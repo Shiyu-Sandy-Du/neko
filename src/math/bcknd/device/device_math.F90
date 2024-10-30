@@ -67,7 +67,7 @@ module device_math
        device_glsc3, device_glsc3_many, device_add2s2_many, device_glsc2, &
        device_glsum, device_masked_copy, device_cfill_mask, &
        device_masked_red_copy, device_vcross, device_absval, &
-       device_pwmax, device_pwmin
+       device_pwmax, device_pwmin, device_vecsqrt1, device_rmneg
 
 contains
 
@@ -697,7 +697,6 @@ contains
 #else
     call neko_error('No device backend configured')
 #endif
-
   end subroutine device_pwmax_vec3
 
   !> Compute the point-wise maximum of a vector and a scalar
@@ -713,10 +712,7 @@ contains
     call cuda_pwmax_sca2(a_d, c, n)
 #elif HAVE_OPENCL
     call neko_error('No OpenCL backend for device_pwmax_sca2')
-#else
-    call neko_error('No device backend configured')
 #endif
-
   end subroutine device_pwmax_sca2
 
   !> Compute the point-wise maximum of a vector and a scalar
@@ -808,10 +804,36 @@ contains
     call cuda_pwmin_sca3(a_d, b_d, c, n)
 #elif HAVE_OPENCL
     call neko_error('No OpenCL backend for device_pwmin_sca3')
+#endif
+  end subroutine device_pwmin_sca3
+
+   subroutine device_vecsqrt1(a_d, n)
+    integer, intent(in) :: n
+    type(c_ptr) :: a_d
+#ifdef HAVE_HIP
+    call hip_vecsqrt1(a_d, n)
+#elif HAVE_CUDA
+    call cuda_vecsqrt1(a_d, n)
+#elif HAVE_OPENCL
+    call neko_error('OPENCL is not implemented for device_vecsqrt1')
 #else
     call neko_error('No device backend configured')
 #endif
+   end subroutine device_vecsqrt1
+  
+  subroutine device_rmneg(a_d, n)
+    integer, intent(in) :: n
+    type(c_ptr) :: a_d
+#ifdef HAVE_HIP
+    call hip_rmneg(a_d, n)
+#elif HAVE_CUDA
+    call cuda_rmneg(a_d, n)
+#elif HAVE_OPENCL
+    call neko_error('OPENCL is not implemented for device_rmneg')
+#else
+    call neko_error('No device backend configured')
+#endif
+   end subroutine device_rmneg
 
-  end subroutine device_pwmin_sca3
 
 end module device_math

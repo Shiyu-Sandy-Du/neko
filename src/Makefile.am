@@ -234,6 +234,7 @@ neko_fortran_SOURCES = \
 	math/bcknd/sx/ax_helm_sx.f90\
 	math/bcknd/xsmm/ax_helm_xsmm.F90\
 	math/bcknd/device/ax_helm_device.F90\
+	math/bcknd/device/ax_helm_full_device.F90\
 	common/projection.f90\
 	common/bcknd/device/device_projection.F90\
 	comm/parmetis.F90\
@@ -307,6 +308,9 @@ neko_fortran_SOURCES = \
 	les/les_model_fctry.f90\
 	les/vreman.f90\
 	les/bcknd/cpu/vreman_cpu.f90\
+	les/bcknd/device/vreman_device.f90\
+	les/bcknd/device/device_vreman_nut.F90\
+	les/bcknd/device/hip/hip_vreman_nut.f90\
 	les/smagorinsky.f90\
 	les/bcknd/cpu/smagorinsky_cpu.f90\
 	les/dynamic_smagorinsky.f90\
@@ -315,6 +319,9 @@ neko_fortran_SOURCES = \
 	les/bcknd/cpu/elementwise_filter_cpu.f90\
 	les/sigma.f90\
 	les/bcknd/cpu/sigma_cpu.f90\
+	les/bcknd/device/sigma_device.f90\
+	les/bcknd/device/device_sigma_nut.F90\
+	les/bcknd/device/hip/hip_sigma_nut.f90\
 	wall_models/wall_model.f90\
 	wall_models/rough_log_law.f90\
 	wall_models/spalding.f90\
@@ -351,6 +358,7 @@ libneko_a_SOURCES += \
 	math/bcknd/device/hip/opr_lambda2.hip\
 	math/bcknd/device/hip/opr_cfl.hip\
 	math/bcknd/device/hip/ax_helm.hip\
+	math/bcknd/device/hip/ax_helm_full.hip\
 	krylov/bcknd/device/hip/pc_jacobi.hip\
 	krylov/bcknd/device/hip/pipecg_aux.hip\
 	krylov/bcknd/device/hip/fusedcg_aux.hip\
@@ -369,7 +377,9 @@ libneko_a_SOURCES += \
 	fluid/bcknd/device/hip/pnpn_res.hip\
 	scalar/bcknd/device/hip/scalar_residual.hip\
 	sem/bcknd/device/hip/coef.hip\
-	source_terms/bcknd/device/hip/filters.hip
+	source_terms/bcknd/device/hip/filters.hip\
+	les/bcknd/device/hip/sigma_nut.hip\
+	les/bcknd/device/hip/vreman_nut.hip
 endif
 
 if ENABLE_CUDA
@@ -569,6 +579,7 @@ EXTRA_DIST = \
 	math/bcknd/device/hip/lambda2_kernel.h\
 	math/bcknd/device/hip/cfl_kernel.h\
 	math/bcknd/device/hip/ax_helm_kernel.h\
+	math/bcknd/device/hip/ax_helm_full_kernel.h\
 	common/bcknd/device/hip/sumab_kernel.h\
 	common/bcknd/device/hip/makeext_kernel.h\
 	common/bcknd/device/hip/makebdf_kernel.h\
@@ -585,6 +596,8 @@ EXTRA_DIST = \
 	krylov/bcknd/device/cuda/gmres_kernel.h\
 	krylov/bcknd/device/hip/gmres_kernel.h\
 	sem/bcknd/device/hip/coef_kernel.h\
+	les/bcknd/device/hip/sigma_nut_kernel.h\
+	les/bcknd/device/hip/vreman_nut_kernel.h\
 	bc/bcknd/device/opencl/dirichlet_kernel.cl\
 	bc/bcknd/device/opencl/inflow_kernel.cl\
 	bc/bcknd/device/opencl/no_slip_wall_kernel.cl\
