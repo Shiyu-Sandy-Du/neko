@@ -81,6 +81,7 @@ module fluid_scheme
   use wall_model_bc, only : wall_model_bc_t
   use shear_stress, only : shear_stress_t
   use gradient_jump_penalty, only : gradient_jump_penalty_t
+  use filter, only : filter_t
   implicit none
   private
 
@@ -139,6 +140,9 @@ module fluid_scheme
      character(len=:), allocatable :: nut_field_name
      !> Is mu varying in time? Currently only due to LES models.
      logical :: variable_material_properties = .false.
+     !> LES using explicit filtering
+     logical :: explicit_filtered_les = .false.
+     class(filter_t), allocatable :: explicit_filter
      !> Density
      real(kind=rp) :: rho
      !> The variable density field
@@ -323,6 +327,14 @@ contains
        this%nut_field_name = ""
     end if
 
+    !
+    ! Turbulence modelling and variable material properties
+    !
+    if (params%valid_path('case.fluid.explicit_filtered_les')) then
+       this%explicit_filtered_les = .true.
+       call this%explicit_filter%init(params, this%c_Xh)
+    end if
+
     ! Fill mu and rho field with the physical value
 
     call this%mu_field%init(this%dm_Xh, "mu")
@@ -386,7 +398,10 @@ contains
     write(log_buf, '(A, L1)') 'Dealias    : ',  logical_val
     call neko_log%message(log_buf)
 
-    write(log_buf, '(A, L1)') 'LES        : ', this%variable_material_properties
+    write(log_buf, '(A, L1)') 'LES using grid filter: ', this%variable_material_properties
+    call neko_log%message(log_buf)
+
+    write(log_buf, '(A, L1)') 'LES using explicit filter: ', this%explicit_filtered_les
     call neko_log%message(log_buf)
 
     call json_get_or_default(params, 'case.output_boundary', logical_val, &
@@ -555,6 +570,10 @@ contains
        call this%gradient_jump_penalty_u%free()
        call this%gradient_jump_penalty_v%free()
        call this%gradient_jump_penalty_w%free()
+    end if
+
+    if (this%explicit_filtered_les .eqv. .true.) then
+       call this%explicit_filter%free()
     end if
 
 
