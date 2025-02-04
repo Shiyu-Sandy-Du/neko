@@ -724,7 +724,7 @@ contains
          call this%adv%compute(u, v, w, &
                                f_x, f_y, f_z, &
                                Xh, this%c_Xh, dm_Xh%size())
-
+         
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the
          ! previous time-step. Now, this value is used in the explicit time
@@ -733,6 +733,11 @@ contains
                               this%abx2, this%aby2, this%abz2, &
                               f_x%x, f_y%x, f_z%x, &
                               rho, ext_bdf%advection_coeffs, n)
+
+         ! For LES using explicit filtering, filter the advection term and the source term
+         call this%explicit_filter%apply(f_x, f_x)
+         call this%explicit_filter%apply(f_y, f_y)
+         call this%explicit_filter%apply(f_z, f_z)
 
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
