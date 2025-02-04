@@ -332,6 +332,10 @@ contains
     !
     if (params%valid_path('case.fluid.explicit_filtered_les')) then
        this%explicit_filtered_les = .true.
+       if (this%variable_material_properties = .true.) then
+          call neko_warning("Do NOT use eddy viscosity field as the &
+          & nut_field in LES with explicit filtering!!!")
+       end if
        call this%explicit_filter%init(params, this%c_Xh)
     end if
 
