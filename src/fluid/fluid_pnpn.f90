@@ -735,9 +735,11 @@ contains
                               rho, ext_bdf%advection_coeffs, n)
 
          ! For LES using explicit filtering, filter the advection term and the source term
-         call this%explicit_filter%apply(f_x, f_x)
-         call this%explicit_filter%apply(f_y, f_y)
-         call this%explicit_filter%apply(f_z, f_z)
+         if (this%explicit_filtered_les .eqv. .true.) then
+            call this%explicit_filter%apply(f_x, f_x)
+            call this%explicit_filter%apply(f_y, f_y)
+            call this%explicit_filter%apply(f_z, f_z)
+         end if
 
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
