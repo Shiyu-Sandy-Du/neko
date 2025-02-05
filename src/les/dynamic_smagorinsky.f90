@@ -90,6 +90,7 @@ contains
     character(len=:), allocatable :: nut_name
     integer :: i
     character(len=:), allocatable :: delta_type
+    character(len=:), allocatable :: filter_type
     character(len=LOG_SIZE) :: log_buf
 
     call json_get_or_default(json, "nut_field", nut_name, "nut")
@@ -98,6 +99,20 @@ contains
     call this%free()
     call this%init_base(dofmap, coef, nut_name, delta_type)
     call this%test_filter%init(json, coef)
+    if (json%valid_path('filter.transfer_function')) then
+       call neko_error("Dynamic Smagorinsky model does not support transfer &
+                        &function specified in the json file. &
+                        &Please hard-code it in &
+                        &subroutine set_ds_filt() in &
+                        &src/les/dynamic_smagorisnky.f90")
+    end if
+    if (json%valid_path('filter.type')) then
+       call json_get(json, "filter.type", filter_type)
+       if (trim(filter_type) .ne. "elementwise") then
+          call neko_error("Currently only elementwise filter is supported &
+                           for dynamic smagorinsky model.")
+       end if
+    end if
     call set_ds_filt(this%test_filter)
 
     call neko_log%section('LES model')
@@ -106,7 +121,7 @@ contains
     write(log_buf, '(A, A)') 'Delta evaluation : ', delta_type
     call neko_log%message(log_buf)
     write(log_buf, '(A, A)') 'Test filter type : ', &
-                                 this%test_filter%filter_type
+                                 this%test_filter%elementwise_filter_type
     call neko_log%message(log_buf)
     call neko_log%end_section()
 
