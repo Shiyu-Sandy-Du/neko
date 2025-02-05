@@ -81,7 +81,7 @@ module fluid_scheme
   use wall_model_bc, only : wall_model_bc_t
   use shear_stress, only : shear_stress_t
   use gradient_jump_penalty, only : gradient_jump_penalty_t
-  use filter, only : filter_t
+  use filter, only : filter_t, filter_factory
   implicit none
   private
 
@@ -282,6 +282,8 @@ contains
     type(json_file) :: wm_json
     character(len=:), allocatable :: string_val1, string_val2
     real(kind=rp) :: GJP_param_a, GJP_param_b
+    type(json_file) :: fluid_subdict
+    character(len=:), allocatable :: filter_type
 
     !
     ! SEM simulation fundamentals
@@ -331,12 +333,15 @@ contains
     ! Turbulence modelling and variable material properties
     !
     if (params%valid_path('case.fluid.explicit_filtered_les')) then
-       this%explicit_filtered_les = .true.
+       call json_get(params, 'case.fluid.explicit_filtered_les', &
+                     this%explicit_filtered_les)
        if (this%variable_material_properties .eqv. .true.) then
           call neko_warning("Do NOT use eddy viscosity field as the &
           & nut_field in LES with explicit filtering!!!")
        end if
-       call this%explicit_filter%init(params, this%c_Xh)
+       call json_extract_object(params, "case.fluid", fluid_subdict)
+       call json_get(fluid_subdict, 'filter.type', filter_type)
+       call filter_factory(this%explicit_filter, filter_type, fluid_subdict, this%c_Xh)
     end if
 
     ! Fill mu and rho field with the physical value
