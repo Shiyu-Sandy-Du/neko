@@ -75,7 +75,7 @@ module fluid_pnpn
   use bc_list, only: bc_list_t
   use zero_dirichlet, only : zero_dirichlet_t
   use utils, only : neko_error, neko_type_error
-  use field_math, only : field_add2, field_copy
+  use field_math, only : field_add2, field_copy, field_rzero
   use bc, only : bc_t
   use file, only : file_t
   use operators, only : ortho
@@ -163,7 +163,7 @@ module fluid_pnpn
      type(field_t) :: abx1, aby1, abz1
      type(field_t) :: abx2, aby2, abz2
 
-     ! Advection terms for the oifs method
+     ! Advection terms for the oifs method or LES with explicit filtering
      type(field_t) :: advx, advy, advz
 
      !> Pressure residual equation for computing `p_res`.
@@ -705,6 +705,12 @@ contains
          call this%adv%compute(u, v, w, &
                                this%advx, this%advy, this%advz, &
                                Xh, this%c_Xh, dm_Xh%size(), dt)
+         ! For LES using explicit filtering, filter the advection term.
+         if (this%explicit_filtered_les .eqv. .true.) then
+            call this%explicit_filter%apply(this%advx, this%advx)
+            call this%explicit_filter%apply(this%advy, this%advy)
+            call this%explicit_filter%apply(this%advz, this%advz)
+         end if
 
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the
@@ -720,10 +726,33 @@ contains
                                      f_x%x, f_y%x, f_z%x, &
                                      rho, dt, n)
       else
-        ! Add the advection operators to the right-hand-side.
-         call this%adv%compute(u, v, w, &
-                               f_x, f_y, f_z, &
-                               Xh, this%c_Xh, dm_Xh%size())
+         ! For LES using explicit filtering, filter the advection term.
+         if (this%explicit_filtered_les .eqv. .true.) then
+            ! Reset the advection term.
+            call field_rzero(this%advx, n)
+            call field_rzero(this%advy, n)
+            call field_rzero(this%advz, n)
+            ! Add the advection operators to the right-hand-side.
+            call this%adv%compute(u, v, w, &
+                                 this%advx, this%advy, this%advz, &
+                                 Xh, this%c_Xh, dm_Xh%size())
+            call this%explicit_filter%apply(this%advx, this%advx)
+            call this%explicit_filter%apply(this%advy, this%advy)
+            call this%explicit_filter%apply(this%advz, this%advz)
+            if (NEKO_BCKND_DEVICE .eq. 1) then
+               call device_opadd2cm(f_x%x_d, f_y%x_d, f_z%x_d, &
+                  this%advx%x_d, this%advy%x_d, this%advz%x_d, &
+                  1.0_rp, n, msh%gdim)
+            else
+               call opadd2cm(f_x%x, f_y%x, f_z%x, this%advx%x, &
+                  this%advy%x, this%advz%x, 1.0_rp, n, msh%gdim)
+            end if
+         else
+            ! Add the advection operators to the right-hand-side.
+            call this%adv%compute(u, v, w, &
+                                 f_x, f_y, f_z, &
+                                 Xh, this%c_Xh, dm_Xh%size())
+         end if
          
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the
@@ -734,12 +763,7 @@ contains
                               f_x%x, f_y%x, f_z%x, &
                               rho, ext_bdf%advection_coeffs, n)
 
-         ! For LES using explicit filtering, filter the advection term and the source term
-         if (this%explicit_filtered_les .eqv. .true.) then
-            call this%explicit_filter%apply(f_x, f_x)
-            call this%explicit_filter%apply(f_y, f_y)
-            call this%explicit_filter%apply(f_z, f_z)
-         end if
+         
 
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
