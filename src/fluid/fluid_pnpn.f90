@@ -165,6 +165,7 @@ module fluid_pnpn
 
      ! Advection terms for the oifs method or LES with explicit filtering
      type(field_t) :: advx, advy, advz
+     type(field_t) :: wa ! work array for LES with explicit filtering
 
      !> Pressure residual equation for computing `p_res`.
      class(pnpn_prs_res_t), allocatable :: prs_res
@@ -323,6 +324,7 @@ contains
       call this%advx%init(dm_Xh, "advx")
       call this%advy%init(dm_Xh, "advy")
       call this%advz%init(dm_Xh, "advz")
+      call this%wa%init(dm_Xh, "wa")
     end associate
 
     call this%du%init(this%dm_Xh, 'du')
@@ -475,6 +477,8 @@ contains
                             w%dof%size(), HOST_TO_DEVICE, sync = .false.)
          call device_memcpy(this%advz%x, this%advz%x_d, &
                             w%dof%size(), HOST_TO_DEVICE, sync = .false.)
+         call device_memcpy(this%wa%x, this%wa%x_d, &
+                            w%dof%size(), HOST_TO_DEVICE, sync = .false.)
        end associate
     end if
     ! Make sure that continuity is maintained (important for interpolation)
@@ -589,6 +593,8 @@ contains
     call this%advx%free()
     call this%advy%free()
     call this%advz%free()
+
+    call this%wa%free()
 
     if (allocated(this%Ax_vel)) then
        deallocate(this%Ax_vel)
@@ -707,9 +713,12 @@ contains
                                Xh, this%c_Xh, dm_Xh%size(), dt)
          ! For LES using explicit filtering, filter the advection term.
          if (this%explicit_filtered_les .eqv. .true.) then
-            call this%explicit_filter%apply(this%advx, this%advx)
-            call this%explicit_filter%apply(this%advy, this%advy)
-            call this%explicit_filter%apply(this%advz, this%advz)
+            call field_copy(this%advx, this%wa)
+            call this%explicit_filter%apply(this%advx, this%wa)
+            call field_copy(this%advy, this%wa)
+            call this%explicit_filter%apply(this%advy, this%wa)
+            call field_copy(this%advz, this%wa)
+            call this%explicit_filter%apply(this%advz, this%wa)
          end if
 
          ! At this point the RHS contains the sum of the advection operator and
