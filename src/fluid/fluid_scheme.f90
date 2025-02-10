@@ -91,6 +91,8 @@ module fluid_scheme
      type(field_t), pointer :: v => null() !< y-component of Velocity
      type(field_t), pointer :: w => null() !< z-component of Velocity
      type(field_t), pointer :: p => null() !< Pressure
+     type(field_t), pointer :: output_check => null()
+     type(field_t), pointer :: output_check2 => null()
      type(field_series_t) :: ulag, vlag, wlag !< fluid field (lag)
      type(space_t) :: Xh        !< Function space \f$ X_h \f$
      type(dofmap_t) :: dm_Xh    !< Dofmap associated with \f$ X_h \f$
@@ -470,6 +472,10 @@ contains
     this%u => neko_field_registry%get_field('u')
     this%v => neko_field_registry%get_field('v')
     this%w => neko_field_registry%get_field('w')
+    call neko_field_registry%add_field(this%dm_Xh, 'output_check')
+    this%output_check => neko_field_registry%get_field('output_check')
+    call neko_field_registry%add_field(this%dm_Xh, 'output_check2')
+    this%output_check2 => neko_field_registry%get_field('output_check2')
 
     !! Initialize time-lag fields
     call this%ulag%init(this%u, 2)
@@ -550,6 +556,8 @@ contains
     nullify(this%v)
     nullify(this%w)
     nullify(this%p)
+    nullify(this%output_check)
+    nullify(this%output_check2)
 
     call this%ulag%free()
     call this%vlag%free()

@@ -652,7 +652,7 @@ contains
     ! Extrapolated velocity for the pressure residual
     type(field_t), pointer :: u_e, v_e, w_e
     ! Indices for tracking temporary fields
-    integer :: temp_indices(3)
+    integer :: temp_indices(3), i
 
     type(file_t) :: dump_file
     class(bc_t), pointer :: bc_i
@@ -713,11 +713,11 @@ contains
                                Xh, this%c_Xh, dm_Xh%size(), dt)
          ! For LES using explicit filtering, filter the advection term.
          if (this%explicit_filtered_les .eqv. .true.) then
-            call field_copy(this%advx, this%wa)
+            call field_copy(this%wa, this%advx)
             call this%explicit_filter%apply(this%advx, this%wa)
-            call field_copy(this%advy, this%wa)
+            call field_copy(this%wa, this%advy)
             call this%explicit_filter%apply(this%advy, this%wa)
-            call field_copy(this%advz, this%wa)
+            call field_copy(this%wa, this%advz)
             call this%explicit_filter%apply(this%advz, this%wa)
          end if
 
@@ -745,9 +745,23 @@ contains
             call this%adv%compute(u, v, w, &
                                  this%advx, this%advy, this%advz, &
                                  Xh, this%c_Xh, dm_Xh%size())
-            call this%explicit_filter%apply(this%advx, this%advx)
-            call this%explicit_filter%apply(this%advy, this%advy)
-            call this%explicit_filter%apply(this%advz, this%advz)
+
+            call gs_Xh%op(this%advx, GS_OP_ADD)
+            call gs_Xh%op(this%advy, GS_OP_ADD)
+            call gs_Xh%op(this%advz, GS_OP_ADD)
+            do concurrent (i = 1:this%advx%dof%size())
+               this%advx%x(i,1,1,1) = this%advx%x(i,1,1,1) * this%c_Xh%mult(i,1,1,1)
+               this%advy%x(i,1,1,1) = this%advy%x(i,1,1,1) * this%c_Xh%mult(i,1,1,1)
+               this%advz%x(i,1,1,1) = this%advz%x(i,1,1,1) * this%c_Xh%mult(i,1,1,1)
+            end do
+
+            call field_copy(this%wa, this%advx)
+            call this%explicit_filter%apply(this%advx, this%wa)
+            call field_copy(this%wa, this%advy)
+            call this%explicit_filter%apply(this%advy, this%wa)
+            call field_copy(this%wa, this%advz)
+            call this%explicit_filter%apply(this%advz, this%wa)
+
             if (NEKO_BCKND_DEVICE .eq. 1) then
                call device_opadd2cm(f_x%x_d, f_y%x_d, f_z%x_d, &
                   this%advx%x_d, this%advy%x_d, this%advz%x_d, &
