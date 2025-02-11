@@ -754,13 +754,15 @@ contains
                this%advy%x(i,1,1,1) = this%advy%x(i,1,1,1) * this%c_Xh%mult(i,1,1,1)
                this%advz%x(i,1,1,1) = this%advz%x(i,1,1,1) * this%c_Xh%mult(i,1,1,1)
             end do
-
+            
+            call field_copy(this%output_check, this%advx)
             call field_copy(this%wa, this%advx)
             call this%explicit_filter%apply(this%advx, this%wa)
             call field_copy(this%wa, this%advy)
             call this%explicit_filter%apply(this%advy, this%wa)
             call field_copy(this%wa, this%advz)
             call this%explicit_filter%apply(this%advz, this%wa)
+            call field_copy(this%output_check2, this%advx)
 
             if (NEKO_BCKND_DEVICE .eq. 1) then
                call device_opadd2cm(f_x%x_d, f_y%x_d, f_z%x_d, &
