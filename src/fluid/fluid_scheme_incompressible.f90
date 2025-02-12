@@ -101,6 +101,9 @@ module fluid_scheme_incompressible
      type(gradient_jump_penalty_t) :: gradient_jump_penalty_u
      type(gradient_jump_penalty_t) :: gradient_jump_penalty_v
      type(gradient_jump_penalty_t) :: gradient_jump_penalty_w
+     !> Explicit filter
+     logical :: explicit_filtered_les
+     class(filter_t), allocatable :: explicit_filter
 
      type(mean_flow_t) :: mean !< Mean flow field
      type(fluid_stats_t) :: stats !< Fluid statistics
