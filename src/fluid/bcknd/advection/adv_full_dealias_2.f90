@@ -44,7 +44,7 @@ module adv_full_dealias
   use device_math, only: device_vdot3, device_sub2
   use neko_config, only: NEKO_BCKND_DEVICE, NEKO_BCKND_SX, NEKO_BCKND_XSMM, &
     NEKO_BCKND_OPENCL, NEKO_BCKND_CUDA, NEKO_BCKND_HIP
-  use operators, only: opgrad, dudxyz
+  use operators, only: opgrad, div
   use interpolation, only: interpolator_t
   use device, only: device_map, device_get_ptr
   use, intrinsic :: iso_c_binding, only: c_ptr, C_NULL_PTR
@@ -75,11 +75,9 @@ module adv_full_dealias
      ! the following array should be global
      ! and stored as field_t for filters
      type(field_t) :: tx, ty, tz
-     type(field_t) :: t11, t22, t33, t12, t13, t23
-     type(field_t) :: dump_field, dump_field2
-     type(field_t) :: tx11, ty22, tz33, &
-                      tx12, ty12, tx13, &
-                      tz13, ty23, tz23
+     type(field_t) :: t11, t12, t13, &
+                      t21, t22, t23, &
+                      t31, t32, t33
      !> Device pointer for `temp`
      type(c_ptr) :: temp_d = C_NULL_PTR
      !> Device pointer for `tbf`
@@ -158,22 +156,14 @@ contains
     call this%ty%init(this%dm_GL, "ty")
     call this%tz%init(this%dm_GL, "tz")
     call this%t11%init(this%dm_GL, "t11")
-    call this%t22%init(this%dm_GL, "t22")
-    call this%t33%init(this%dm_GL, "t33")
     call this%t12%init(this%dm_GL, "t12")
     call this%t13%init(this%dm_GL, "t13")
+    call this%t21%init(this%dm_GL, "t21")
+    call this%t22%init(this%dm_GL, "t22")
     call this%t23%init(this%dm_GL, "t23")
-    call this%dump_field%init(this%dm_GL, "dump_field")
-    call this%dump_field2%init(this%dm_GL, "dump_field2")
-    call this%tx11%init(this%dm_GL, "tx11")
-    call this%ty22%init(this%dm_GL, "ty22")
-    call this%tz33%init(this%dm_GL, "tz33")
-    call this%tx12%init(this%dm_GL, "tx12")
-    call this%ty12%init(this%dm_GL, "ty12")
-    call this%tx13%init(this%dm_GL, "tx13")
-    call this%tz13%init(this%dm_GL, "tz13")
-    call this%ty23%init(this%dm_GL, "ty23")
-    call this%tz23%init(this%dm_GL, "tz23")
+    call this%t31%init(this%dm_GL, "t31")
+    call this%t32%init(this%dm_GL, "t32")
+    call this%t33%init(this%dm_GL, "t33")
 
   end subroutine init_full_dealias
 
@@ -215,14 +205,10 @@ contains
 
     !This is extremely primitive and unoptimized  on the device //Karp
     associate(c_GL => this%coef_GL, tx => this%tx, ty => this%ty, &
-              tz => this%tz, t11 => this%t11, t22 => this%t22, &
-              t33 => this%t33, t12 => this%t12, t13 => this%t13, &
-              t23 => this%t23, tx11 => this%tx11, ty22 => this%ty22, &
-              tz33 => this%tz33, &
-              tx12 => this%tx12, ty12 => this%ty12, &
-              tx13 => this%tx13, tz13 => this%tz13, &
-              ty23 => this%ty23, tz23 => this%tz23, &
-              dump_field => this%dump_field, dump_field2 => this%dump_field2)
+              tz => this%tz, t11 => this%t11, t12 => this%t12, &
+              t13 => this%t13, t21 => this%t21, t22 => this%t22, &
+              t23 => this%t23, t31 => this%t31, t32 => this%t32, &
+              t33 => this%t33)
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call neko_error("adv_full_dealiasing not implemented for devices")
 
@@ -235,34 +221,28 @@ contains
          call this%GLL_to_GL%map(tx%x, vx%x, coef%msh%nelv, this%Xh_GL)
          call this%GLL_to_GL%map(ty%x, vy%x, coef%msh%nelv, this%Xh_GL)
          call this%GLL_to_GL%map(tz%x, vz%x, coef%msh%nelv, this%Xh_GL)
-         do concurrent (i = 1 : t11%dof%size())
-            t11%x(i, 1, 1, 1) = tx%x(i, 1, 1, 1) * tx%x(i, 1, 1, 1)
-            t22%x(i, 1, 1, 1) = ty%x(i, 1, 1, 1) * ty%x(i, 1, 1, 1)
-            t33%x(i, 1, 1, 1) = tz%x(i, 1, 1, 1) * tz%x(i, 1, 1, 1)
-            t12%x(i, 1, 1, 1) = tx%x(i, 1, 1, 1) * ty%x(i, 1, 1, 1)
-            t13%x(i, 1, 1, 1) = tx%x(i, 1, 1, 1) * tz%x(i, 1, 1, 1)
-            t23%x(i, 1, 1, 1) = ty%x(i, 1, 1, 1) * tz%x(i, 1, 1, 1)
-         end do
+
+         call opgrad(t11%x, t12%x, t13%x, tx%x, c_GL)
+         call opgrad(t21%x, t22%x, t23%x, ty%x, c_GL)
+         call opgrad(t31%x, t32%x, t33%x, tz%x, c_GL)
          
-         call opgrad(tx11%x, dump_field%x, dump_field2%x, t11%x, c_GL)
-         call opgrad(dump_field%x, ty22%x, dump_field2%x, t22%x, c_GL)
-         call opgrad(dump_field%x, dump_field2%x, tz33%x, t33%x, c_GL)
-         call opgrad(tx12%x, ty12%x, dump_field%x, t12%x, c_GL)
-         call opgrad(tx13%x, dump_field%x, tz13%x, t13%x, c_GL)
-         call opgrad(dump_field%x, ty23%x, tz23%x, t23%x, c_GL)
-
-
          do e = 1, coef%msh%nelv
             do concurrent (i = 1 : this%Xh_GL%lxyz)
-               tfx(i) = tx11%x(i, 1, 1, e) + &
-                        ty12%x(i, 1, 1, e) + &
-                        tz13%x(i, 1, 1, e)
-               tfy(i) = tx12%x(i, 1, 1, e) + &
-                        ty22%x(i, 1, 1, e) + &
-                        tz23%x(i, 1, 1, e)
-               tfz(i) = tx13%x(i, 1, 1, e) + &
-                        ty23%x(i, 1, 1, e) + &
-                        tz33%x(i, 1, 1, e)
+               tfx(i) = 2 * tx%x(i,1,1,e) * t11%x(i,1,1,e) + &
+                            ty%x(i,1,1,e) * t12%x(i,1,1,e) + &
+                            tz%x(i,1,1,e) * t13%x(i,1,1,e) + &
+                            tx%x(i,1,1,e) * t22%x(i,1,1,e) + &
+                            tx%x(i,1,1,e) * t33%x(i,1,1,e)
+               tfy(i) =     tx%x(i,1,1,e) * t21%x(i,1,1,e) + &
+                        2 * ty%x(i,1,1,e) * t22%x(i,1,1,e) + &
+                            tz%x(i,1,1,e) * t23%x(i,1,1,e) + &
+                            ty%x(i,1,1,e) * t11%x(i,1,1,e) + &
+                            ty%x(i,1,1,e) * t33%x(i,1,1,e)
+               tfz(i) =     tx%x(i,1,1,e) * t31%x(i,1,1,e) + &
+                            ty%x(i,1,1,e) * t32%x(i,1,1,e) + &
+                        2 * tz%x(i,1,1,e) * t33%x(i,1,1,e) + &
+                            tz%x(i,1,1,e) * t11%x(i,1,1,e) + &
+                            tz%x(i,1,1,e) * t22%x(i,1,1,e)
             end do
 
             call this%GLL_to_GL%map(tempx, tfx, 1, this%Xh_GLL)
