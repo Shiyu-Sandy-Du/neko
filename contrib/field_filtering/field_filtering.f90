@@ -8,6 +8,7 @@ program field_filtering
   type(fld_file_data_t) :: field_data
   type(space_t) :: Xh
   type(vector_ptr_t), allocatable :: fields(:)
+  type(field_t), allocatable :: field_in, field_out
   integer :: argc, i, lx, j, file_precision
   logical :: dp_precision
 
