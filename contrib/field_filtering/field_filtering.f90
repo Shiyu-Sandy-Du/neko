@@ -1,21 +1,22 @@
 !> Program to filter a field
 program field_filtering
   use neko
+  use PDE_filter, only : PDE_filter_t
   implicit none
 
-  character(len=NEKO_FNAME_LEN) :: inputchar, field_fname, hom_dir, output_fname, mesh_fname
+  character(len=NEKO_FNAME_LEN) :: inputchar, field_fname, output_fname, mesh_fname
   type(file_t) :: field_file, output_file, mesh_file
   type(fld_file_data_t) :: field_data
   type(space_t) :: Xh
   type(mesh_t) :: msh
-  type(coef_t) :: coef
+  type(coef_t), target :: coef
   type(dofmap_t) :: dof
   type(gs_t) :: gs_h
   type(vector_ptr_t), allocatable :: fields(:)
   type(field_t) :: field_in, field_out
   integer :: argc, i, lx, j, file_precision
   logical :: dp_precision
-  real(kind=rp) :: r
+  type(PDE_filter_t) :: PDE_filter
 
   argc = command_argument_count()
 
@@ -62,6 +63,15 @@ program field_filtering
   call field_in%init(dof, "field_in")
   call field_out%init(dof, "field_out")
 
+  !! Initialize the PDE filter
+  PDE_filter%r = 0.03788962064050693
+  PDE_filter%abstol_filt = 1e-4
+  PDE_filter%ksp_max_iter = 200
+  PDE_filter%ksp_solver = 'cg'
+  PDE_filter%precon_type_filt = 'jacobi'
+  PDE_filter%coef => coef
+  call PDE_filter%init_from_attributes(coef)
+
   ! interpolate field for t>0
   call field_file%read(field_data)
   allocate(fields(field_data%size()))
@@ -74,7 +84,7 @@ program field_filtering
      do j = 1, field_data%size()
         !! Apply filter to field fields(j)%ptr%x
         call copy(field_in%x, fields(j)%ptr%x, field_in%dof%size())
-        call copy(field_out%x, field_in%x, field_in%dof%size())
+        call PDE_filter%apply(field_out, field_in)
         call copy(fields(j)%ptr%x, field_out%x, field_in%dof%size())
      end do
      ! output
