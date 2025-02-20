@@ -390,6 +390,7 @@ if test "x${enable_contrib}" = xyes; then
 		    contrib/map_to_equidistant_1d/Makefile\
 		    contrib/mesh_checker/Makefile\
           contrib/field_filtering/Makefile\
+          contrib/field_diff/Makefile\
 		    contrib/prepart/Makefile])
 fi
 # Doxygen

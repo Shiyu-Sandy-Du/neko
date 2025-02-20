@@ -73,9 +73,8 @@ program field_filtering
   call PDE_filter%init_from_attributes(coef)
 
   ! interpolate field for t>0
-  call field_file%read(field_data)
   allocate(fields(field_data%size()))
-  do i = 1, field_data%meta_nsamples - 1
+  do i = 1, field_data%meta_nsamples
      if (pe_rank .eq. 0) write(*,*) 'Reading file:', i
      if (i .gt. 1) then
         call field_file%read(field_data)

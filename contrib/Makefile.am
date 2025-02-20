@@ -7,5 +7,6 @@ SUBDIRS = rea2nbin\
 	  postprocess_fluid_stats\
 	  mesh_checker\
 	  map_to_equidistant_1d\
-	  field_filtering
+	  field_filtering\
+	  field_diff
 
