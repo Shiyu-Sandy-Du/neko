@@ -72,6 +72,5 @@ postprocess_fluid_stats
 map_to_equidistant_1d
 calc_lift_from_field
 field_filtering
-field_diff
 libneko*.so
 
