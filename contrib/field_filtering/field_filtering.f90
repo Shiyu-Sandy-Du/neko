@@ -67,7 +67,8 @@ program field_filtering
   ! for order 9
 !   PDE_filter%r = 0.03788962064050693 !! maximum GLL spacing
 !   PDE_filter%r = 0.025472013875971044 !! avg GLL spacing
-  PDE_filter%r = 0.009223350334781055 !! minimum GLL spacing
+!   PDE_filter%r = 0.009223350334781055 !! minimum GLL spacing
+  PDE_filter%r = 0.01844670066956211 !! two times of the min
   PDE_filter%abstol_filt = 1e-4
   PDE_filter%ksp_max_iter = 200
   PDE_filter%ksp_solver = 'cg'
