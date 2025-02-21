@@ -64,6 +64,7 @@ program field_filtering
   call field_out%init(dof, "field_out")
 
   !! Initialize the PDE filter
+  ! for order 9
 !   PDE_filter%r = 0.03788962064050693 !! maximum GLL spacing
 !   PDE_filter%r = 0.025472013875971044 !! avg GLL spacing
   PDE_filter%r = 0.009223350334781055 !! minimum GLL spacing
