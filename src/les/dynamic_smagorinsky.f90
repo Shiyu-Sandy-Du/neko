@@ -36,7 +36,7 @@ module dynamic_smagorinsky
   use field, only : field_t
   use fluid_scheme_base, only : fluid_scheme_base_t
   use les_model, only : les_model_t
-  use json_utils, only : json_get_or_default
+  use json_utils, only : json_get, json_get_or_default
   use json_module, only : json_file
   use utils, only : neko_error
   use neko_config, only : NEKO_BCKND_DEVICE
@@ -89,46 +89,49 @@ contains
     character(len=:), allocatable :: filter_type
     character(len=LOG_SIZE) :: log_buf
 
-    call json_get_or_default(json, "nut_field", nut_name, "nut")
-    call json_get_or_default(json, "delta_type", delta_type, "pointwise")
+    associate(dofmap => fluid%dm_Xh, &
+         coef => fluid%c_Xh)
 
-    call this%free()
-    call this%init_base(dofmap, coef, nut_name, delta_type)
-    call this%test_filter%init(json, coef)
-    if (json%valid_path('filter.transfer_function')) then
-       call neko_error("Dynamic Smagorinsky model does not support transfer &
-                        &function specified in the json file. &
-                        &Please hard-code it in &
-                        &subroutine set_ds_filt() in &
-                        &src/les/dynamic_smagorisnky.f90")
-    end if
-    if (json%valid_path('filter.type')) then
-       call json_get(json, "filter.type", filter_type)
-       if (trim(filter_type) .ne. "elementwise") then
-          call neko_error("Currently only elementwise filter is supported &
-                           for dynamic smagorinsky model.")
-       end if
-    end if
-    call set_ds_filt(this%test_filter)
+      call json_get_or_default(json, "nut_field", nut_name, "nut")
+      call json_get_or_default(json, "delta_type", delta_type, "pointwise")
 
-    call neko_log%section('LES model')
-    write(log_buf, '(A)') 'Model : Dynamic Smagorinsky'
-    call neko_log%message(log_buf)
-    write(log_buf, '(A, A)') 'Delta evaluation : ', delta_type
-    call neko_log%message(log_buf)
-    write(log_buf, '(A, A)') 'Test filter type : ', &
-                                 this%test_filter%elementwise_filter_type
-    call neko_log%message(log_buf)
-    call neko_log%end_section()
+      call this%free()
+      call this%init_base(fluid, nut_name, delta_type)
+      call this%test_filter%init(json, coef)
+      if (json%valid_path('filter.transfer_function')) then
+         call neko_error("Dynamic Smagorinsky model does not support transfer &
+                           &function specified in the json file. &
+                           &Please hard-code it in &
+                           &subroutine set_ds_filt() in &
+                           &src/les/dynamic_smagorisnky.f90")
+      end if
+      if (json%valid_path('filter.type')) then
+         call json_get(json, "filter.type", filter_type)
+         if (trim(filter_type) .ne. "elementwise") then
+            call neko_error("Currently only elementwise filter is supported &
+                              for dynamic smagorinsky model.")
+         end if
+      end if
+      call set_ds_filt(this%test_filter)
 
-    call this%c_dyn%init(dofmap, "ds_c_dyn")
-    call this%num%init(dofmap, "ds_num")
-    call this%den%init(dofmap, "ds_den")
+      call neko_log%section('LES model')
+      write(log_buf, '(A)') 'Model : Dynamic Smagorinsky'
+      call neko_log%message(log_buf)
+      write(log_buf, '(A, A)') 'Delta evaluation : ', delta_type
+      call neko_log%message(log_buf)
+      write(log_buf, '(A, A)') 'Test filter type : ', &
+           this%test_filter%elementwise_filter_type
+      call neko_log%message(log_buf)
+      call neko_log%end_section()
 
-    do i = 1, 6
-       call this%mij(i)%init(dofmap)
-       call this%lij(i)%init(dofmap)
-    end do
+      call this%c_dyn%init(dofmap, "ds_c_dyn")
+      call this%num%init(dofmap, "ds_num")
+      call this%den%init(dofmap, "ds_den")
+
+      do i = 1, 6
+         call this%mij(i)%init(dofmap)
+         call this%lij(i)%init(dofmap)
+      end do
 
     end associate
 
