@@ -121,14 +121,14 @@ contains
     call neko_log%message(log_buf)
     call neko_log%end_section()
 
-      call this%c_dyn%init(dofmap, "ds_c_dyn")
-      call this%num%init(dofmap, "ds_num")
-      call this%den%init(dofmap, "ds_den")
+    call this%c_dyn%init(dofmap, "ds_c_dyn")
+    call this%num%init(dofmap, "ds_num")
+    call this%den%init(dofmap, "ds_den")
 
-      do i = 1, 6
-         call this%mij(i)%init(dofmap)
-         call this%lij(i)%init(dofmap)
-      end do
+    do i = 1, 6
+       call this%mij(i)%init(dofmap)
+       call this%lij(i)%init(dofmap)
+    end do
 
     end associate
 
