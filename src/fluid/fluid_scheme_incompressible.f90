@@ -104,6 +104,10 @@ module fluid_scheme_incompressible
      !> Explicit filter
      logical :: explicit_filtered_les
      class(filter_t), allocatable :: explicit_filter
+     !> Extrapolation velocity fields for LES
+     type(field_t), pointer :: u_e => null() !< Extrapolated x-Velocity
+     type(field_t), pointer :: v_e => null() !< Extrapolated y-Velocity
+     type(field_t), pointer :: w_e => null() !< Extrapolated z-Velocity
 
      type(mean_flow_t) :: mean !< Mean flow field
      type(fluid_stats_t) :: stats !< Fluid statistics
@@ -403,6 +407,13 @@ contains
             GJP_param_a, GJP_param_b)
     end if
 
+    call neko_field_registry%add_field(this%dm_Xh, 'u_e')
+    call neko_field_registry%add_field(this%dm_Xh, 'v_e')
+    call neko_field_registry%add_field(this%dm_Xh, 'w_e')
+    this%u_e => neko_field_registry%get_field('u_e')
+    this%v_e => neko_field_registry%get_field('v_e')
+    this%w_e => neko_field_registry%get_field('w_e')
+
     call neko_log%end_section()
 
 
@@ -452,6 +463,12 @@ contains
     nullify(this%p)
     nullify(this%output_check)
     nullify(this%output_check2)
+
+    if (this%variable_material_properties) then
+       nullify(this%u_e)
+       nullify(this%v_e)
+       nullify(this%w_e)
+    end if
 
     call this%ulag%free()
     call this%vlag%free()
