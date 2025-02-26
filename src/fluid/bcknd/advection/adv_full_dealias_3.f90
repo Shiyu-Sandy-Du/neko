@@ -78,7 +78,7 @@ module adv_full_dealias
      ! and stored as field_t for filters
      type(field_t) :: tx, ty, tz, wa
      type(field_t) :: t11, t22, t33, t12, t13, t23
-     type(field_t) :: dump_field, dump_field2
+     type(field_t) :: dummy_field, dummy_field2
      type(field_t) :: tx11, ty22, tz33, &
                       tx12, ty12, tx13, &
                       tz13, ty23, tz23
@@ -166,8 +166,8 @@ contains
     call this%t12%init(this%dm_GL, "t12")
     call this%t13%init(this%dm_GL, "t13")
     call this%t23%init(this%dm_GL, "t23")
-    call this%dump_field%init(this%dm_GL, "dump_field")
-    call this%dump_field2%init(this%dm_GL, "dump_field2")
+    call this%dummy_field%init(this%dm_GL, "dummy_field")
+    call this%dummy_field2%init(this%dm_GL, "dummy_field2")
     call this%tx11%init(this%dm_GL, "tx11")
     call this%ty22%init(this%dm_GL, "ty22")
     call this%tz33%init(this%dm_GL, "tz33")
@@ -177,6 +177,9 @@ contains
     call this%tz13%init(this%dm_GL, "tz13")
     call this%ty23%init(this%dm_GL, "ty23")
     call this%tz23%init(this%dm_GL, "tz23")
+
+    call this%output_check%init(this%dm_GL, "output_check_adv")
+    call this%output_check2%init(this%dm_GL, "output_check2_adv")
 
   end subroutine init_full_dealias
 
@@ -225,7 +228,7 @@ contains
               tx12 => this%tx12, ty12 => this%ty12, &
               tx13 => this%tx13, tz13 => this%tz13, &
               ty23 => this%ty23, tz23 => this%tz23, &
-              dump_field => this%dump_field, dump_field2 => this%dump_field2)
+              dummy_field => this%dummy_field, dummy_field2 => this%dummy_field2)
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call neko_error("adv_full_dealiasing not implemented for devices")
 
@@ -248,7 +251,9 @@ contains
          end do
 
          call field_copy(this%wa, this%t11)
+         call field_copy(this%output_check, this%wa)
          call this%explicit_filter%apply(this%t11, this%wa)
+         call field_copy(this%output_check2, this%t11)
          call field_copy(this%wa, this%t22)
          call this%explicit_filter%apply(this%t22, this%wa)
          call field_copy(this%wa, this%t33)
@@ -260,12 +265,12 @@ contains
          call field_copy(this%wa, this%t23)
          call this%explicit_filter%apply(this%t23, this%wa)
          
-         call opgrad(tx11%x, dump_field%x, dump_field2%x, t11%x, c_GL)
-         call opgrad(dump_field%x, ty22%x, dump_field2%x, t22%x, c_GL)
-         call opgrad(dump_field%x, dump_field2%x, tz33%x, t33%x, c_GL)
-         call opgrad(tx12%x, ty12%x, dump_field%x, t12%x, c_GL)
-         call opgrad(tx13%x, dump_field%x, tz13%x, t13%x, c_GL)
-         call opgrad(dump_field%x, ty23%x, tz23%x, t23%x, c_GL)
+         call opgrad(tx11%x, dummy_field%x, dummy_field2%x, t11%x, c_GL)
+         call opgrad(dummy_field%x, ty22%x, dummy_field2%x, t22%x, c_GL)
+         call opgrad(dummy_field%x, dummy_field2%x, tz33%x, t33%x, c_GL)
+         call opgrad(tx12%x, ty12%x, dummy_field%x, t12%x, c_GL)
+         call opgrad(tx13%x, dummy_field%x, tz13%x, t13%x, c_GL)
+         call opgrad(dummy_field%x, ty23%x, tz23%x, t23%x, c_GL)
 
 
          do e = 1, coef%msh%nelv

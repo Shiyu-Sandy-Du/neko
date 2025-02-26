@@ -36,6 +36,7 @@ submodule (advection) advection_fctry
 
   ! Advection and derivatives
   use adv_dealias, only : adv_dealias_t
+  use adv_full_dealias, only : adv_full_dealias_t
   use adv_no_dealias, only : adv_no_dealias_t
   use adv_oifs, only : adv_oifs_t
   use adv_dummy, only : adv_dummy_t
@@ -68,7 +69,7 @@ contains
     logical, optional, intent(in) :: use_dummy
     type(field_series_t), target, optional, intent(in) :: slag
 
-    logical :: dealias, oifs
+    logical :: dealias, oifs, full_adv
     real(kind=rp) :: ctarget
     integer :: lxd, order
 
@@ -87,6 +88,7 @@ contains
 
     ! Read the parameters from the json file
     call json_get(json, 'case.numerics.dealias', dealias)
+   !  call json_get(json, 'case.numerics.full_advection', full_adv)
     call json_get(json, 'case.numerics.polynomial_order', order)
     call json_get_or_default(json, 'case.numerics.oifs', oifs, .false.)
 
@@ -100,7 +102,11 @@ contains
       allocate(adv_oifs_t::object)
     else
       if (dealias) then
-         allocate(adv_dealias_t::object)
+         if (full_adv) then
+            allocate(adv_full_dealias_t::object)
+         else
+            allocate(adv_dealias_t::object)
+         end if
       else
          allocate(adv_no_dealias_t::object)
       end if
@@ -108,6 +114,8 @@ contains
 
     select type (adv => object)
       type is (adv_dealias_t)
+       call adv%init(lxd, coef)
+      type is (adv_full_dealias_t)
        call adv%init(lxd, coef)
       type is (adv_no_dealias_t)
        call adv%init(coef)

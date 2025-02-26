@@ -303,9 +303,9 @@ contains
     write(log_buf, '(A, L1)') 'Dealias    : ', logical_val
     call neko_log%message(log_buf)
 
-    call json_get(params, 'case.numerics.full_advection', logical_val)
-    write(log_buf, '(A, L1)') 'Full adv.  : ', logical_val
-    call neko_log%message(log_buf)
+   !  call json_get(params, 'case.numerics.full_advection', logical_val)
+   !  write(log_buf, '(A, L1)') 'Full adv.  : ', logical_val
+   !  call neko_log%message(log_buf)
 
     write(log_buf, '(A, L1)') 'LES using grid filter: ', this%variable_material_properties
     call neko_log%message(log_buf)

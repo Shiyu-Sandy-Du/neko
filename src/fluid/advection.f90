@@ -39,14 +39,11 @@ module advection
   use json_module, only : json_file
   use field_series, only: field_series_t
   use time_scheme_controller, only: time_scheme_controller_t
-  use filter, only: filter_t
   implicit none
   private
 
   !> Base abstract type for computing the advection operator
   type, public, abstract :: advection_t
-     class(filter_t), pointer :: explicit_filter
-     logical :: if_explicit_filter = .false.
    contains
      procedure(compute_adv), pass(this), deferred :: compute
      procedure(compute_scalar_adv), pass(this), deferred :: compute_scalar
