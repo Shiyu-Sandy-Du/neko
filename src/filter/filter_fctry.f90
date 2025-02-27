@@ -33,12 +33,12 @@
 submodule (filter) filter_fctry
   use elementwise_filter, only : elementwise_filter_t
   use PDE_filter, only : PDE_filter_t
-  use Yazdi_filter, only : Yazdi_filter_t
+!   use Yazdi_filter, only : Yazdi_filter_t
   use utils, only : concat_string_array, neko_error
   implicit none
 
   ! List of all possible types created by the factory routine
-  character(len=20) :: FILTER_KNOWN_TYPES(2) = [character(len=20) :: &
+  character(len=20) :: FILTER_KNOWN_TYPES(3) = [character(len=20) :: &
      "elementwise", &
      "PDE", &
      "Yazdi"]
@@ -62,8 +62,8 @@ contains
        allocate(elementwise_filter_t::object)
     else if (trim(type_name) .eq. 'PDE') then
        allocate(pde_filter_t::object)
-    else if (trim(type_name) .eq. 'Yazdi') then
-       allocate(Yazdi_filter_t::object)
+   !  else if (trim(type_name) .eq. 'Yazdi') then
+   !     allocate(Yazdi_filter_t::object)
     else
        type_string =  concat_string_array(FILTER_KNOWN_TYPES, &
             NEW_LINE('A') // "-  ", .true.)
