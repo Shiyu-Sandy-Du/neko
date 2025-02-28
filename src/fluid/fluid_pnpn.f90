@@ -742,14 +742,13 @@ contains
                this%advx%x(i,1,1,1) = this%advx%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
                this%advy%x(i,1,1,1) = this%advy%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
                this%advz%x(i,1,1,1) = this%advz%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
-            end do
-
-            ! call copy(this%output_check%x, this%c_Xh%drdx, this%advx%dof%size())
-            ! call copy(this%output_check2%x, this%c_Xh%dxdr, this%advx%dof%size())
+            end do            
 
             call gs_Xh%op(this%advx, GS_OP_ADD)
             call gs_Xh%op(this%advy, GS_OP_ADD)
             call gs_Xh%op(this%advz, GS_OP_ADD)
+
+            call copy(this%output_check%x, this%advx%x, this%advx%dof%size())
 
             call field_copy(this%wa, this%advx)
             call this%explicit_filter%apply(this%advx, this%wa)
@@ -757,6 +756,8 @@ contains
             call this%explicit_filter%apply(this%advy, this%wa)
             call field_copy(this%wa, this%advz)
             call this%explicit_filter%apply(this%advz, this%wa)
+
+            call copy(this%output_check2%x, this%advx%x, this%advx%dof%size())
 
             do concurrent (i = 1:this%advx%dof%size())
                this%advx%x(i,1,1,1) = this%advx%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
