@@ -1,7 +1,8 @@
 !> Program to filter a field
 program field_filtering
   use neko
-  use PDE_filter, only : PDE_filter_t
+  use filter, only : filter_t
+  use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
   implicit none
 
   character(len=NEKO_FNAME_LEN) :: inputchar, field_fname, output_fname, mesh_fname
@@ -16,7 +17,8 @@ program field_filtering
   type(field_t) :: field_in, field_out
   integer :: argc, i, lx, j, file_precision
   logical :: dp_precision
-  type(PDE_filter_t) :: PDE_filter
+!   type(PDE_filter_t) :: filter
+  type(Najafi_Yazdi_filter_t) :: filter
 
   argc = command_argument_count()
 
@@ -65,16 +67,22 @@ program field_filtering
 
   !! Initialize the PDE filter
   ! for order 9
-!   PDE_filter%r = 0.03788962064050693 !! maximum GLL spacing
-!   PDE_filter%r = 0.025472013875971044 !! avg GLL spacing
-!   PDE_filter%r = 0.009223350334781055 !! minimum GLL spacing
-  PDE_filter%r = 0.014347433854103862 !! two times of the min
-  PDE_filter%abstol_filt = 1e-4
-  PDE_filter%ksp_max_iter = 200
-  PDE_filter%ksp_solver = 'cg'
-  PDE_filter%precon_type_filt = 'jacobi'
-  PDE_filter%coef => coef
-  call PDE_filter%init_from_attributes(coef)
+! for PDE filter
+!   filter%r = 0.03788962064050693 !! maximum GLL spacing
+!   filter%r = 0.025472013875971044 !! avg GLL spacing
+!   filter%r = 0.009223350334781055 !! minimum GLL spacing
+!   filter%r = 0.014347433854103862 !! two times of the min
+  
+  filter%alpha = 0.014347433854103862!! two times of the min for 0.66 cutoff
+  filter%beta = 0!! zero at the minimal GLL spacing
+
+  ! general info for filter
+  filter%abstol_filt = 1e-4
+  filter%ksp_max_iter = 200
+  filter%ksp_solver = 'cg'
+  filter%precon_type_filt = 'jacobi'
+  filter%coef => coef
+  call filter%init_from_attributes(coef)
 
   ! interpolate field for t>0
   allocate(fields(field_data%size()))
@@ -87,7 +95,7 @@ program field_filtering
      do j = 1, field_data%size()
         !! Apply filter to field fields(j)%ptr%x
         call copy(field_in%x, fields(j)%ptr%x, field_in%dof%size())
-        call PDE_filter%apply(field_out, field_in)
+        call filter%apply(field_out, field_in)
         call copy(fields(j)%ptr%x, field_out%x, field_in%dof%size())
      end do
      ! output
