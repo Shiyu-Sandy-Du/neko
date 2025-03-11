@@ -3,6 +3,8 @@ program field_filtering
   use neko
   use filter, only : filter_t
   use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
+  use PDE_filter, only : PDE_filter_t
+  use scratch_registry, only : scratch_registry_t, neko_scratch_registry
   implicit none
 
   character(len=NEKO_FNAME_LEN) :: inputchar, field_fname, output_fname, mesh_fname
@@ -65,21 +67,23 @@ program field_filtering
   call field_in%init(dof, "field_in")
   call field_out%init(dof, "field_out")
 
+  neko_scratch_registry = scratch_registry_t(dof, 10, 10)
+
   !! Initialize the PDE filter
   ! for order 9
 ! for PDE filter
-!   filter%r = 0.03788962064050693 !! maximum GLL spacing
-!   filter%r = 0.025472013875971044 !! avg GLL spacing
-!   filter%r = 0.009223350334781055 !! minimum GLL spacing
-!   filter%r = 0.014347433854103862 !! two times of the min
+!   filter%r = 0.02264179011197426 !! average GLL
+!   filter%r = 0.008198533630916494 !! two times of the min
   
-  filter%alpha = 0.014347433854103862!! two times of the min for 0.66 cutoff
-  filter%beta = 0!! zero at the minimal GLL spacing
+  filter%alpha = 0.017700172170343316 !! avg GLL for 0.66 cutoff
+!   filter%alpha = 0.02264179011197426
+  filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
+!   filter%beta = 0.0
 
   ! general info for filter
   filter%abstol_filt = 1e-4
   filter%ksp_max_iter = 200
-  filter%ksp_solver = 'cg'
+  filter%ksp_solver = "cg"
   filter%precon_type_filt = 'jacobi'
   filter%coef => coef
   call filter%init_from_attributes(coef)

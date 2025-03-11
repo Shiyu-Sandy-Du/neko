@@ -63,7 +63,11 @@ module Najafi_Yazdi_filter
   use sx_jacobi, only: sx_jacobi_t
   use hsmg, only: hsmg_t
   use utils, only: neko_error
-  use device_math, only: device_cfill, device_subcol3, device_cmult
+  use math, only : invcol2, col2
+  use device_math, only: device_cfill, device_subcol3, &
+                         device_cmult, device_invcol2, &
+                         device_col2
+  use operators, only : dudxyz, div
   implicit none
   private
 
@@ -207,7 +211,8 @@ contains
     ! type(field_t), pointer :: RHS
     type(field_t) :: RHS, d_F_out
     character(len=LOG_SIZE) :: log_buf
-    ! integer :: temp_indices(1)
+    type(field_t), pointer :: fx, fy, fz, lapf
+    integer :: temp_indices(4)
 
     n = this%coef%dof%size()
     ! TODO
@@ -230,37 +235,84 @@ contains
     ! A (d_F_out) = F_in - A(F_in)
 
     ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_cfill(this%coef%h1_d, -this%beta**2, n)
-       call device_cfill(this%coef%h2_d, 1.0_rp, n)
-    else
-       do i = 1, n
-          ! h1 is already negative in its definition
-          this%coef%h1(i,1,1,1) = -this%beta**2
-          ! ax_helm includes the mass matrix in h2
-          this%coef%h2(i,1,1,1) = 1.0_rp
-       end do
-    end if
-    this%coef%ifh2 = .true.
+   !  if (NEKO_BCKND_DEVICE .eq. 1) then
+   !     call device_cfill(this%coef%h1_d, -this%beta**2, n)
+   !     call device_cfill(this%coef%h2_d, 1.0_rp, n)
+   !  else
+   !     do i = 1, n
+   !        ! h1 is already negative in its definition
+   !        this%coef%h1(i,1,1,1) = -this%beta**2
+   !        ! ax_helm includes the mass matrix in h2
+   !        this%coef%h2(i,1,1,1) = 1.0_rp
+   !     end do
+   !  end if
+   !  this%coef%ifh2 = .true.
 
-    ! compute the A(F_in) component of the RHS 
-    ! (note, to be safe with the inout intent we first copy F_in to the
-    !  temporary d_F_out, later not needed)
-    call field_copy(d_F_out, F_in)
-    ! First, construct \rho + beta^2 \nabla^2 \rho
-    call this%Ax_R%compute(d_F_out%x, d_F_out%x, this%coef, this%coef%msh, &
-        this%coef%Xh)
+   !  ! compute the A(F_in) component of the RHS 
+   !  ! First, construct \rho + beta^2 \nabla^2 \rho
+   !  call this%Ax_R%compute(d_F_out%x, F_in%x, this%coef, this%coef%msh, &
+   !      this%coef%Xh)
+    
+   !  if (NEKO_BCKND_DEVICE .eq. 1) then
+   !     call device_invcol2(d_F_out%x_d, this%coef%B_d, n)
+   !  else
+   !     call invcol2(d_F_out%x, this%coef%B, n)
+   !  end if
+    call neko_scratch_registry%request_field(fx, temp_indices(1))
+    call neko_scratch_registry%request_field(fy, temp_indices(2))
+    call neko_scratch_registry%request_field(fz, temp_indices(3))
+    call neko_scratch_registry%request_field(lapf, temp_indices(4))
+
+    call dudxyz(fx%x, F_in%x, this%coef%drdx, this%coef%dsdx, this%coef%dtdx, this%coef)
+    call dudxyz(fy%x, F_in%x, this%coef%drdy, this%coef%dsdy, this%coef%dtdy, this%coef)
+    call dudxyz(fz%x, F_in%x, this%coef%drdz, this%coef%dsdz, this%coef%dtdz, this%coef)
+
+    call this%coef%gs_h%op(fx, GS_OP_ADD)
+    call this%coef%gs_h%op(fy, GS_OP_ADD)
+    call this%coef%gs_h%op(fz, GS_OP_ADD)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(fx%x_d, this%coef%mult_d, n)
+       call device_col2(fy%x_d, this%coef%mult_d, n)
+       call device_col2(fz%x_d, this%coef%mult_d, n)
+    else
+       call col2(fx%x, this%coef%mult, n)
+       call col2(fy%x, this%coef%mult, n)
+       call col2(fz%x, this%coef%mult, n)
+    end if
+
+    call div(lapf%x, fx%x, fy%x, fz%x, this%coef)
+
+    call this%coef%gs_h%op(lapf, GS_OP_ADD)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(lapf%x_d, this%coef%mult_d, n)
+    else
+       call col2(lapf%x, this%coef%mult, n)
+    end if
+
+    do i = 1, n
+       d_F_out%x(i,1,1,1) = F_in%x(i,1,1,1) + this%beta**2*lapf%x(i,1,1,1)
+    end do
+
+    ! gather scatter
+    call this%coef%gs_h%op(d_F_out, GS_OP_ADD)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(d_F_out%x_d, this%coef%mult_d, n)
+    else
+       call col2(d_F_out%x, this%coef%mult, n)
+    end if
+
     
     ! set up Helmholtz operators for euqation solving
     if (NEKO_BCKND_DEVICE .eq. 1) then
        ! TODO
        ! I think this is correct but I've never tested it
-       call device_cfill(this%coef%h1_d, -this%alpha**2, n)
+       call device_cfill(this%coef%h1_d, this%alpha**2, n)
        call device_cfill(this%coef%h2_d, 1.0_rp, n)
     else
        do i = 1, n
           ! h1 is already negative in its definition
-          this%coef%h1(i,1,1,1) = -this%alpha**2
+          this%coef%h1(i,1,1,1) = this%alpha**2
           ! ax_helm includes the mass matrix in h2
           this%coef%h2(i,1,1,1) = 1.0_rp
        end do
@@ -313,6 +365,8 @@ contains
     !call neko_scratch_registry%relinquish_field(temp_indices)
     call RHS%free()
     call d_F_out%free()
+
+    call neko_scratch_registry%relinquish_field(temp_indices)
 
   end subroutine Najafi_Yazdi_filter_apply
 
