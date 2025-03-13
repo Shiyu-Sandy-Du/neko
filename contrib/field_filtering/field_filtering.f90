@@ -75,14 +75,15 @@ program field_filtering
 !   filter%r = 0.02264179011197426 !! average GLL
 !   filter%r = 0.008198533630916494 !! two times of the min
   
-  filter%alpha = 0.017700172170343316 !! avg GLL for 0.66 cutoff
-!   filter%alpha = 0.02264179011197426
+!  filter%alpha = 0.017700172170343316 !! avg GLL for 0.66 cutoff
+  filter%alpha = 0.02264179011197426
+!   filter%alpha = 0.0
   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
 !   filter%beta = 0.0
 
   ! general info for filter
   filter%abstol_filt = 1e-4
-  filter%ksp_max_iter = 200
+  filter%ksp_max_iter = 800
   filter%ksp_solver = "cg"
   filter%precon_type_filt = 'jacobi'
   filter%coef => coef
