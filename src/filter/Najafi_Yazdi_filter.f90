@@ -1,4 +1,4 @@
-! Copyright (c) 2023, The Neko Authors
+! Copyright (c) 2025, The Neko Authors
 ! All rights reserved.
 !
 ! Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 !
 !> A PDE based filter
 
-module Yazdi_filter
+module Najafi_Yazdi_filter
   use num_types, only: rp
   use json_module, only: json_file
   use json_utils, only: json_get_or_default, json_get
@@ -53,7 +53,7 @@ module Yazdi_filter
   use field_registry, only: neko_field_registry
   use filter, only: filter_t
   use scratch_registry, only: neko_scratch_registry
-  use field_math, only: field_copy, field_add3
+  use field_math, only: field_copy, field_add2
   use coefs, only: coef_t
   use logger, only: neko_log, LOG_SIZE
   use neko_config, only: NEKO_BCKND_DEVICE
@@ -63,17 +63,23 @@ module Yazdi_filter
   use sx_jacobi, only: sx_jacobi_t
   use hsmg, only: hsmg_t
   use utils, only: neko_error
-  use device_math, only: device_cfill, device_subcol3, device_cmult
+  use math, only : invcol2, col2
+  use device_math, only: device_cfill, device_subcol3, &
+                         device_cmult, device_invcol2, &
+                         device_col2
+  use operators, only : dudxyz, div
   implicit none
   private
 
   !> A PDE based filter mapping $\rho \mapsto \tilde{\rho}$,
+  !! see A. Najafi-Yazdi et al. 2015,
   !! by solving an equation
-  !! of the form $\f -r^2 \nabla^2 \tilde{\rho} + \tilde{\rho} = \rho \f$
-  type, public, extends(filter_t) :: Yazdi_filter_t
+  !! of the form $\f \tilde{\rho} + alpha^2 \nabla^2 \tilde{\rho} = 
+  !! \rho + beta^2 \nabla^2 \rho \f$
+  type, public, extends(filter_t) :: Najafi_Yazdi_filter_t
 
      !> Ax
-     class(ax_t), allocatable :: Ax
+     class(ax_t), allocatable :: Ax_L, AX_R
      !> Solver results monitors ( filter )
      type(ksp_monitor_t) :: ksp_results(1)
      !> Krylov solver for the filter
@@ -84,8 +90,7 @@ module Yazdi_filter
      type(bc_list_t) :: bclst_filt
 
      ! Inputs from the user
-     !> filter parameters
-     real(kind=rp) :: delta
+     !> filter radius
      real(kind=rp) :: alpha
      real(kind=rp) :: beta
      !> tolerance for PDE filter
@@ -102,31 +107,28 @@ module Yazdi_filter
 
    contains
      !> Constructor from json.
-     procedure, pass(this) :: init => Yazdi_filter_init_from_json
+     procedure, pass(this) :: init => Najafi_Yazdi_filter_init_from_json
      !> Actual constructor.
      procedure, pass(this) :: init_from_attributes => &
-          Yazdi_filter_init_from_attributes
+          Najafi_Yazdi_filter_init_from_attributes
      !> Destructor.
-     procedure, pass(this) :: free => Yazdi_filter_free
+     procedure, pass(this) :: free => Najafi_Yazdi_filter_free
      !> Apply the filter
-     procedure, pass(this) :: apply => Yazdi_filter_apply
-  end type Yazdi_filter_t
+     procedure, pass(this) :: apply => Najafi_Yazdi_filter_apply
+  end type Najafi_Yazdi_filter_t
 
 contains
 
   !> Constructor from json.
-  subroutine Yazdi_filter_init_from_json(this, json, coef)
-    class(Yazdi_filter_t), intent(inout) :: this
+  subroutine Najafi_Yazdi_filter_init_from_json(this, json, coef)
+    class(Najafi_Yazdi_filter_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in) :: coef
-    
-    real(kind=rp) :: PI = 4.0_rp * atan(1.0_rp)
-    real(kind=rp) :: Tc = exp(-PI*PI/24.0_rp)
 
     ! user parameters
-    call json_get(json, "filter.delta", this%delta)
-    this%alpha = (1.0_rp - 3.0_rp/4.0_rp/Tc)/PI/PI
-    this%beta = 1/4/PI/PI
+    call json_get(json, "filter.alpha", this%alpha)
+
+    call json_get(json, "filter.beta", this%beta)
 
     call json_get_or_default(json, "filter.tolerance", this%abstol_filt, &
          1.0e-10_rp)
@@ -139,13 +141,13 @@ contains
          this%precon_type_filt, 'jacobi')
 
     call this%init_base(json, coef)
-    call Yazdi_filter_init_from_attributes(this, coef)
+    call Najafi_Yazdi_filter_init_from_attributes(this, coef)
 
-  end subroutine Yazdi_filter_init_from_json
+  end subroutine Najafi_Yazdi_filter_init_from_json
 
   !> Actual constructor.
-  subroutine Yazdi_filter_init_from_attributes(this, coef)
-    class(Yazdi_filter_t), intent(inout) :: this
+  subroutine Najafi_Yazdi_filter_init_from_attributes(this, coef)
+    class(Najafi_Yazdi_filter_t), intent(inout) :: this
     type(coef_t), intent(in) :: coef
     integer :: n
 
@@ -155,7 +157,8 @@ contains
     call this%bclst_filt%init()
 
     ! Setup backend dependent Ax routines
-    call ax_helm_factory(this%Ax, full_formulation = .false.)
+    call ax_helm_factory(this%Ax_L, full_formulation = .false.)
+    call ax_helm_factory(this%Ax_R, full_formulation = .false.)
 
     ! set up krylov solver
     call krylov_solver_factory(this%ksp_filt, n, this%ksp_solver, &
@@ -167,14 +170,18 @@ contains
                                       this%coef%gs_h, &      
                                       this%bclst_filt, this%precon_type_filt)
 
-  end subroutine Yazdi_filter_init_from_attributes
+  end subroutine Najafi_Yazdi_filter_init_from_attributes
 
   !> Destructor.
-  subroutine Yazdi_filter_free(this)
-    class(Yazdi_filter_t), intent(inout) :: this
+  subroutine Najafi_Yazdi_filter_free(this)
+    class(Najafi_Yazdi_filter_t), intent(inout) :: this
 
-    if (allocated(this%Ax)) then
-       deallocate(this%Ax)
+    if (allocated(this%Ax_L)) then
+       deallocate(this%Ax_L)
+    end if
+
+    if (allocated(this%Ax_R)) then
+       deallocate(this%Ax_R)
     end if
 
     if (allocated(this%ksp_filt)) then                                               
@@ -191,20 +198,18 @@ contains
 
     call this%free_base()
 
-  end subroutine Yazdi_filter_free
+  end subroutine Najafi_Yazdi_filter_free
 
   !> Apply the filter
   !! @param F_out filtered field
   !! @param F_in unfiltered field
-  subroutine Yazdi_filter_apply(this, F_out, F_in)
-    class(Yazdi_filter_t), intent(inout) :: this
+  subroutine Najafi_Yazdi_filter_apply(this, F_out, F_in)
+    class(Najafi_Yazdi_filter_t), intent(inout) :: this
     type(field_t), intent(in) :: F_in
     type(field_t), intent(inout) :: F_out
     integer :: n, i
-    ! type(field_t), pointer :: RHS
     type(field_t) :: RHS, d_F_out
     character(len=LOG_SIZE) :: log_buf
-    ! integer :: temp_indices(1)
 
     n = this%coef%dof%size()
     ! TODO
@@ -218,61 +223,76 @@ contains
     ! in a similar fasion to pressure/velocity, we will solve for d_F_out.
 
     ! to improve convergence, we use F_in as an initial guess for F_out.
-    ! so F_out = F_in + d_F_in.
+    ! so F_out = (I + alpha^2 \nabla^2) F_in + d_F_in.
 
-    ! Defining the operator A = alpha*delta^2 \nabla^2 + I
+    ! Defining the operator A = alpha^2 or beta^2 \nabla^2 + I
     ! the system changes from:
-    ! A (F_out) = F_in
+    ! A_L (F_out) = A_R (F_in)
     ! to
-    ! A (d_F_out) = F_in - A(F_in)
+    ! A_L (d_F_out) = A_R(F_in) - A_L(F_in)
 
-    ! set up Helmholtz operators and RHS of the pde
+    ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       ! TODO
-       ! I think this is correct but I've never tested it
-       call device_cfill(this%coef%h1_d, - this%beta * this%delta**2, n)
+       call device_cfill(this%coef%h1_d, -this%beta**2, n)
        call device_cfill(this%coef%h2_d, 1.0_rp, n)
     else
        do i = 1, n
           ! h1 is already negative in its definition
-          this%coef%h1(i,1,1,1) = - this%beta * this%delta**2
+          this%coef%h1(i,1,1,1) = -this%beta**2
           ! ax_helm includes the mass matrix in h2
           this%coef%h2(i,1,1,1) = 1.0_rp
        end do
     end if
     this%coef%ifh2 = .true.
-    
-    ! use d_F_out as a work field and will be overwritten later 
-    call field_copy(d_F_out, F_in)
-    call this%Ax%compute(d_F_out%x, F_in%x, this%coef, this%coef%msh, &
-        this%coef%Xh)
 
-    ! set up Helmholtz operators and RHS
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       ! TODO
-       ! I think this is correct but I've never tested it
-       call device_cfill(this%coef%h1_d, - this%alpha * this%delta**2, n)
-       call device_cfill(this%coef%h2_d, 1.0_rp, n)
-    else
-       do i = 1, n
-          ! h1 is already negative in its definition
-          this%coef%h1(i,1,1,1) = - this%alpha * this%delta**2
-          ! ax_helm includes the mass matrix in h2
-          this%coef%h2(i,1,1,1) = 1.0_rp
-       end do
-    end if
-    this%coef%ifh2 = .true.
     ! compute the A(F_in) component of the RHS 
-    call this%Ax%compute(RHS%x, d_F_out%x, this%coef, this%coef%msh, &
+    ! use F_out as a temporal array
+    ! First, construct \rho + beta^2 \nabla^2 \rho
+    call this%Ax_R%compute(F_out%x, F_in%x, this%coef, this%coef%msh, &
+        this%coef%Xh)
+    
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_invcol2(F_out%x_d, this%coef%B_d, n)
+    else
+       call invcol2(F_out%x, this%coef%B, n)
+    end if
+
+    ! gather scatter
+    call this%coef%gs_h%op(F_out, GS_OP_ADD)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(F_out%x_d, this%coef%mult_d, n)
+    else
+       call col2(F_out%x, this%coef%mult, n)
+    end if
+
+    
+    ! set up Helmholtz operators for euqation solving
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       ! TODO
+       ! I think this is correct but I've never tested it
+       call device_cfill(this%coef%h1_d, this%alpha**2, n)
+       call device_cfill(this%coef%h2_d, 1.0_rp, n)
+    else
+       do i = 1, n
+          ! h1 is already negative in its definition
+          this%coef%h1(i,1,1,1) = this%alpha**2
+          ! ax_helm includes the mass matrix in h2
+          this%coef%h2(i,1,1,1) = 1.0_rp
+       end do
+    end if
+    this%coef%ifh2 = .true.
+
+    call this%Ax_L%compute(RHS%x, F_out%x, this%coef, this%coef%msh, &
         this%coef%Xh)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_subcol3(RHS%x_d, F_in%x_d, this%coef%B_d, n)
+       call device_subcol3(RHS%x_d, F_out%x_d, this%coef%B_d, n)
        call device_cmult(RHS%x_d, -1.0_rp, n)
     else
        do i = 1, n
           ! mass matrix should be included here
-          RHS%x(i,1,1,1) = d_F_out%x(i,1,1,1) * this%coef%B(i,1,1,1) &
+          RHS%x(i,1,1,1) = F_out%x(i,1,1,1) * this%coef%B(i,1,1,1) &
               - RHS%x(i,1,1,1)
        end do
     end if
@@ -286,13 +306,13 @@ contains
     ! Solve Helmholtz equation
     call profiler_start_region('filter solve')
     this%ksp_results(1) = &
-         this%ksp_filt%solve(this%Ax, d_F_out, RHS%x, n, this%coef, &
+         this%ksp_filt%solve(this%Ax_L, d_F_out, RHS%x, n, this%coef, &
          this%bclst_filt, this%coef%gs_h)
 
     call profiler_end_region
 
     ! add result
-    call field_add3(F_out, F_in, d_F_out)
+    call field_add2(F_out, d_F_out)
     ! update preconditioner (needed?)
     call this%pc_filt%update()
 
@@ -310,7 +330,7 @@ contains
     call RHS%free()
     call d_F_out%free()
 
-  end subroutine Yazdi_filter_apply
+  end subroutine Najafi_Yazdi_filter_apply
 
   !> Initialize a Krylov preconditioner
   subroutine filter_precon_factory(pc, ksp, coef, dof, gs, bclst, &
@@ -349,4 +369,4 @@ contains
 
   end subroutine filter_precon_factory
 
-end module Yazdi_filter
+end module Najafi_Yazdi_filter
