@@ -72,12 +72,13 @@ program field_filtering
   !! Initialize the PDE filter
   ! for order 9
 ! for PDE filter
-!   filter%r = 0.02264179011197426 !! average GLL
-!   filter%r = 0.008198533630916494 !! two times of the min
+!   filter%r = 0.031746031746031744 !! Transfer function 0.5 at average GLL
+!   filter%r = 0.047222559333253436 !! Transfer function 0.5 at max GLL
   
-!  filter%alpha = 0.017700172170343316 !! avg GLL for 0.66 cutoff
-  filter%alpha = 0.02264179011197426
+!   filter%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
+  filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
 !   filter%alpha = 0.0
+!   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
 !   filter%beta = 0.0
 
