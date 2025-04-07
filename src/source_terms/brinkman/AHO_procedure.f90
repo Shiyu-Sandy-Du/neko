@@ -185,6 +185,11 @@ contains
     do i = 1, this%damp_order
        call this%Ax_damp%compute(F_out%x, tmp_field%x, &
        this%coef, this%coef%msh, this%coef%Xh)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(F_out%x_d, this%coef%B_d, n)
+       else
+          call invcol2(F_out%x, this%coef%B, n)
+       end if
        call field_copy(tmp_field, F_out)
     end do
 
