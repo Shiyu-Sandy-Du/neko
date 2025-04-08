@@ -52,7 +52,7 @@ module AHO_procedure
   use field_registry, only: neko_field_registry
   use filter, only: filter_t
   use scratch_registry, only: neko_scratch_registry
-  use field_math, only: field_copy, field_add2
+  use field_math, only: field_copy, field_add2, field_sub2, field_add2s2
   use coefs, only: coef_t
   use logger, only: neko_log, LOG_SIZE
   use neko_config, only: NEKO_BCKND_DEVICE

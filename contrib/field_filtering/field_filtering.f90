@@ -4,6 +4,7 @@ program field_filtering
   use filter, only : filter_t
   use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
   use PDE_filter, only : PDE_filter_t
+  use AHO_procedure, only : AHO_procedure_t
   use scratch_registry, only : scratch_registry_t, neko_scratch_registry
   implicit none
 
@@ -20,7 +21,8 @@ program field_filtering
   integer :: argc, i, lx, j, file_precision
   logical :: dp_precision
 !   type(PDE_filter_t) :: filter
-  type(Najafi_Yazdi_filter_t) :: filter
+!   type(Najafi_Yazdi_filter_t) :: filter
+  type(AHO_procedure_t) :: filter
 
   argc = command_argument_count()
 
@@ -76,17 +78,41 @@ program field_filtering
 !   filter%r = 0.047222559333253436 !! Transfer function 0.5 at max GLL
   
 !   filter%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
-  filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
-!   filter%alpha = 0.0
-!   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
+! !   filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
+! !   filter%alpha = 0.0
+! !   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
-!   filter%beta = 0.0
+! !   filter%beta = 0.0
+  filter%AD_order = 3
+  filter%gamma = 1.7
+  filter%damp_order = 8
+  allocate(Najafi_Yazdi_filter_t::filter%base_filter)
+  
+  select type(f => filter%base_filter)
+  type is (Najafi_Yazdi_filter_t)
+    f%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
+    !   filter%base_filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
+    !   filter%base_filter%alpha = 0.0
+    !   filter%base_filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
+    f%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
+    !   filter%base_filter%beta = 0.0
+  end select
 
   ! general info for filter
-  filter%abstol_filt = 1e-4
-  filter%ksp_max_iter = 800
-  filter%ksp_solver = "cg"
-  filter%precon_type_filt = 'jacobi'
+!   filter%abstol_filt = 1e-4
+!   filter%ksp_max_iter = 800
+!   filter%ksp_solver = "cg"
+!   filter%precon_type_filt = 'jacobi'
+!   filter%coef => coef
+  select type(f => filter%base_filter)
+  type is (Najafi_Yazdi_filter_t)
+     f%abstol_filt = 1e-4
+     f%ksp_max_iter = 800
+     f%ksp_solver = "cg"
+     f%precon_type_filt = 'jacobi'
+     f%coef => coef
+     call f%init_from_attributes(coef)
+  end select
   filter%coef => coef
   call filter%init_from_attributes(coef)
 
