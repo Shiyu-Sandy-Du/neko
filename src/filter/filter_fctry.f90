@@ -34,14 +34,16 @@ submodule (filter) filter_fctry
   use elementwise_filter, only : elementwise_filter_t
   use PDE_filter, only : PDE_filter_t
   use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
+  use AHO_procedure, only : AHO_procedure_t
   use utils, only : concat_string_array, neko_error
   implicit none
 
   ! List of all possible types created by the factory routine
-  character(len=20) :: FILTER_KNOWN_TYPES(3) = [character(len=20) :: &
+  character(len=20) :: FILTER_KNOWN_TYPES(4) = [character(len=20) :: &
      "elementwise", &
      "PDE", &
-     "Yazdi"]
+     "Yazdi", &
+     "AHO"]
 
 contains
   !> Filter factory. Both constructs and initializes the object.
@@ -64,6 +66,8 @@ contains
        allocate(pde_filter_t::object)
     else if (trim(type_name) .eq. 'Najafi_Yazdi') then
        allocate(Najafi_Yazdi_filter_t::object)
+    else if (trim(type_name) .eq. 'AHO') then
+       allocate(AHO_procedure_t::object)
     else
        type_string =  concat_string_array(FILTER_KNOWN_TYPES, &
             NEW_LINE('A') // "-  ", .true.)

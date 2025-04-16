@@ -326,6 +326,7 @@ neko_fortran_SOURCES = \
 	filter/filter_fctry.f90\
 	filter/PDE_filter.f90\
 	filter/Najafi_Yazdi_filter.f90\
+	filter/AHO_procedure.f90\
 	filter/elementwise_filter.f90\
 	filter/bcknd/cpu/filters_cpu.f90\
 	filter/bcknd/device/filters_device.F90\
