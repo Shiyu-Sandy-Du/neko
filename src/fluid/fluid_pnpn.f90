@@ -80,6 +80,7 @@ module fluid_pnpn
   use bc, only : bc_t
   use file, only : file_t
   use operators, only : ortho
+  use math, only : copy
   implicit none
   private
 
@@ -636,6 +637,7 @@ contains
     type(file_t) :: dump_file
     class(bc_t), pointer :: bc_i
     type(non_normal_t), pointer :: bc_j
+    integer :: i
 
     if (this%freeze) return
 
@@ -708,6 +710,20 @@ contains
          call this%adv%compute(u, v, w, &
               f_x, f_y, f_z, &
               Xh, this%c_Xh, dm_Xh%size())
+
+         !!!!!!!!!!!!!!! Take a user check of the convection term
+         do concurrent (i = 1:this%f_x%dof%size())
+            this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
+         end do            
+
+         call gs_Xh%op(this%f_x, GS_OP_ADD)
+
+         call copy(this%output_check%x, this%f_x%x, this%f_x%dof%size())
+
+         do concurrent (i = 1:this%f_x%dof%size())
+            this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
+         end do
+         !!!!!!!!!!!!!!!
 
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the

@@ -70,6 +70,7 @@ module fluid_scheme_base
      type(field_t), pointer :: w => null() !< z-component of Velocity
      type(field_t), pointer :: p => null() !< Pressure
      type(field_series_t) :: ulag, vlag, wlag !< fluid field (lag)
+     type(field_t) :: output_check !< a check field for output
 
      !> Density
      real(kind=rp) :: rho

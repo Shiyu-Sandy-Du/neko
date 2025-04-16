@@ -345,6 +345,7 @@ contains
     this%u => neko_field_registry%get_field('u')
     this%v => neko_field_registry%get_field('v')
     this%w => neko_field_registry%get_field('w')
+    call this%output_check%init(this%dm_Xh)
 
     !! Initialize time-lag fields
     call this%ulag%init(this%u, 2)

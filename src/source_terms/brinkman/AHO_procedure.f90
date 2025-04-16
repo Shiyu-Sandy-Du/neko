@@ -191,7 +191,16 @@ contains
           call invcol2(F_out%x, this%coef%B, n)
        end if
        call field_copy(tmp_field, F_out)
+       ! gather scatter
+       call this%coef%gs_h%op(tmp_field, GS_OP_ADD)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_col2(tmp_field%x_d, this%coef%mult_d, n)
+       else
+          call col2(tmp_field%x, this%coef%mult, n)
+       end if
     end do
+
+    
 
     !! Step 2: Apply the base filter
     call this%base_filter%apply(F_out, tmp_field)

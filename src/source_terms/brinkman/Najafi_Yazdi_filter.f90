@@ -316,15 +316,15 @@ contains
     ! update preconditioner (needed?)
     call this%pc_filt%update()
 
-    ! write it all out
-    call neko_log%message('Filter')
+   !  ! write it all out
+   !  call neko_log%message('Filter')
 
-    write(log_buf, '(A,A,A)') 'Iterations:   ',&
-         'Start residual:     ', 'Final residual:'
-    call neko_log%message(log_buf)
-    write(log_buf, '(I11,3x, E15.7,5x, E15.7)') this%ksp_results%iter, &
-         this%ksp_results%res_start, this%ksp_results%res_final
-    call neko_log%message(log_buf)
+   !  write(log_buf, '(A,A,A)') 'Iterations:   ',&
+   !       'Start residual:     ', 'Final residual:'
+   !  call neko_log%message(log_buf)
+   !  write(log_buf, '(I11,3x, E15.7,5x, E15.7)') this%ksp_results%iter, &
+   !       this%ksp_results%res_start, this%ksp_results%res_final
+   !  call neko_log%message(log_buf)
 
     !call neko_scratch_registry%relinquish_field(temp_indices)
     call RHS%free()

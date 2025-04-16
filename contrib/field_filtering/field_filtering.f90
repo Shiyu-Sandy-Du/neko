@@ -21,8 +21,10 @@ program field_filtering
   integer :: argc, i, lx, j, file_precision
   logical :: dp_precision
 !   type(PDE_filter_t) :: filter
-!   type(Najafi_Yazdi_filter_t) :: filter
+  ! type(Najafi_Yazdi_filter_t) :: filter
   type(AHO_procedure_t) :: filter
+  real(kind=rp) :: t_start, t_end, t_elapsed
+  t_elapsed = 0.0_rp
 
   argc = command_argument_count()
 
@@ -77,36 +79,35 @@ program field_filtering
 !   filter%r = 0.031746031746031744 !! Transfer function 0.5 at average GLL
 !   filter%r = 0.047222559333253436 !! Transfer function 0.5 at max GLL
   
-!   filter%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
-! !   filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
-! !   filter%alpha = 0.0
+  ! filter%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
+! !   filter%alpha = 0.04433613524144137 !! Transfer function 0.5 at max GLL
+!   filter%alpha = 0.016256605483164713 !! Transfer function 0.5 at double min GLL
 ! !   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
   filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
 ! !   filter%beta = 0.0
   filter%AD_order = 3
-  filter%gamma = 1.7
+  filter%gamma = 2.212
   filter%damp_order = 8
   allocate(Najafi_Yazdi_filter_t::filter%base_filter)
   
   select type(f => filter%base_filter)
   type is (Najafi_Yazdi_filter_t)
     f%alpha = 0.027267807205288697 !! Transfer function 0.5 at average GLL
-    !   filter%base_filter%alpha =0.04433613524144137 !! Transfer function 0.5 at max GLL
-    !   filter%base_filter%alpha = 0.0
+    ! f%alpha = 0.04433613524144137 !! Transfer function 0.5 at max GLL
+   !  f%alpha = 0.016256605483164713 !! Transfer function 0.5 at double min GLL
     !   filter%base_filter%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
     f%beta = 0.01149515597622018 !! zero at the minimal GLL spacing
     !   filter%base_filter%beta = 0.0
   end select
 
   ! general info for filter
-!   filter%abstol_filt = 1e-4
-!   filter%ksp_max_iter = 800
-!   filter%ksp_solver = "cg"
-!   filter%precon_type_filt = 'jacobi'
-!   filter%coef => coef
+  ! filter%abstol_filt = 1e-10
+  ! filter%ksp_max_iter = 800
+  ! filter%ksp_solver = "cg"
+  ! filter%precon_type_filt = 'jacobi'
   select type(f => filter%base_filter)
   type is (Najafi_Yazdi_filter_t)
-     f%abstol_filt = 1e-4
+     f%abstol_filt = 1e-10
      f%ksp_max_iter = 800
      f%ksp_solver = "cg"
      f%precon_type_filt = 'jacobi'
@@ -124,15 +125,22 @@ program field_filtering
         call field_file%read(field_data)
      end if
      call field_data%get_list(fields,field_data%size())
+     if (pe_rank .eq. 0) call cpu_time(t_start)
      do j = 1, field_data%size()
         !! Apply filter to field fields(j)%ptr%x
         call copy(field_in%x, fields(j)%ptr%x, field_in%dof%size())
         call filter%apply(field_out, field_in)
         call copy(fields(j)%ptr%x, field_out%x, field_in%dof%size())
      end do
+     if (pe_rank .eq. 0) then
+        call cpu_time(t_end)
+        t_elapsed = t_elapsed + t_end - t_start
+        write(*,*) "elapsed time", t_end - t_start 
+     end if
      ! output
      call output_file%write(field_data, field_data%time)
   end do
+  if (pe_rank .eq. 0) write(*,*) "Total elapsed time for filtering: ", t_elapsed 
 
 
   if (pe_rank .eq. 0) write(*,*) 'Done'
