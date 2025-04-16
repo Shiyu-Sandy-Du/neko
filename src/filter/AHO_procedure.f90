@@ -35,7 +35,7 @@
 module AHO_procedure
   use num_types, only: rp
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default, json_get
+  use json_utils, only: json_get_or_default, json_get, json_extract_object
   use field_registry, only: neko_field_registry
   use field, only: field_t
   use coefs, only: coef_t
@@ -61,11 +61,14 @@ module AHO_procedure
   use device_jacobi, only: device_jacobi_t
   use sx_jacobi, only: sx_jacobi_t
   use hsmg, only: hsmg_t
-  use utils, only: neko_error
+  use utils, only : concat_string_array, neko_error
   use math, only : invcol2, col2
   use device_math, only: device_cfill, device_subcol3, &
                          device_cmult, device_invcol2, &
                          device_col2
+  use elementwise_filter, only : elementwise_filter_t
+  use PDE_filter, only : PDE_filter_t
+  use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
   implicit none
   private
 
@@ -106,6 +109,13 @@ contains
     type(json_file), intent(inout) :: json
     type(json_file) :: json_base_filter
     type(coef_t), intent(in) :: coef
+    character(len=:), allocatable :: base_filter_type
+    character(len=:), allocatable :: type_string
+    character(len=20) :: FILTER_KNOWN_TYPES(4) = [character(len=20) :: &
+     "elementwise", &
+     "PDE", &
+     "Yazdi", &
+     "AHO"]
 
     ! user parameters
     call json_get(json, "filter.AD_order", this%AD_order)
@@ -114,8 +124,30 @@ contains
     call json_get(json, "filter.beta", this%beta)
 
     call this%init_base(json, coef)
+
     ! initialize the base filter
-    call json_get(json, "filter.base_filter", json_base_filter)
+    call json_extract_object(json, "filter.base_filter", json_base_filter)
+    call json_get(json_base_filter, 'filter.type', base_filter_type)
+
+    if (allocated(this%base_filter)) then
+       deallocate(this%base_filter)
+    else if (trim(base_filter_type) .eq. 'elementwise') then
+       allocate(elementwise_filter_t::this%base_filter)
+    else if (trim(base_filter_type) .eq. 'PDE') then
+       allocate(pde_filter_t::this%base_filter)
+    else if (trim(base_filter_type) .eq. 'Najafi_Yazdi') then
+       allocate(Najafi_Yazdi_filter_t::this%base_filter)
+    else if (trim(base_filter_type) .eq. 'AHO') then
+       allocate(AHO_procedure_t::this%base_filter)
+    else
+       type_string =  concat_string_array(FILTER_KNOWN_TYPES, &
+            NEW_LINE('A') // "-  ", .true.)
+       call neko_error("Unknown filter type: " &
+                       // trim(base_filter_type) // ".  Known types are: " &
+                       // type_string)
+       stop
+
+    end if
     call this%base_filter%init(json_base_filter, coef)
     ! initialize the rest used in the filter
     call AHO_procedure_init_from_attributes(this, coef)
@@ -166,7 +198,7 @@ contains
     call tmp_field%init(this%coef%dof)
     call tmp_field2%init(this%coef%dof)
     call field_copy(tmp_field, F_in)
-
+    
     !! Step 1: Pre-apply the damp procedure to smoothen the field
     ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -190,17 +222,15 @@ contains
        else
           call invcol2(F_out%x, this%coef%B, n)
        end if
-       call field_copy(tmp_field, F_out)
        ! gather scatter
-       call this%coef%gs_h%op(tmp_field, GS_OP_ADD)
+       call this%coef%gs_h%op(F_out, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(tmp_field%x_d, this%coef%mult_d, n)
+          call device_col2(F_out%x_d, this%coef%mult_d, n)
        else
-          call col2(tmp_field%x, this%coef%mult, n)
+          call col2(F_out%x, this%coef%mult, n)
        end if
+       call field_copy(tmp_field, F_out)
     end do
-
-    
 
     !! Step 2: Apply the base filter
     call this%base_filter%apply(F_out, tmp_field)
