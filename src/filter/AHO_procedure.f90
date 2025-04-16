@@ -198,7 +198,7 @@ contains
     call tmp_field%init(this%coef%dof)
     call tmp_field2%init(this%coef%dof)
     call field_copy(tmp_field, F_in)
-    
+
     !! Step 1: Pre-apply the damp procedure to smoothen the field
     ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -230,7 +230,7 @@ contains
           call col2(F_out%x, this%coef%mult, n)
        end if
        call field_copy(tmp_field, F_out)
-    end do
+    end do    
 
     !! Step 2: Apply the base filter
     call this%base_filter%apply(F_out, tmp_field)
@@ -241,8 +241,7 @@ contains
        call this%base_filter%apply(tmp_field2, tmp_field)
        call field_sub2(tmp_field, tmp_field2)
        call field_add2s2(F_out, tmp_field, this%gamma)
-    end do
-
+    end do 
   end subroutine AHO_procedure_apply
 
 end module AHO_procedure

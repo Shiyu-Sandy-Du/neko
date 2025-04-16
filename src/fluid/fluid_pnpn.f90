@@ -702,15 +702,6 @@ contains
          call this%adv%compute(u, v, w, &
                                this%advx, this%advy, this%advz, &
                                Xh, this%c_Xh, dm_Xh%size(), dt)
-         ! ! For LES using explicit filtering, filter the advection term.
-         ! if (this%explicit_filtered_les .eqv. .true.) then
-         !    call field_copy(this%wa, this%advx)
-         !    call this%explicit_filter%apply(this%advx, this%wa)
-         !    call field_copy(this%wa, this%advy)
-         !    call this%explicit_filter%apply(this%advy, this%wa)
-         !    call field_copy(this%wa, this%advz)
-         !    call this%explicit_filter%apply(this%advz, this%wa)
-         ! end if
 
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the

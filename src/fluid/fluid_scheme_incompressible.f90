@@ -228,15 +228,12 @@ contains
     end if
 
     !
-    ! Turbulence modelling and variable material properties
+    ! LES with explicit filtering
     !
     if (params%valid_path('case.fluid.explicit_filtered_les')) then
        call json_get(params, 'case.fluid.explicit_filtered_les', &
                      this%explicit_filtered_les)
-       if (this%variable_material_properties .eqv. .true.) then
-          call neko_warning("Do NOT use eddy viscosity field as the &
-          & nut_field in LES with explicit filtering!!!")
-       end if
+       this%variable_material_properties = .false.
        call json_extract_object(params, "case.fluid", fluid_subdict)
        call json_get(fluid_subdict, 'filter.type', filter_type)
        call filter_factory(this%explicit_filter, filter_type, fluid_subdict, this%c_Xh)
