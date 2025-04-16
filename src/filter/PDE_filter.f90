@@ -93,9 +93,11 @@ module PDE_filter
      integer :: ksp_max_iter
      !> method for solving PDE
      character(len=:), allocatable :: ksp_solver
-     ! > preconditioner type
+     !> preconditioner type
      character(len=:), allocatable :: precon_type_filt
      integer :: ksp_n, n, i
+     !> If write out iteration info
+     logical :: if_log
 
 
 
@@ -131,6 +133,9 @@ contains
 
     call json_get_or_default(json, "filter.preconditioner", &
          this%precon_type_filt, 'jacobi')
+    
+    call json_get_or_default(json, "filter.log", &
+         this%if_log, .false.)
 
     call this%init_base(json, coef)
     call PDE_filter_init_from_attributes(this, coef)
@@ -273,15 +278,17 @@ contains
     ! update preconditioner (needed?)
     call this%pc_filt%update()
 
-    ! write it all out
-    call neko_log%message('Filter')
+    if (this%if_log) then
+       ! write it all out
+       call neko_log%message('Filter')
 
-    write(log_buf, '(A,A,A)') 'Iterations:   ',&
-         'Start residual:     ', 'Final residual:'
-    call neko_log%message(log_buf)
-    write(log_buf, '(I11,3x, E15.7,5x, E15.7)') this%ksp_results%iter, &
-         this%ksp_results%res_start, this%ksp_results%res_final
-    call neko_log%message(log_buf)
+       write(log_buf, '(A,A,A)') 'Iterations:   ',&
+             'Start residual:     ', 'Final residual:'
+       call neko_log%message(log_buf)
+       write(log_buf, '(I11,3x, E15.7,5x, E15.7)') this%ksp_results%iter, &
+             this%ksp_results%res_start, this%ksp_results%res_final
+       call neko_log%message(log_buf)
+    end if
 
     !call neko_scratch_registry%relinquish_field(temp_indices)
     call RHS%free()
