@@ -682,6 +682,15 @@ contains
 
       ! Compute the source terms
       call this%source_term%compute(t, tstep)
+      ! Filter the source term if using explicit filter in LES
+      if (this%explicit_filtered_les .eqv. .true.) then
+         call field_copy(this%wa, this%f_x)
+         call this%explicit_filter%apply(this%f_x, this%wa)
+         call field_copy(this%wa, this%f_y)
+         call this%explicit_filter%apply(this%f_y, this%wa)
+         call field_copy(this%wa, this%f_z)
+         call this%explicit_filter%apply(this%f_z, this%wa)
+      end if
 
       ! Add Neumann bc contributions to the RHS
       call this%bcs_vel%apply_vector(f_x%x, f_y%x, f_z%x, &

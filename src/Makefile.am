@@ -312,6 +312,8 @@ neko_fortran_SOURCES = \
 	source_terms/source_term.f90\
 	source_terms/coriolis_source_term.f90\
 	source_terms/bcknd/cpu/coriolis_source_term_cpu.f90\
+	source_terms/strain_rate_based_stress.f90\
+	source_terms/bcknd/cpu/strain_rate_based_stress_cpu.f90\
 	source_terms/source_term_handler.f90\
 	source_terms/const_source_term.f90\
 	source_terms/bcknd/cpu/const_source_term_cpu.f90\

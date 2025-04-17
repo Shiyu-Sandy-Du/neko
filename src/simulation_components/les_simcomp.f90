@@ -41,7 +41,7 @@ module les_simcomp
   use les_model, only : les_model_t, les_model_factory
   use json_utils, only : json_get, json_get_or_default
   use field_writer, only : field_writer_t
-  use utils, only : neko_error
+  use utils, only : neko_warning
   implicit none
   private
 
@@ -78,8 +78,8 @@ contains
 
     ! Check for whether eddy viscosity is enabled in fluid_scheme_incompressible
     if (case%fluid%variable_material_properties .eqv. .false.) then
-       call neko_error("Eddy viscosity is not acting &
-            &on the equations. &
+       call neko_warning("Eddy viscosity is not acting &
+            &on the left hand side of the equations. &
             &Please set up a nut_field option &
             &in the fluid solver")
     end if
