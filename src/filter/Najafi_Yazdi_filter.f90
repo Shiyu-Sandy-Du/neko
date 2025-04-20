@@ -68,6 +68,7 @@ module Najafi_Yazdi_filter
                          device_cmult, device_invcol2, &
                          device_col2
   use operators, only : dudxyz, div
+  use projection, only : projection_t
   implicit none
   private
 
@@ -105,7 +106,8 @@ module Najafi_Yazdi_filter
      !> If write out iteration info
      logical :: if_log
 
-
+     !> Projection related attributes to reduce the number of iterations
+     type(projection_t) :: proj
 
    contains
      !> Constructor from json.

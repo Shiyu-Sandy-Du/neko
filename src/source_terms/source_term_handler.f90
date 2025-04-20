@@ -76,8 +76,6 @@ module source_term_handler
      procedure, pass(this) :: free => source_term_handler_free
      !> Add all the source terms to the passed right-hand side fields.
      procedure, pass(this) :: compute => source_term_handler_compute
-     !> Add all the source terms to the passed right-hand side fields.
-     procedure, pass(this) :: make_weak => source_term_handler_make_weak
      !> Generic interface to add a source term to the list.
      generic :: add => add_source_term, add_json_source_terms
      !> Append a new source term to the source_terms array.
@@ -160,41 +158,19 @@ contains
           call this%source_terms(i)%source_term%compute(t, tstep)
        end do
 
-      !  ! Multiply by mass matrix
-      !  do i = 1, this%rhs_fields%size()
-      !     f => this%rhs_fields%get(i)
-      !     if (NEKO_BCKND_DEVICE .eq. 1) then
-      !        call device_col2(f%x_d, this%coef%B_d, f%size())
-      !     else
-      !        call col2(f%x, this%coef%B, f%size())
-      !     end if
-      !  end do
+       ! Multiply by mass matrix
+       do i = 1, this%rhs_fields%size()
+          f => this%rhs_fields%get(i)
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             call device_col2(f%x_d, this%coef%B_d, f%size())
+          else
+             call col2(f%x, this%coef%B, f%size())
+          end if
+       end do
 
     end if
 
   end subroutine source_term_handler_compute
-
-  !> Make all the source term to be weak form.
-  subroutine source_term_handler_make_weak(this)
-    class(source_term_handler_t), intent(inout) :: this
-    integer :: i
-    type(field_t), pointer :: f
-
-    do i = 1, this%rhs_fields%size()
-       f => this%rhs_fields%get(i)
-    end do
-
-    ! Multiply by mass matrix
-    do i = 1, this%rhs_fields%size()
-       f => this%rhs_fields%get(i)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(f%x_d, this%coef%B_d, f%size())
-       else
-          call col2(f%x, this%coef%B, f%size())
-       end if
-    end do
-
-  end subroutine source_term_handler_make_weak
 
   !> Read from the json file and initialize the source terms.
   subroutine source_term_handler_add_json_source_terms(this, json, name)

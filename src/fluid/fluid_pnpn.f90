@@ -359,11 +359,6 @@ contains
          this%chkp%dtlag, this%chkp%tlag, this%ext_bdf, &
          .not. advection)
 
-   !  if (this%explicit_filtered_les .eqv. .true.) then
-      !  this%adv%if_explicit_filter = .true.
-      !  this%adv%explicit_filter => this%explicit_filter
-   !  end if
-
     if (params%valid_path('case.fluid.flow_rate_force')) then
        call this%vol_flow%init(this%dm_Xh, params)
     end if
@@ -682,16 +677,6 @@ contains
 
       ! Compute the source terms
       call this%source_term%compute(t, tstep)
-      ! Filter the source term if using explicit filter in LES
-      if (this%explicit_filtered_les .eqv. .true.) then
-         call field_copy(this%wa, this%f_x)
-         call this%explicit_filter%apply(this%f_x, this%wa)
-         call field_copy(this%wa, this%f_y)
-         call this%explicit_filter%apply(this%f_y, this%wa)
-         call field_copy(this%wa, this%f_z)
-         call this%explicit_filter%apply(this%f_z, this%wa)
-      end if
-      call this%source_term%make_weak()
 
       ! Add Neumann bc contributions to the RHS
       call this%bcs_vel%apply_vector(f_x%x, f_y%x, f_z%x, &
@@ -727,57 +712,35 @@ contains
               f_x%x, f_y%x, f_z%x, &
               rho, dt, n)
       else
-         ! For LES using explicit filtering, filter the advection term.
+         ! Add the advection operators to the right-hand-side.
+         call this%adv%compute(u, v, w, &
+                              f_x, f_y, f_z, &
+                              Xh, this%c_Xh, dm_Xh%size())
          if (this%explicit_filtered_les .eqv. .true.) then
-            ! Reset the advection term.
-            call field_rzero(this%advx, n)
-            call field_rzero(this%advy, n)
-            call field_rzero(this%advz, n)
-            ! Add the advection operators to the right-hand-side.
-            call this%adv%compute(u, v, w, &
-                                 this%advx, this%advy, this%advz, &
-                                 Xh, this%c_Xh, dm_Xh%size())
-
-            do concurrent (i = 1:this%advx%dof%size())
-               this%advx%x(i,1,1,1) = this%advx%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
-               this%advy%x(i,1,1,1) = this%advy%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
-               this%advz%x(i,1,1,1) = this%advz%x(i,1,1,1) / this%c_Xh%B(i,1,1,1) * c_Xh%mult(i,1,1,1)
-            end do            
-
-            call gs_Xh%op(this%advx, GS_OP_ADD)
-            call gs_Xh%op(this%advy, GS_OP_ADD)
-            call gs_Xh%op(this%advz, GS_OP_ADD)
-
-            call copy(this%output_check%x, this%advx%x, this%advx%dof%size())
-
-            call field_copy(this%wa, this%advx)
-            call this%explicit_filter%apply(this%advx, this%wa)
-            call field_copy(this%wa, this%advy)
-            call this%explicit_filter%apply(this%advy, this%wa)
-            call field_copy(this%wa, this%advz)
-            call this%explicit_filter%apply(this%advz, this%wa)
-
-            call copy(this%output_check2%x, this%advx%x, this%advx%dof%size())
-
-            do concurrent (i = 1:this%advx%dof%size())
-               this%advx%x(i,1,1,1) = this%advx%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
-               this%advy%x(i,1,1,1) = this%advy%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
-               this%advz%x(i,1,1,1) = this%advz%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
+            do concurrent (i = 1:this%f_x%dof%size())
+               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
+               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
+               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
+            end do 
+            call gs_Xh%op(this%f_x, GS_OP_ADD)
+            call gs_Xh%op(this%f_y, GS_OP_ADD)
+            call gs_Xh%op(this%f_z, GS_OP_ADD)
+            do concurrent (i = 1:this%f_x%dof%size())
+               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
+               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
+               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
             end do
-
-            if (NEKO_BCKND_DEVICE .eq. 1) then
-               call device_opadd2cm(f_x%x_d, f_y%x_d, f_z%x_d, &
-                  this%advx%x_d, this%advy%x_d, this%advz%x_d, &
-                  1.0_rp, n, msh%gdim)
-            else
-               call opadd2cm(f_x%x, f_y%x, f_z%x, this%advx%x, &
-                  this%advy%x, this%advz%x, 1.0_rp, n, msh%gdim)
-            end if
-         else
-            ! Add the advection operators to the right-hand-side.
-            call this%adv%compute(u, v, w, &
-                                 f_x, f_y, f_z, &
-                                 Xh, this%c_Xh, dm_Xh%size())
+            call field_copy(this%wa, this%f_x)
+            call this%explicit_filter%apply(this%f_x, this%wa)
+            call field_copy(this%wa, this%f_y)
+            call this%explicit_filter%apply(this%f_y, this%wa)
+            call field_copy(this%wa, this%f_z)
+            call this%explicit_filter%apply(this%f_z, this%wa)
+            do concurrent (i = 1:this%f_x%dof%size())
+               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
+               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
+               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
+            end do
          end if
          
          ! At this point the RHS contains the sum of the advection operator and
@@ -788,8 +751,6 @@ contains
               this%abx2, this%aby2, this%abz2, &
               f_x%x, f_y%x, f_z%x, &
               rho, ext_bdf%advection_coeffs, n)
-
-         
 
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
