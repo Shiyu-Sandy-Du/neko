@@ -45,6 +45,7 @@ module strain_rate_based_stress
   use neko_config, only : NEKO_BCKND_DEVICE
   use utils, only : neko_error
   use strain_rate_based_stress_cpu, only : strain_rate_based_stress_compute_cpu
+  use ax_product, only: ax_t, ax_helm_factory 
   implicit none
   private
 
@@ -54,6 +55,8 @@ module strain_rate_based_stress
      type(field_t), pointer :: nut
      !> The name for the nut field
      character(len=:), allocatable :: nut_field_name
+     !> Ax_helm for the Laplacian in weak form
+     class(ax_t), allocatable :: Ax
    contains
      !> The common constructor using a JSON object.
      procedure, pass(this) :: init => strain_rate_based_stress_init_from_json
@@ -116,11 +119,17 @@ contains
        call neko_error("Number of fields for the strain rate based stresses &
        &must be 3.")
     end if
+
+    call ax_helm_factory(this%Ax, full_formulation = .true.)
   end subroutine strain_rate_based_stress_init_from_components
 
   !> Destructor.
   subroutine strain_rate_based_stress_free(this)
     class(strain_rate_based_stress_t), intent(inout) :: this
+    
+    if (allocated(this%Ax)) then
+       deallocate(this%Ax)
+    end if
 
     call this%free_base()
   end subroutine strain_rate_based_stress_free
@@ -139,7 +148,7 @@ contains
        call neko_error("The strain rate based stress &
        &is only implemented on the CPU")
     else
-       call strain_rate_based_stress_compute_cpu(this%fields, this%nut, &
+       call strain_rate_based_stress_compute_cpu(this%ax, this%fields, this%nut, &
                                                  this%coef)
     end if
   end subroutine strain_rate_based_stress_compute

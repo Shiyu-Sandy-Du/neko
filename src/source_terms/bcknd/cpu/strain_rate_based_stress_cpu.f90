@@ -43,6 +43,7 @@ module strain_rate_based_stress_cpu
   use field_registry, only : neko_field_registry
   use gs_ops, only : GS_OP_ADD
   use coefs, only : coef_t
+  use ax_product, only: ax_t
   implicit none
   private
 
@@ -54,15 +55,13 @@ contains
   !! @param fields The right-hand side, which should be the velocity components.
   !! @param omega The rotation vector.
   !! @param omega The geostrophic wind.
-  subroutine strain_rate_based_stress_compute_cpu(fields, nut, coef)
+  subroutine strain_rate_based_stress_compute_cpu(Ax, fields, nut, coef)
+    class(ax_t), intent(in) :: Ax
     type(field_list_t), intent(inout) :: fields
     type(field_t), intent(in) :: nut
-    type(coef_t), intent(in) :: coef
+    type(coef_t), intent(inout) :: coef
     integer :: i, n
     type(field_t), pointer :: f_x, f_y, f_z, u, v, w
-    type(field_t), pointer :: s11, s22, s33, s12, s13, s23
-    type(field_t), pointer :: tauijd1, tauijd2, tauijd3
-    integer :: temp_indices(9)
 
     n = fields%item_size(1)
 
@@ -70,65 +69,23 @@ contains
     f_y => fields%get_by_index(2)
     f_z => fields%get_by_index(3)
 
-    call neko_scratch_registry%request_field(s11, temp_indices(1))
-    call neko_scratch_registry%request_field(s22, temp_indices(2))
-    call neko_scratch_registry%request_field(s33, temp_indices(3))
-    call neko_scratch_registry%request_field(s12, temp_indices(4))
-    call neko_scratch_registry%request_field(s13, temp_indices(5))
-    call neko_scratch_registry%request_field(s23, temp_indices(6))
-    call neko_scratch_registry%request_field(tauijd1, temp_indices(7))
-    call neko_scratch_registry%request_field(tauijd2, temp_indices(8))
-    call neko_scratch_registry%request_field(tauijd3, temp_indices(9))
-
     u => neko_field_registry%get_field_by_name("u")
     v => neko_field_registry%get_field_by_name("v")
     w => neko_field_registry%get_field_by_name("w")
 
-    call strain_rate(s11%x, s22%x, s33%x, s12%x, s13%x, s23%x, u, v, w, coef)
+    ! set up Helmholtz operators for the Laplacian
+    coef%h1 = -1.0_rp * nut%x
+    coef%ifh2 = .false.
 
-    call coef%gs_h%op(s11, GS_OP_ADD)
-    call coef%gs_h%op(s22, GS_OP_ADD)
-    call coef%gs_h%op(s33, GS_OP_ADD)
-    call coef%gs_h%op(s12, GS_OP_ADD)
-    call coef%gs_h%op(s13, GS_OP_ADD)
-    call coef%gs_h%op(s23, GS_OP_ADD)
+    call Ax%compute_vector(f_x%x, f_y%x, f_z%x, u%x, v%x, w%x, coef,&
+         coef%msh, coef%Xh)
 
-    ! make stress tensor tau_ij from s_ij
     do concurrent (i = 1:n)
-       s11%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s11%x(i,1,1,1) * coef%mult(i,1,1,1)
-       s22%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s22%x(i,1,1,1) * coef%mult(i,1,1,1)
-       s33%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s33%x(i,1,1,1) * coef%mult(i,1,1,1)
-       s12%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s12%x(i,1,1,1) * coef%mult(i,1,1,1)
-       s13%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s13%x(i,1,1,1) * coef%mult(i,1,1,1)
-       s23%x(i,1,1,1) = 2.0_rp * nut%x(i,1,1,1) * s23%x(i,1,1,1) * coef%mult(i,1,1,1)
+      f_x%x(i,1,1,1) = f_x%x(i,1,1,1) / coef%B(i,1,1,1)
+      f_y%x(i,1,1,1) = f_y%x(i,1,1,1) / coef%B(i,1,1,1)
+      f_z%x(i,1,1,1) = f_z%x(i,1,1,1) / coef%B(i,1,1,1)
     end do
 
-    ! d tau_ij / d x_j
-    call dudxyz(tauijd1%x, s11%x, coef%drdx, coef%dsdx, coef%dtdx, coef)
-    call dudxyz(tauijd2%x, s12%x, coef%drdy, coef%dsdy, coef%dtdy, coef)
-    call dudxyz(tauijd3%x, s13%x, coef%drdz, coef%dsdz, coef%dtdz, coef)
-    do i = 1,n
-       f_x%x(i,1,1,1) = tauijd1%x(i,1,1,1) + &
-                        tauijd2%x(i,1,1,1) + tauijd3%x(i,1,1,1)
-    end do
-
-    call dudxyz(tauijd1%x, s12%x, coef%drdx, coef%dsdx, coef%dtdx, coef)
-    call dudxyz(tauijd2%x, s22%x, coef%drdy, coef%dsdy, coef%dtdy, coef)
-    call dudxyz(tauijd3%x, s23%x, coef%drdz, coef%dsdz, coef%dtdz, coef)
-    do i = 1,n
-       f_y%x(i,1,1,1) = tauijd1%x(i,1,1,1) + &
-                        tauijd2%x(i,1,1,1) + tauijd3%x(i,1,1,1)
-    end do
-
-    call dudxyz(tauijd1%x, s13%x, coef%drdx, coef%dsdx, coef%dtdx, coef)
-    call dudxyz(tauijd2%x, s23%x, coef%drdy, coef%dsdy, coef%dtdy, coef)
-    call dudxyz(tauijd3%x, s33%x, coef%drdz, coef%dsdz, coef%dtdz, coef)
-    do i = 1,n
-       f_z%x(i,1,1,1) = tauijd1%x(i,1,1,1) + &
-                        tauijd2%x(i,1,1,1) + tauijd3%x(i,1,1,1)
-    end do
-
-    call neko_scratch_registry%relinquish_field(temp_indices)
   end subroutine strain_rate_based_stress_compute_cpu
 
 end module strain_rate_based_stress_cpu

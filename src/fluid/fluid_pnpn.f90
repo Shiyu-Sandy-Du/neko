@@ -80,7 +80,7 @@ module fluid_pnpn
   use bc, only : bc_t
   use file, only : file_t
   use operators, only : ortho
-  use math, only: copy
+  use math, only : copy
   implicit none
   private
 
@@ -691,6 +691,7 @@ contains
          call field_copy(this%wa, this%f_z)
          call this%explicit_filter%apply(this%f_z, this%wa)
       end if
+      call this%source_term%make_weak()
 
       ! Add Neumann bc contributions to the RHS
       call this%bcs_vel%apply_vector(f_x%x, f_y%x, f_z%x, &
