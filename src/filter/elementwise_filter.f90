@@ -49,6 +49,7 @@ module elementwise_filter
   use device, only : device_map, device_free, device_memcpy, HOST_TO_DEVICE
   use device_math, only : device_cfill
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR, c_associated
+  use time_step_controller, only : time_step_controller_t
   implicit none
   private
 
@@ -184,10 +185,12 @@ contains
   end subroutine build_1d
 
   !> Filter a 3D field.
-  subroutine elementwise_field_filter_3d(this, F_out, F_in)
+  subroutine elementwise_field_filter_3d(this, F_out, F_in, tstep, dt_controller)
     class(elementwise_filter_t), intent(inout) :: this
     type(field_t), intent(inout) :: F_out
     type(field_t), intent(in) :: F_in
+    integer, intent(in), optional :: tstep
+    type(time_step_controller_t), intent(in), optional :: dt_controller
 
     ! F_out = fh x fh x fh x F_in
     call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%fht, this%fht, &

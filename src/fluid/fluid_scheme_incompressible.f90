@@ -105,7 +105,9 @@ module fluid_scheme_incompressible
      type(gradient_jump_penalty_t) :: gradient_jump_penalty_w
      !> Explicit filter
      logical :: explicit_filtered_les
-     class(filter_t), allocatable :: explicit_filter
+     class(filter_t), allocatable :: explicit_filter_x
+     class(filter_t), allocatable :: explicit_filter_y
+     class(filter_t), allocatable :: explicit_filter_z
      !> Extrapolation velocity fields for LES
      type(field_t), pointer :: u_e => null() !< Extrapolated x-Velocity
      type(field_t), pointer :: v_e => null() !< Extrapolated y-Velocity
@@ -236,7 +238,12 @@ contains
        this%variable_material_properties = .false.
        call json_extract_object(params, "case.fluid", fluid_subdict)
        call json_get(fluid_subdict, 'filter.type', filter_type)
-       call filter_factory(this%explicit_filter, filter_type, fluid_subdict, this%c_Xh)
+       call filter_factory(this%explicit_filter_x, filter_type, &
+            fluid_subdict, this%c_Xh)
+       call filter_factory(this%explicit_filter_y, filter_type, &
+            fluid_subdict, this%c_Xh)
+       call filter_factory(this%explicit_filter_z, filter_type, &
+            fluid_subdict, this%c_Xh)
     end if
 
     ! Fill mu and rho field with the physical value
@@ -499,7 +506,9 @@ contains
     end if
 
     if (this%explicit_filtered_les .eqv. .true.) then
-       call this%explicit_filter%free()
+       call this%explicit_filter_x%free()
+       call this%explicit_filter_y%free()
+       call this%explicit_filter_z%free()
     end if
 
 

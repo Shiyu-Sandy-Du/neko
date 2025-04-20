@@ -644,6 +644,7 @@ contains
     class(bc_t), pointer :: bc_i
     type(non_normal_t), pointer :: bc_j
     integer :: i
+    real(kind=rp) :: t1, t2
 
     if (this%freeze) return
 
@@ -731,11 +732,11 @@ contains
                this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
             end do
             call field_copy(this%wa, this%f_x)
-            call this%explicit_filter%apply(this%f_x, this%wa)
+            call this%explicit_filter_x%apply(this%f_x, this%wa, tstep, dt_controller)
             call field_copy(this%wa, this%f_y)
-            call this%explicit_filter%apply(this%f_y, this%wa)
+            call this%explicit_filter_y%apply(this%f_y, this%wa, tstep, dt_controller)
             call field_copy(this%wa, this%f_z)
-            call this%explicit_filter%apply(this%f_z, this%wa)
+            call this%explicit_filter_z%apply(this%f_z, this%wa, tstep, dt_controller)
             do concurrent (i = 1:this%f_x%dof%size())
                this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
                this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)

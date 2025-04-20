@@ -64,6 +64,8 @@ module PDE_filter
   use hsmg, only: hsmg_t
   use utils, only: neko_error
   use device_math, only: device_cfill, device_subcol3, device_cmult
+  use projection, only : projection_t
+  use time_step_controller, only : time_step_controller_t
   implicit none
   private
 
@@ -83,6 +85,8 @@ module PDE_filter
      class(pc_t), allocatable :: pc_filt
      !> Filter boundary conditions (they will all be Neumann, so empty)
      type(bc_list_t) :: bclst_filt
+     !> b and x in equation Ax=b
+     type(field_t) :: RHS, d_F_out
 
      ! Inputs from the user
      !> filter radius
@@ -99,7 +103,9 @@ module PDE_filter
      !> If write out iteration info
      logical :: if_log
 
-
+     !> Projection related attributes to reduce the number of iterations
+     type(projection_t) :: projection
+     integer :: projection_dim, projection_activ_step
 
    contains
      !> Constructor from json.
@@ -136,6 +142,11 @@ contains
     
     call json_get_or_default(json, "filter.log", &
          this%if_log, .false.)
+    
+    call json_get_or_default(json, "filter.projection_space_size", &
+         this%projection_dim, 0)
+    call json_get_or_default(json, "filter.projection_hold_steps", &
+         this%projection_activ_step, 0)
 
     call this%init_base(json, coef)
     call PDE_filter_init_from_attributes(this, coef)
@@ -153,6 +164,10 @@ contains
     ! init the bc list (all Neuman BCs, will remain empty)
     call this%bclst_filt%init()
 
+    ! init the b and x in Ax=b
+    call this%RHS%init(this%coef%dof)
+    call this%d_F_out%init(this%coef%dof)
+
     ! Setup backend dependent Ax routines
     call ax_helm_factory(this%Ax, full_formulation = .false.)
 
@@ -165,6 +180,10 @@ contains
                                       this%coef, this%coef%dof, &
                                       this%coef%gs_h, &      
                                       this%bclst_filt, this%precon_type_filt)
+      
+    ! set up projection
+    call this%projection%init(this%coef%dof%size(), this%projection_dim, &
+         this%projection_activ_step)
 
   end subroutine PDE_filter_init_from_attributes
 
@@ -187,6 +206,9 @@ contains
     end if                    
 
     call this%bclst_filt%free()
+    call this%projection%free()
+    call this%RHS%free()
+    call this%d_F_out%free()
 
     call this%free_base()
 
@@ -195,35 +217,16 @@ contains
   !> Apply the filter
   !! @param F_out filtered field
   !! @param F_in unfiltered field
-  subroutine PDE_filter_apply(this, F_out, F_in)
+  subroutine PDE_filter_apply(this, F_out, F_in, tstep, dt_controller)
     class(PDE_filter_t), intent(inout) :: this
     type(field_t), intent(in) :: F_in
     type(field_t), intent(inout) :: F_out
+    integer, intent(in), optional :: tstep
+    type(time_step_controller_t), intent(in), optional :: dt_controller
     integer :: n, i
-    ! type(field_t), pointer :: RHS
-    type(field_t) :: RHS, d_F_out
     character(len=LOG_SIZE) :: log_buf
-    ! integer :: temp_indices(1)
 
     n = this%coef%dof%size()
-    ! TODO
-    ! This is a bit awkward, because the init for the source terms occurs
-    ! before the init of the scratch registry.
-    ! So we can't use the scratch registry here.
-    ! call neko_scratch_registry%request_field(RHS, temp_indices(1))
-    call RHS%init(this%coef%dof)
-    call d_F_out%init(this%coef%dof)
-
-    ! in a similar fasion to pressure/velocity, we will solve for d_F_out.
-
-    ! to improve convergence, we use F_in as an initial guess for F_out.
-    ! so F_out = F_in + d_F_in.
-
-    ! Defining the operator A = -r^2 \nabla^2 + I
-    ! the system changes from:
-    ! A (F_out) = F_in
-    ! to
-    ! A (d_F_out) = F_in - A(F_in)
 
     ! set up Helmholtz operators and RHS
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -244,37 +247,43 @@ contains
     ! compute the A(F_in) component of the RHS 
     ! (note, to be safe with the inout intent we first copy F_in to the
     !  temporary d_F_out)
-    call field_copy(d_F_out, F_in)
-    call this%Ax%compute(RHS%x, d_F_out%x, this%coef, this%coef%msh, &
+    call field_copy(this%d_F_out, F_in)
+    call this%Ax%compute(this%RHS%x, this%d_F_out%x, this%coef, this%coef%msh, &
         this%coef%Xh)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_subcol3(RHS%x_d, F_in%x_d, this%coef%B_d, n)
-       call device_cmult(RHS%x_d, -1.0_rp, n)
+       call device_subcol3(this%RHS%x_d, F_in%x_d, this%coef%B_d, n)
+       call device_cmult(this%RHS%x_d, -1.0_rp, n)
     else
        do i = 1, n
           ! mass matrix should be included here
-          RHS%x(i,1,1,1) = F_in%x(i,1,1,1) * this%coef%B(i,1,1,1) &
-              - RHS%x(i,1,1,1)
+          this%RHS%x(i,1,1,1) = F_in%x(i,1,1,1) * this%coef%B(i,1,1,1) &
+              - this%RHS%x(i,1,1,1)
        end do
     end if
 
     ! gather scatter
-    call this%coef%gs_h%op(RHS, GS_OP_ADD)
+    call this%coef%gs_h%op(this%RHS, GS_OP_ADD)
 
     ! set BCs
-    call this%bclst_filt%apply_scalar(RHS%x, n)
+    call this%bclst_filt%apply_scalar(this%RHS%x, n)
+
+    call this%projection%pre_solving(this%RHS%x, tstep, this%coef, n, &
+         dt_controller)
 
     ! Solve Helmholtz equation
     call profiler_start_region('filter solve')
     this%ksp_results(1) = &
-         this%ksp_filt%solve(this%Ax, d_F_out, RHS%x, n, this%coef, &
+         this%ksp_filt%solve(this%Ax, this%d_F_out, this%RHS%x, n, this%coef, &
          this%bclst_filt, this%coef%gs_h)
 
     call profiler_end_region
+    
+    call this%projection%post_solving(this%d_F_out%x, this%Ax, this%coef, &
+         this%bclst_filt, this%coef%gs_h, n, tstep, dt_controller)
 
     ! add result
-    call field_add3(F_out, F_in, d_F_out)
+    call field_add3(F_out, F_in, this%d_F_out)
     ! update preconditioner (needed?)
     call this%pc_filt%update()
 
@@ -289,10 +298,6 @@ contains
              this%ksp_results%res_start, this%ksp_results%res_final
        call neko_log%message(log_buf)
     end if
-
-    !call neko_scratch_registry%relinquish_field(temp_indices)
-    call RHS%free()
-    call d_F_out%free()
 
   end subroutine PDE_filter_apply
 

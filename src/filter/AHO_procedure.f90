@@ -69,6 +69,7 @@ module AHO_procedure
   use elementwise_filter, only : elementwise_filter_t
   use PDE_filter, only : PDE_filter_t
   use Najafi_Yazdi_filter, only : Najafi_Yazdi_filter_t
+  use time_step_controller, only : time_step_controller_t
   implicit none
   private
 
@@ -187,10 +188,12 @@ contains
   !> Apply the filter
   !! @param F_out filtered field
   !! @param F_in unfiltered field
-  subroutine AHO_procedure_apply(this, F_out, F_in)
+  subroutine AHO_procedure_apply(this, F_out, F_in, tstep, dt_controller)
     class(AHO_procedure_t), intent(inout) :: this
     type(field_t), intent(in) :: F_in
     type(field_t), intent(inout) :: F_out
+    integer, intent(in), optional :: tstep
+    type(time_step_controller_t), intent(in), optional :: dt_controller
     integer :: n, i
     type(field_t) :: tmp_field, tmp_field2
 
@@ -233,12 +236,12 @@ contains
     end do    
 
     !! Step 2: Apply the base filter
-    call this%base_filter%apply(F_out, tmp_field)
+    call this%base_filter%apply(F_out, tmp_field, tstep, dt_controller)
 
     !! Step 3: Apply the approximate devoncolution procedure
     call field_copy(tmp_field, F_out)
     do i = 1, this%AD_order
-       call this%base_filter%apply(tmp_field2, tmp_field)
+       call this%base_filter%apply(tmp_field2, tmp_field, tstep, dt_controller)
        call field_sub2(tmp_field, tmp_field2)
        call field_add2s2(F_out, tmp_field, this%gamma)
     end do 

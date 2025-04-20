@@ -69,6 +69,7 @@ module Najafi_Yazdi_filter
                          device_col2
   use operators, only : dudxyz, div
   use projection, only : projection_t
+  use time_step_controller, only : time_step_controller_t
   implicit none
   private
 
@@ -89,6 +90,8 @@ module Najafi_Yazdi_filter
      class(pc_t), allocatable :: pc_filt
      !> Filter boundary conditions (they will all be Neumann, so empty)
      type(bc_list_t) :: bclst_filt
+     !> b and x in equation Ax=b
+     type(field_t) :: RHS, d_F_out
 
      ! Inputs from the user
      !> filter radius
@@ -107,7 +110,8 @@ module Najafi_Yazdi_filter
      logical :: if_log
 
      !> Projection related attributes to reduce the number of iterations
-     type(projection_t) :: proj
+     type(projection_t) :: projection
+     integer :: projection_dim, projection_activ_step
 
    contains
      !> Constructor from json.
@@ -146,6 +150,11 @@ contains
     
     call json_get_or_default(json, "filter.log", &
          this%if_log, .false.)
+    
+    call json_get_or_default(json, "filter.projection_space_size", &
+         this%projection_dim, 0)
+    call json_get_or_default(json, "filter.projection_hold_steps", &
+         this%projection_activ_step, 0)
 
     call this%init_base(json, coef)
     call Najafi_Yazdi_filter_init_from_attributes(this, coef)
@@ -163,6 +172,10 @@ contains
     ! init the bc list (all Neuman BCs, will remain empty)
     call this%bclst_filt%init()
 
+    ! init the b and x in Ax=b
+    call this%RHS%init(this%coef%dof)
+    call this%d_F_out%init(this%coef%dof)
+
     ! Setup backend dependent Ax routines
     call ax_helm_factory(this%Ax_L, full_formulation = .false.)
     call ax_helm_factory(this%Ax_R, full_formulation = .false.)
@@ -176,6 +189,10 @@ contains
                                       this%coef, this%coef%dof, &
                                       this%coef%gs_h, &      
                                       this%bclst_filt, this%precon_type_filt)
+   
+    ! set up projection
+    call this%projection%init(this%coef%dof%size(), this%projection_dim, &
+         this%projection_activ_step)
 
   end subroutine Najafi_Yazdi_filter_init_from_attributes
 
@@ -202,6 +219,9 @@ contains
     end if                    
 
     call this%bclst_filt%free()
+    call this%projection%free()
+    call this%RHS%free()
+    call this%d_F_out%free()
 
     call this%free_base()
 
@@ -210,33 +230,16 @@ contains
   !> Apply the filter
   !! @param F_out filtered field
   !! @param F_in unfiltered field
-  subroutine Najafi_Yazdi_filter_apply(this, F_out, F_in)
+  subroutine Najafi_Yazdi_filter_apply(this, F_out, F_in, tstep, dt_controller)
     class(Najafi_Yazdi_filter_t), intent(inout) :: this
     type(field_t), intent(in) :: F_in
     type(field_t), intent(inout) :: F_out
+    integer, intent(in), optional :: tstep
+    type(time_step_controller_t), intent(in), optional :: dt_controller
     integer :: n, i
-    type(field_t) :: RHS, d_F_out
     character(len=LOG_SIZE) :: log_buf
 
     n = this%coef%dof%size()
-    ! TODO
-    ! This is a bit awkward, because the init for the source terms occurs
-    ! before the init of the scratch registry.
-    ! So we can't use the scratch registry here.
-    ! call neko_scratch_registry%request_field(RHS, temp_indices(1))
-    call RHS%init(this%coef%dof)
-    call d_F_out%init(this%coef%dof)
-
-    ! in a similar fasion to pressure/velocity, we will solve for d_F_out.
-
-    ! to improve convergence, we use F_in as an initial guess for F_out.
-    ! so F_out = (I + alpha^2 \nabla^2) F_in + d_F_in.
-
-    ! Defining the operator A = alpha^2 or beta^2 \nabla^2 + I
-    ! the system changes from:
-    ! A_L (F_out) = A_R (F_in)
-    ! to
-    ! A_L (d_F_out) = A_R(F_in) - A_L(F_in)
 
     ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -273,8 +276,7 @@ contains
        call col2(F_out%x, this%coef%mult, n)
     end if
 
-    
-    ! set up Helmholtz operators for euqation solving
+    ! set up Helmholtz operators for equation solving
     if (NEKO_BCKND_DEVICE .eq. 1) then
        ! TODO
        ! I think this is correct but I've never tested it
@@ -290,36 +292,42 @@ contains
     end if
     this%coef%ifh2 = .true.
 
-    call this%Ax_L%compute(RHS%x, F_out%x, this%coef, this%coef%msh, &
+    call this%Ax_L%compute(this%RHS%x, F_out%x, this%coef, this%coef%msh, &
         this%coef%Xh)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_subcol3(RHS%x_d, F_out%x_d, this%coef%B_d, n)
-       call device_cmult(RHS%x_d, -1.0_rp, n)
+       call device_subcol3(this%RHS%x_d, F_out%x_d, this%coef%B_d, n)
+       call device_cmult(this%RHS%x_d, -1.0_rp, n)
     else
        do i = 1, n
           ! mass matrix should be included here
-          RHS%x(i,1,1,1) = F_out%x(i,1,1,1) * this%coef%B(i,1,1,1) &
-              - RHS%x(i,1,1,1)
+          this%RHS%x(i,1,1,1) = F_out%x(i,1,1,1) * this%coef%B(i,1,1,1) &
+              - this%RHS%x(i,1,1,1)
        end do
     end if
 
     ! gather scatter
-    call this%coef%gs_h%op(RHS, GS_OP_ADD)
+    call this%coef%gs_h%op(this%RHS, GS_OP_ADD)
 
     ! set BCs
-    call this%bclst_filt%apply_scalar(RHS%x, n)
+    call this%bclst_filt%apply_scalar(this%RHS%x, n)
+
+    call this%projection%pre_solving(this%RHS%x, tstep, this%coef, n, &
+         dt_controller)
 
     ! Solve Helmholtz equation
     call profiler_start_region('filter solve')
     this%ksp_results(1) = &
-         this%ksp_filt%solve(this%Ax_L, d_F_out, RHS%x, n, this%coef, &
-         this%bclst_filt, this%coef%gs_h)
+         this%ksp_filt%solve(this%Ax_L, this%d_F_out, this%RHS%x, n, &
+         this%coef, this%bclst_filt, this%coef%gs_h)
 
     call profiler_end_region
 
+    call this%projection%post_solving(this%d_F_out%x, this%Ax_L, this%coef, &
+         this%bclst_filt, this%coef%gs_h, n, tstep, dt_controller)
+
     ! add result
-    call field_add2(F_out, d_F_out)
+    call field_add2(F_out, this%d_F_out)
     ! update preconditioner (needed?)
     call this%pc_filt%update()
     
@@ -334,10 +342,6 @@ contains
              this%ksp_results%res_start, this%ksp_results%res_final
        call neko_log%message(log_buf)
     end if
-
-    !call neko_scratch_registry%relinquish_field(temp_indices)
-    call RHS%free()
-    call d_F_out%free()
 
   end subroutine Najafi_Yazdi_filter_apply
 

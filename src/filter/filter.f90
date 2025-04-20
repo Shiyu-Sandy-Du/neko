@@ -41,6 +41,7 @@ module filter
   use coefs, only : coef_t
   use json_utils, only : json_get_or_default, json_get
   use field, only: field_t
+  use time_step_controller, only : time_step_controller_t
   implicit none
   private
 
@@ -89,11 +90,13 @@ module filter
      !> The application of the filter.
      !! @param F_out The output field
      !! @param F_in The input field
-     subroutine filter_apply(this, F_out, F_in)
-       import filter_t, field_t
+     subroutine filter_apply(this, F_out, F_in, tstep, dt_controller)
+       import filter_t, field_t, time_step_controller_t
        class(filter_t), intent(inout) :: this
        type(field_t), intent(in) ::  F_in
        type(field_t), intent(inout) ::  F_out
+       integer, intent(in), optional :: tstep
+       type(time_step_controller_t), intent(in), optional :: dt_controller
      end subroutine filter_apply
   end interface
 
