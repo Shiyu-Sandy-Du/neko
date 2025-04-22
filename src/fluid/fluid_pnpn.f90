@@ -81,6 +81,7 @@ module fluid_pnpn
   use file, only : file_t
   use operators, only : ortho
   use math, only : copy
+  use filter, only : field_make_strong, field_make_weak, field_inv_mult
   implicit none
   private
 
@@ -718,31 +719,39 @@ contains
                               f_x, f_y, f_z, &
                               Xh, this%c_Xh, dm_Xh%size())
          if (this%explicit_filtered_les .eqv. .true.) then
-            do concurrent (i = 1:this%f_x%dof%size())
-               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
-               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
-               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) / this%c_Xh%B(i,1,1,1)
-            end do 
+            call field_make_strong(this%f_x, this%c_Xh)
+            call field_make_strong(this%f_y, this%c_Xh)
+            call field_make_strong(this%f_z, this%c_Xh)
             call gs_Xh%op(this%f_x, GS_OP_ADD)
             call gs_Xh%op(this%f_y, GS_OP_ADD)
             call gs_Xh%op(this%f_z, GS_OP_ADD)
-            do concurrent (i = 1:this%f_x%dof%size())
-               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
-               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
-               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) * c_Xh%mult(i,1,1,1)
-            end do
+            call field_inv_mult(this%f_x, this%c_Xh)
+            call field_inv_mult(this%f_y, this%c_Xh)
+            call field_inv_mult(this%f_z, this%c_Xh)
             call field_copy(this%wa, this%f_x)
             call this%explicit_filter_x%apply(this%f_x, this%wa, tstep, dt_controller)
             call field_copy(this%wa, this%f_y)
             call this%explicit_filter_y%apply(this%f_y, this%wa, tstep, dt_controller)
             call field_copy(this%wa, this%f_z)
             call this%explicit_filter_z%apply(this%f_z, this%wa, tstep, dt_controller)
-            do concurrent (i = 1:this%f_x%dof%size())
-               this%f_x%x(i,1,1,1) = this%f_x%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
-               this%f_y%x(i,1,1,1) = this%f_y%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
-               this%f_z%x(i,1,1,1) = this%f_z%x(i,1,1,1) * this%c_Xh%B(i,1,1,1)
-            end do
+            call field_make_weak(this%f_x, this%c_Xh)
+            call field_make_weak(this%f_y, this%c_Xh)
+            call field_make_weak(this%f_z, this%c_Xh)
          end if
+
+         call field_make_strong(this%f_x, this%c_Xh)
+         call field_make_strong(this%f_y, this%c_Xh)
+         call field_make_strong(this%f_z, this%c_Xh)
+         call gs_Xh%op(this%f_x, GS_OP_ADD)
+         call gs_Xh%op(this%f_y, GS_OP_ADD)
+         call gs_Xh%op(this%f_z, GS_OP_ADD)
+         call field_inv_mult(this%f_x, this%c_Xh)
+         call field_inv_mult(this%f_y, this%c_Xh)
+         call field_inv_mult(this%f_z, this%c_Xh)
+         call field_copy(this%output_check,this%f_x)
+         call field_make_weak(this%f_x, this%c_Xh)
+         call field_make_weak(this%f_y, this%c_Xh)
+         call field_make_weak(this%f_z, this%c_Xh)
          
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the

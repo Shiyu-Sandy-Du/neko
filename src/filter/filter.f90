@@ -36,12 +36,15 @@
 ! (sorry about the naming convention of filter vs filters, I want the
 ! name "filters" for this eventually)
 module filter
+  use neko_config, only : NEKO_BCKND_DEVICE
   use num_types, only : rp
   use json_module, only : json_file
   use coefs, only : coef_t
   use json_utils, only : json_get_or_default, json_get
   use field, only: field_t
   use time_step_controller, only : time_step_controller_t
+  use device_math, only : device_col2, device_invcol2
+  use math, only : col2, invcol2
   implicit none
   private
 
@@ -62,6 +65,8 @@ module filter
      !> The main function to be executed during the run.
      procedure(filter_apply), pass(this), deferred :: apply
   end type filter_t
+
+  public :: field_make_strong, field_make_weak, field_inv_mult
 
 
 
@@ -133,6 +138,69 @@ contains
 
     nullify(this%coef)
   end subroutine filter_free_base
+
+  !> Divide a field by the mass matrix
+  subroutine field_make_strong(a, coef, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    type(coef_t), intent(in) :: coef
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_invcol2(a%x_d, coef%B_d, size)
+    else
+       call invcol2(a%x, coef%B, size)
+    end if
+
+  end subroutine field_make_strong
+
+  !> Multiply a field by the mass matrix
+  subroutine field_make_weak(a, coef, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    type(coef_t), intent(in) :: coef
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(a%x_d, coef%B_d, size)
+    else
+       call col2(a%x, coef%B, size)
+    end if
+
+  end subroutine field_make_weak
+
+  !> Multiply a field by the multiplicity array (divided by the multiplcity)
+  subroutine field_inv_mult(a, coef, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    type(coef_t), intent(in) :: coef
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(a%x_d, coef%mult_d, size)
+    else
+       call col2(a%x, coef%mult, size)
+    end if
+
+  end subroutine field_inv_mult
 
 
 
