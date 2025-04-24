@@ -184,7 +184,7 @@ contains
     call this%projection%init(this%coef%dof%size(), this%projection_dim, &
          this%projection_activ_step)
 
-  end subroutine PDE_filter_init_from_attributes
+  end subroutine PDE_filter_init_from_components
 
   !> Destructor.
   subroutine PDE_filter_free(this)

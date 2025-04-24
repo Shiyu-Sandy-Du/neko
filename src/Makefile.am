@@ -715,9 +715,6 @@ EXTRA_DIST = \
 	filter/bcknd/device/opencl/filter_kernels.cl\
 	math/bcknd/device/device_nccl_reduce.h\
 	math/bcknd/device/device_nccl_op.h\
-	source_terms/bcknd/device/cuda/filter_kernels.h\
-	source_terms/bcknd/device/hip/filter_kernels.h\
-	source_terms/bcknd/device/opencl/filter_kernels.cl\
 	device/opencl/jit.h\
 	device/opencl/prgm_lib.h\
 	device/opencl/check.h\

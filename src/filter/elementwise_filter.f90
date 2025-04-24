@@ -93,7 +93,7 @@ contains
     ! Filter assumes lx = ly = lz
     call this%init_base(json, coef)
 
-    call this%init_from_attributes(coef%dof%xh%lx)
+    call this%init_from_components(coef%dof%xh%lx)
 
     call json_get_or_default(json, "filter.elementwise_filter_type", &
                              this%elementwise_filter_type, "nonBoyd")
@@ -113,7 +113,7 @@ contains
   end subroutine elementwise_filter_init_from_json
   !> Actual Constructor.
   !! @param nx number of points in an elements in one direction.
-  subroutine elementwise_filter_init_from_attributes(this, nx)
+  subroutine elementwise_filter_init_from_components(this, nx)
     class(elementwise_filter_t), intent(inout) :: this
     integer :: nx
 

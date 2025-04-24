@@ -40,8 +40,7 @@ module AHO_procedure
   use field, only: field_t
   use coefs, only: coef_t
   use ax_product, only: ax_t, ax_helm_factory
-  use krylov, only: ksp_t, ksp_monitor_t, krylov_solver_factory, &
-       krylov_solver_destroy
+  use krylov, only: ksp_t, ksp_monitor_t, krylov_solver_factory
   use precon, only: pc_t, precon_factory, precon_destroy
   use bc_list, only : bc_list_t
   use neumann, only: neumann_t
