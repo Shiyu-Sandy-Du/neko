@@ -61,13 +61,9 @@ contains
     type(field_t), intent(in) :: nut
     type(coef_t), intent(inout) :: coef
     integer :: n
-    type(field_t), pointer :: f_x, f_y, f_z, u, v, w
+    type(field_t), pointer :: u, v, w
     
     n = fields%item_size(1)
-
-    f_x => fields%get_by_index(1)
-    f_y => fields%get_by_index(2)
-    f_z => fields%get_by_index(3)
 
     u => neko_field_registry%get_field_by_name("u")
     v => neko_field_registry%get_field_by_name("v")
@@ -77,12 +73,12 @@ contains
     call device_cmult2(coef%h1_d, nut%x_d, -1.0_rp, n)
     coef%ifh2 = .false.
 
-    call Ax%compute_vector(f_x%x, f_y%x, f_z%x, u%x, v%x, w%x, coef, &
-         coef%msh, coef%Xh)
+    call Ax%compute_vector(fields%x(1), fields%x(2), fields%x(3), &
+         u%x, v%x, w%x, coef, coef%msh, coef%Xh)
 
-    call device_invcol2(f_x%x_d, coef%B_d, n)
-    call device_invcol2(f_y%x_d, coef%B_d, n)
-    call device_invcol2(f_z%x_d, coef%B_d, n)
+    call device_invcol2(fields%x_d(1), coef%B_d, n)
+    call device_invcol2(fields%x_d(2), coef%B_d, n)
+    call device_invcol2(fields%x_d(3), coef%B_d, n)
 
   end subroutine strain_rate_based_stress_compute_device
 
