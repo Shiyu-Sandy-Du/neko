@@ -45,6 +45,8 @@ module strain_rate_based_stress
   use neko_config, only : NEKO_BCKND_DEVICE
   use utils, only : neko_error
   use strain_rate_based_stress_cpu, only : strain_rate_based_stress_compute_cpu
+  use strain_rate_based_stress_device, only : &
+        strain_rate_based_stress_compute_device
   use ax_product, only: ax_t, ax_helm_factory 
   implicit none
   private
@@ -141,12 +143,14 @@ contains
     class(strain_rate_based_stress_t), intent(inout) :: this
     real(kind=rp), intent(in) :: t
     integer, intent(in) :: tstep
-  
+
+    if (tstep .eq. 0) return
+    
     this%nut => neko_field_registry%get_field(this%nut_field_name)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call neko_error("The strain rate based stress &
-       &is only implemented on the CPU")
+       call strain_rate_based_stress_compute_device(this%ax, this%fields, this%nut, &
+                                                 this%coef)
     else
        call strain_rate_based_stress_compute_cpu(this%ax, this%fields, this%nut, &
                                                  this%coef)

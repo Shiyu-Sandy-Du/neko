@@ -30,13 +30,13 @@
 ! ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ! POSSIBILITY OF SUCH DAMAGE.
 !
-!> Implements the cpu kernel for the `strain_rate_based_stress_t` type.
+!> Implements the device kernel for the `strain_rate_based_stress_t` type.
 !! Maintainer: Shiyu Du.
 
-module strain_rate_based_stress_cpu
+module strain_rate_based_stress_device
   use num_types, only : rp
   use field_list, only : field_list_t
-  use math, only : vcross
+  use device_math, only : device_invcol2, device_cmult2
   use field, only : field_t
   use operators, only : dudxyz, strain_rate
   use scratch_registry, only : neko_scratch_registry
@@ -47,22 +47,22 @@ module strain_rate_based_stress_cpu
   implicit none
   private
 
-  public :: strain_rate_based_stress_compute_cpu
+  public :: strain_rate_based_stress_compute_device
 
 contains
 
-  !> Computes the generic Coriolis source term on the cpu.
+  !> Computes the generic Coriolis source term on the device.
   !! @param fields The right-hand side, which should be the velocity components.
   !! @param omega The rotation vector.
   !! @param omega The geostrophic wind.
-  subroutine strain_rate_based_stress_compute_cpu(Ax, fields, nut, coef)
+  subroutine strain_rate_based_stress_compute_device(Ax, fields, nut, coef)
     class(ax_t), intent(in) :: Ax
     type(field_list_t), intent(inout) :: fields
     type(field_t), intent(in) :: nut
     type(coef_t), intent(inout) :: coef
-    integer :: i, n
+    integer :: n
     type(field_t), pointer :: f_x, f_y, f_z, u, v, w
-
+    
     n = fields%item_size(1)
 
     f_x => fields%get_by_index(1)
@@ -74,18 +74,16 @@ contains
     w => neko_field_registry%get_field_by_name("w")
 
     ! set up Helmholtz operators for the Laplacian
-    coef%h1 = -1.0_rp * nut%x
+    call device_cmult2(coef%h1_d, nut%x_d, -1.0_rp, n)
     coef%ifh2 = .false.
 
-    call Ax%compute_vector(f_x%x, f_y%x, f_z%x, u%x, v%x, w%x, coef,&
+    call Ax%compute_vector(f_x%x, f_y%x, f_z%x, u%x, v%x, w%x, coef, &
          coef%msh, coef%Xh)
 
-    do concurrent (i = 1:n)
-      f_x%x(i,1,1,1) = f_x%x(i,1,1,1) / coef%B(i,1,1,1)
-      f_y%x(i,1,1,1) = f_y%x(i,1,1,1) / coef%B(i,1,1,1)
-      f_z%x(i,1,1,1) = f_z%x(i,1,1,1) / coef%B(i,1,1,1)
-    end do
+    call device_invcol2(f_x%x_d, coef%B_d, n)
+    call device_invcol2(f_y%x_d, coef%B_d, n)
+    call device_invcol2(f_z%x_d, coef%B_d, n)
 
-  end subroutine strain_rate_based_stress_compute_cpu
+  end subroutine strain_rate_based_stress_compute_device
 
-end module strain_rate_based_stress_cpu
+end module strain_rate_based_stress_device
