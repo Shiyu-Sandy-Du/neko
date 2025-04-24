@@ -15,6 +15,7 @@ neko_fortran_SOURCES = \
 	common/datadist.f90\
 	common/distdata.f90\
 	common/utils.f90\
+	common/time_state.f90\
 	common/json_utils.f90\
 	common/system.f90\
 	common/runtime_statistics.f90\
@@ -354,6 +355,8 @@ neko_fortran_SOURCES = \
 	les/bcknd/cpu/sigma_cpu.f90\
 	les/bcknd/device/sigma_device.f90\
 	les/bcknd/device/device_sigma_nut.F90\
+	les/wale.f90\
+	les/bcknd/cpu/wale_cpu.f90\
 	wall_models/wall_model.f90\
 	wall_models/rough_log_law.f90\
 	wall_models/spalding.f90\
@@ -526,12 +529,21 @@ if ENABLE_ADIOS2
 #neko_LDADD = \
 #	io/adios2_example.o
 #
+# With the previous build system, the correct method was:
 #
-io/nek_adios2.o: io/nek_adios2.cpp
-	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) -o $@ -c $^
+#io/nek_adios2.o: io/nek_adios2.cpp	
+#	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) -o $@ -c $^
+
+#libneko_la_LIBADD = \
+#	io/nek_adios2.o
+#
+# Now, use libtools to wrap everything
+
+io/nek_adios2.lo: io/nek_adios2.cpp
+	$(LIBTOOL) --tag=CXX --mode=compile $(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 libneko_la_LIBADD = \
-	io/nek_adios2.o
+        io/nek_adios2.lo
 
 #neko_LDADD = \
 #	io/nek_adios2.o
@@ -714,6 +726,9 @@ EXTRA_DIST = \
 	comm/comm_nccl.h\
 	comm/comm.h\
 	common/neko_log.h
+
+# Expose the listed headers in the package
+nobase_pkginclude_HEADERS = ${EXTRA_DIST}
 
 # Fortran deps. (updated with makedepf90 via target 'depend')
 include	.depends

@@ -41,8 +41,7 @@ module PDE_filter
   use field, only: field_t
   use coefs, only: coef_t
   use ax_product, only: ax_t, ax_helm_factory
-  use krylov, only: ksp_t, ksp_monitor_t, krylov_solver_factory, &
-       krylov_solver_destroy
+  use krylov, only: ksp_t, ksp_monitor_t, krylov_solver_factory
   use precon, only: pc_t, precon_factory, precon_destroy
   use bc_list, only : bc_list_t
   use neumann, only: neumann_t
@@ -111,8 +110,8 @@ module PDE_filter
      !> Constructor from json.
      procedure, pass(this) :: init => PDE_filter_init_from_json
      !> Actual constructor.
-     procedure, pass(this) :: init_from_attributes => &
-          PDE_filter_init_from_attributes
+     procedure, pass(this) :: init_from_components => &
+          PDE_filter_init_from_components
      !> Destructor.
      procedure, pass(this) :: free => PDE_filter_free
      !> Apply the filter
@@ -149,12 +148,12 @@ contains
          this%projection_activ_step, 0)
 
     call this%init_base(json, coef)
-    call PDE_filter_init_from_attributes(this, coef)
+    call PDE_filter_init_from_components(this, coef)
 
   end subroutine PDE_filter_init_from_json
 
   !> Actual constructor.
-  subroutine PDE_filter_init_from_attributes(this, coef)
+  subroutine PDE_filter_init_from_components(this, coef)
     class(PDE_filter_t), intent(inout) :: this
     type(coef_t), intent(in) :: coef
     integer :: n
@@ -195,15 +194,15 @@ contains
        deallocate(this%Ax)
     end if
 
-    if (allocated(this%ksp_filt)) then                                               
-       call krylov_solver_destroy(this%ksp_filt)                                     
-       deallocate(this%ksp_filt)                                                     
-    end if                                                                      
-                                                                                
-    if (allocated(this%pc_filt)) then                                                
-       call precon_destroy(this%pc_filt)                                             
-       deallocate(this%pc_filt)                                                      
-    end if                    
+    if (allocated(this%ksp_filt)) then
+       call this%ksp_filt%free()
+       deallocate(this%ksp_filt)
+    end if
+
+    if (allocated(this%pc_filt)) then
+       call precon_destroy(this%pc_filt)
+       deallocate(this%pc_filt)
+    end if
 
     call this%bclst_filt%free()
     call this%projection%free()
@@ -244,7 +243,7 @@ contains
     end if
     this%coef%ifh2 = .true.
 
-    ! compute the A(F_in) component of the RHS 
+    ! compute the A(F_in) component of the RHS
     ! (note, to be safe with the inout intent we first copy F_in to the
     !  temporary d_F_out)
     call field_copy(this%d_F_out, F_in)
@@ -315,13 +314,13 @@ contains
     call precon_factory(pc, pctype)
 
     select type (pcp => pc)
-      type is (jacobi_t)
+    type is (jacobi_t)
        call pcp%init(coef, dof, gs)
-      type is (sx_jacobi_t)
+    type is (sx_jacobi_t)
        call pcp%init(coef, dof, gs)
-      type is (device_jacobi_t)
+    type is (device_jacobi_t)
        call pcp%init(coef, dof, gs)
-      type is (hsmg_t)
+    type is (hsmg_t)
        if (len_trim(pctype) .gt. 4) then
           if (index(pctype, '+') .eq. 5) then
              call pcp%init(dof%msh, dof%Xh, coef, dof, gs, bclst, &
