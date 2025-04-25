@@ -237,15 +237,17 @@ contains
     if (params%valid_path('case.fluid.explicit_filtered_les')) then
        call json_get(params, 'case.fluid.explicit_filtered_les', &
                      this%explicit_filtered_les)
+       if (this%explicit_filtered_les) then
        this%variable_material_properties = .false.
-       call json_extract_object(params, "case.fluid", fluid_subdict)
-       call json_get(fluid_subdict, 'filter.type', filter_type)
-       call filter_factory(this%explicit_filter_x, filter_type, &
-            fluid_subdict, this%c_Xh)
-       call filter_factory(this%explicit_filter_y, filter_type, &
-            fluid_subdict, this%c_Xh)
-       call filter_factory(this%explicit_filter_z, filter_type, &
-            fluid_subdict, this%c_Xh)
+          call json_extract_object(params, "case.fluid", fluid_subdict)
+          call json_get(fluid_subdict, 'filter.type', filter_type)
+          call filter_factory(this%explicit_filter_x, filter_type, &
+               fluid_subdict, this%c_Xh)
+          call filter_factory(this%explicit_filter_y, filter_type, &
+               fluid_subdict, this%c_Xh)
+          call filter_factory(this%explicit_filter_z, filter_type, &
+               fluid_subdict, this%c_Xh)
+       end if
     end if
 
     ! Fill mu and rho field with the physical value
