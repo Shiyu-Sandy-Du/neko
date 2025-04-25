@@ -91,9 +91,8 @@ contains
        allocate(coriolis_source_term_t::object)
     case ("brinkman")
        allocate(brinkman_source_term_t::object)
-    else if (trim(type_name) .eq. "strain_rate_based_stress") then
+    case ("strain_rate_based_stress")
        allocate(strain_rate_based_stress_t::object)
-    else
     case default
        do i = 1, source_term_registry_size
           if (trim(type_name) == trim(source_term_registry(i)%type_name)) then
