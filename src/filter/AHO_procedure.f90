@@ -49,7 +49,7 @@ module AHO_procedure
   use pnpn_residual, only: pnpn_prs_res_t
   use mesh, only: mesh_t, NEKO_MSH_MAX_ZLBLS, NEKO_MSH_MAX_ZLBL_LEN
   use field_registry, only: neko_field_registry
-  use filter, only: filter_t
+  use filter, only: filter_t, filter_wrapper_t
   use scratch_registry, only: neko_scratch_registry
   use field_math, only: field_copy, field_add2, field_sub2, field_add2s2
   use coefs, only: coef_t
@@ -75,7 +75,7 @@ module AHO_procedure
   !> An approximate high order (AHO) procedure based on pde filter
   type, public, extends(filter_t) :: AHO_procedure_t
      !> Base filter
-     class(filter_t), allocatable :: base_filter 
+     class(filter_wrapper_t), allocatable :: base_filters(:)
      !> Ax
      class(ax_t), allocatable :: Ax_damp
      ! Inputs from the user
@@ -111,6 +111,7 @@ contains
     type(coef_t), intent(in) :: coef
     character(len=:), allocatable :: base_filter_type
     character(len=:), allocatable :: type_string
+    integer :: i
     character(len=20) :: FILTER_KNOWN_TYPES(4) = [character(len=20) :: &
      "elementwise", &
      "PDE", &
@@ -129,16 +130,28 @@ contains
     call json_extract_object(json, "filter.base_filter", json_base_filter)
     call json_get(json_base_filter, 'filter.type', base_filter_type)
 
-    if (allocated(this%base_filter)) then
-       deallocate(this%base_filter)
+    if (allocated(this%base_filters)) then
+       deallocate(this%base_filters)
     else if (trim(base_filter_type) .eq. 'elementwise') then
-       allocate(elementwise_filter_t::this%base_filter)
+       allocate(this%base_filters(this%AD_order + 1))
+       do i = 1, this%AD_order + 1
+          allocate(elementwise_filter_t::this%base_filters(i)%filter)
+       end do
     else if (trim(base_filter_type) .eq. 'PDE') then
-       allocate(pde_filter_t::this%base_filter)
+       allocate(this%base_filters(this%AD_order + 1))
+       do i = 1, this%AD_order + 1
+          allocate(pde_filter_t::this%base_filters(i)%filter)
+       end do
     else if (trim(base_filter_type) .eq. 'Najafi_Yazdi') then
-       allocate(Najafi_Yazdi_filter_t::this%base_filter)
+       allocate(this%base_filters(this%AD_order + 1))
+       do i = 1, this%AD_order + 1
+          allocate(Najafi_Yazdi_filter_t::this%base_filters(i)%filter)
+       end do
     else if (trim(base_filter_type) .eq. 'AHO') then
-       allocate(AHO_procedure_t::this%base_filter)
+       allocate(this%base_filters(this%AD_order + 1))
+       do i = 1, this%AD_order + 1
+          allocate(AHO_procedure_t::this%base_filters(i)%filter)
+       end do
     else
        type_string =  concat_string_array(FILTER_KNOWN_TYPES, &
             NEW_LINE('A') // "-  ", .true.)
@@ -148,7 +161,9 @@ contains
        stop
 
     end if
-    call this%base_filter%init(json_base_filter, coef)
+    do i = 1, this%AD_order + 1
+       call this%base_filters(i)%filter%init(json_base_filter, coef)
+    end do
     ! initialize the rest used in the filter
     call AHO_procedure_init_from_attributes(this, coef)
 
@@ -170,10 +185,13 @@ contains
   !> Destructor.
   subroutine AHO_procedure_free(this)
     class(AHO_procedure_t), intent(inout) :: this
+    integer :: i
     
-    if (allocated(this%base_filter)) then
-       call this%base_filter%free
-       deallocate(this%base_filter)
+    if (allocated(this%base_filters)) then
+       do i = 1, size(this%base_filters)
+          call this%base_filters(i)%free()
+       end do
+       deallocate(this%base_filters)
     end if
 
     if (allocated(this%Ax_damp)) then
@@ -235,12 +253,12 @@ contains
     end do    
 
     !! Step 2: Apply the base filter
-    call this%base_filter%apply(F_out, tmp_field, tstep, dt_controller)
+    call this%base_filters(1)%filter%apply(F_out, tmp_field, tstep, dt_controller)
 
     !! Step 3: Apply the approximate devoncolution procedure
     call field_copy(tmp_field, F_out)
     do i = 1, this%AD_order
-       call this%base_filter%apply(tmp_field2, tmp_field, tstep, dt_controller)
+       call this%base_filters(i+1)%filter%apply(tmp_field2, tmp_field, tstep, dt_controller)
        call field_sub2(tmp_field, tmp_field2)
        call field_add2s2(F_out, tmp_field, this%gamma)
     end do 

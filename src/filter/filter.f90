@@ -66,6 +66,15 @@ module filter
      procedure(filter_apply), pass(this), deferred :: apply
   end type filter_t
 
+  !> A helper type that is needed to have an array of polymorphic objects
+  type, public :: filter_wrapper_t
+     !> Wrapped polymorphic source term.
+     class(filter_t), allocatable :: filter
+   contains
+     !> Destructor.
+     procedure, pass(this) :: free => filter_wrapper_free
+  end type filter_wrapper_t
+
   public :: field_make_strong, field_make_weak, field_inv_mult
 
 
@@ -202,6 +211,14 @@ contains
 
   end subroutine field_inv_mult
 
+  !> Destructor for the `filter_wrapper_t` type.
+  subroutine filter_wrapper_free(this)
+    class(filter_wrapper_t), intent(inout) :: this
 
+    if (allocated(this%filter)) then
+       call this%filter%free()
+       deallocate(this%filter)
+    end if
+  end subroutine filter_wrapper_free
 
 end module filter
