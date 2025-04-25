@@ -143,8 +143,6 @@ contains
     class(strain_rate_based_stress_t), intent(inout) :: this
     real(kind=rp), intent(in) :: t
     integer, intent(in) :: tstep
-
-    if (tstep .eq. 0) return
     
     this%nut => neko_field_registry%get_field(this%nut_field_name)
 
