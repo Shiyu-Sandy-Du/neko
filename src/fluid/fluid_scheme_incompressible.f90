@@ -93,6 +93,11 @@ module fluid_scheme_incompressible
      integer :: vel_projection_activ_step !< Steps to activate projection for ksp_vel
      integer :: pr_projection_activ_step !< Steps to activate projection for ksp_pr
      logical :: strict_convergence !< Strict convergence for the velocity solver
+     !> Explicit filter
+     logical :: explicit_filtered_les
+     class(filter_t), allocatable :: explicit_filter_x
+     class(filter_t), allocatable :: explicit_filter_y
+     class(filter_t), allocatable :: explicit_filter_z
      !> Extrapolation velocity fields for LES
      type(field_t), pointer :: u_e => null() !< Extrapolated x-Velocity
      type(field_t), pointer :: v_e => null() !< Extrapolated y-Velocity
