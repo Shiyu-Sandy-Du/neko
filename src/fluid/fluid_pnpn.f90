@@ -686,20 +686,6 @@ contains
             call field_make_weak(this%f_y, this%c_Xh)
             call field_make_weak(this%f_z, this%c_Xh)
          end if
-
-         call field_make_strong(this%f_x, this%c_Xh)
-         call field_make_strong(this%f_y, this%c_Xh)
-         call field_make_strong(this%f_z, this%c_Xh)
-         call gs_Xh%op(this%f_x, GS_OP_ADD)
-         call gs_Xh%op(this%f_y, GS_OP_ADD)
-         call gs_Xh%op(this%f_z, GS_OP_ADD)
-         call field_inv_mult(this%f_x, this%c_Xh)
-         call field_inv_mult(this%f_y, this%c_Xh)
-         call field_inv_mult(this%f_z, this%c_Xh)
-         call field_copy(this%output_check,this%f_x)
-         call field_make_weak(this%f_x, this%c_Xh)
-         call field_make_weak(this%f_y, this%c_Xh)
-         call field_make_weak(this%f_z, this%c_Xh)
          
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the

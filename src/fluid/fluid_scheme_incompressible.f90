@@ -369,10 +369,6 @@ contains
     this%u => neko_field_registry%get_field('u')
     this%v => neko_field_registry%get_field('v')
     this%w => neko_field_registry%get_field('w')
-    call neko_field_registry%add_field(this%dm_Xh, 'output_check')
-    this%output_check => neko_field_registry%get_field('output_check')
-    call neko_field_registry%add_field(this%dm_Xh, 'output_check2')
-    this%output_check2 => neko_field_registry%get_field('output_check2')
 
     !! Initialize time-lag fields
     call this%ulag%init(this%u, 2)
@@ -431,9 +427,7 @@ contains
     nullify(this%v)
     nullify(this%w)
     nullify(this%p)
-    nullify(this%output_check)
-    nullify(this%output_check2)
-
+    
     if (this%variable_material_properties) then
        nullify(this%u_e)
        nullify(this%v_e)
