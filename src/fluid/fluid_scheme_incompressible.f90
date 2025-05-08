@@ -459,9 +459,15 @@ contains
     call this%mu_field%free()
 
     if (this%explicit_filtered_les .eqv. .true.) then
-       call this%explicit_filter_x%free()
-       call this%explicit_filter_y%free()
-       call this%explicit_filter_z%free()
+       if (allocated(this%explicit_filter_x)) then
+          call this%explicit_filter_x%free()
+       end if
+       if (allocated(this%explicit_filter_y)) then
+          call this%explicit_filter_y%free()
+       end if
+       if (allocated(this%explicit_filter_z)) then
+          call this%explicit_filter_z%free()
+       end if
     end if
   end subroutine fluid_scheme_free
 

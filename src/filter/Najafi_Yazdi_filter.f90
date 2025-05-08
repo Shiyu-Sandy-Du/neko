@@ -101,7 +101,7 @@ module Najafi_Yazdi_filter
 
      ! Inputs from the user
      !> filter radius
-     type(field_t) :: alpha2, nbeta2
+     type(field_t) :: alpha2, beta2
      !> tolerance for PDE filter
      real(kind=rp) :: abstol_filt
      !> max iterations for PDE filter
@@ -213,7 +213,7 @@ contains
     call this%RHS%init(this%coef%dof)
     call this%d_F_out%init(this%coef%dof)
     call this%alpha2%init(this%coef%dof)
-    call this%nbeta2%init(this%coef%dof)
+    call this%beta2%init(this%coef%dof)
 
     ! Setup backend dependent Ax routines
     call ax_helm_factory(this%Ax_L, full_formulation = .false.)
@@ -382,7 +382,7 @@ contains
           end do
        end do
        delta_min = minval(delta_el)
-       this%nbeta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
+       this%beta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
 
        do k = 1, this%coef%Xh%lz
           do j = 1, this%coef%Xh%ly
@@ -397,7 +397,7 @@ contains
        
     end do
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_memcpy(this%nbeta2%x, this%nbeta2%x_d, this%nbeta2%dof%size(), &
+       call device_memcpy(this%beta2%x, this%beta2%x_d, this%beta2%dof%size(), &
             HOST_TO_DEVICE, sync = .false.)
        call device_memcpy(this%alpha2%x, this%alpha2%x_d, this%alpha2%dof%size(), &
             HOST_TO_DEVICE, sync = .false.)
@@ -425,7 +425,7 @@ contains
     call this%RHS%init(this%coef%dof)
     call this%d_F_out%init(this%coef%dof)
     call this%alpha2%init(this%coef%dof)
-    call this%nbeta2%init(this%coef%dof)
+    call this%beta2%init(this%coef%dof)
 
     ! Setup backend dependent Ax routines
     call ax_helm_factory(this%Ax_L, full_formulation = .false.)
@@ -500,7 +500,7 @@ contains
           end do
        end do
        delta_min = minval(delta_el)
-       this%nbeta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
+       this%beta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
 
        do k = 1, this%coef%Xh%lz
           do j = 1, this%coef%Xh%ly
@@ -514,7 +514,7 @@ contains
        
     end do
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_memcpy(this%nbeta2%x, this%nbeta2%x_d, this%nbeta2%dof%size(), &
+       call device_memcpy(this%beta2%x, this%beta2%x_d, this%beta2%dof%size(), &
             HOST_TO_DEVICE, sync = .false.)
        call device_memcpy(this%alpha2%x, this%alpha2%x_d, this%alpha2%dof%size(), &
             HOST_TO_DEVICE, sync = .false.)
@@ -544,7 +544,7 @@ contains
     call this%RHS%free()
     call this%d_F_out%free()
     call this%alpha2%free()
-    call this%nbeta2%free()
+    call this%beta2%free()
     call this%ksp_filt%free()
 
     call this%free_base()
@@ -567,11 +567,11 @@ contains
 
     ! set up Helmholtz operators for \rho + beta^2 \nabla^2 \rho
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_copy(this%coef%h1_d, this%nbeta2%x_d, n)
+       call device_copy(this%coef%h1_d, this%beta2%x_d, n)
        call device_cfill(this%coef%h2_d, 1.0_rp, n)
     else
        ! h1 is already negative in its definition
-       call copy(this%coef%h1, this%nbeta2%x, n)
+       call copy(this%coef%h1, this%beta2%x, n)
        ! ax_helm includes the mass matrix in h2
        call cfill(this%coef%h2, 1.0_rp, n)
     end if
