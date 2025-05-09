@@ -198,7 +198,7 @@ contains
     real(kind=rp) :: di, dj, dk, delta_local, delta_min
     real(kind=rp) :: delta(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv)
     integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
-    real(kind=rp) :: delta_el(coef%xh%lx,coef%xh%ly,coef%xh%lz)
+    real(kind=rp) :: delta_edge(2,2,2)
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
     integer :: lx_half, ly_half, lz_half
     real(kind=rp) :: volume_element
@@ -377,11 +377,11 @@ contains
                 di = sqrt(di)
                 dj = sqrt(dj)
                 dk = sqrt(dk)
-                delta_el(i,j,k) = (di * dj * dk)**(1.0_rp / 3.0_rp)
+                delta_edge(i,j,k) = (di * dj * dk)**(1.0_rp / 3.0_rp)
              end do
           end do
        end do
-       delta_min = minval(delta_el)
+       delta_min = minval(delta_edge)
        this%beta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
 
        do k = 1, this%coef%Xh%lz
@@ -412,7 +412,7 @@ contains
     real(kind=rp), intent(in) :: delta_value
     real(kind=rp) :: di, dj, dk, delta_min
     integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
-    real(kind=rp) :: delta_el(coef%xh%lx,coef%xh%ly,coef%xh%lz)
+    real(kind=rp) :: delta_edge(2,2,2)
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
     real(kind=rp) :: G_cutoff = 0.5_rp
 
@@ -495,11 +495,11 @@ contains
                 di = sqrt(di)
                 dj = sqrt(dj)
                 dk = sqrt(dk)
-                delta_el(i,j,k) = (di * dj * dk)**(1.0_rp / 3.0_rp)
+                delta_edge(i,j,k) = (di * dj * dk)**(1.0_rp / 3.0_rp)
              end do
           end do
        end do
-       delta_min = minval(delta_el)
+       delta_min = minval(delta_edge)
        this%beta2%x(:,:,:,e) = - delta_min * delta_min /pi/pi
 
        do k = 1, this%coef%Xh%lz

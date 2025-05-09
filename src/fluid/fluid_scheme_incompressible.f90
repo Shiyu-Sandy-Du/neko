@@ -231,7 +231,7 @@ contains
        call json_get(params, 'case.fluid.explicit_filtered_les', &
                      this%explicit_filtered_les)
        if (this%explicit_filtered_les) then
-       this%variable_material_properties = .false.
+          this%variable_material_properties = .false.
           call json_extract_object(params, "case.fluid", fluid_subdict)
           call json_get(fluid_subdict, 'filter.type', filter_type)
           call filter_factory(this%explicit_filter_x, filter_type, &
@@ -458,17 +458,16 @@ contains
     call this%rho_field%free()
     call this%mu_field%free()
 
-    if (this%explicit_filtered_les .eqv. .true.) then
-       if (allocated(this%explicit_filter_x)) then
-          call this%explicit_filter_x%free()
-       end if
-       if (allocated(this%explicit_filter_y)) then
-          call this%explicit_filter_y%free()
-       end if
-       if (allocated(this%explicit_filter_z)) then
-          call this%explicit_filter_z%free()
-       end if
+    if (allocated(this%explicit_filter_x)) then
+       call this%explicit_filter_x%free()
     end if
+    if (allocated(this%explicit_filter_y)) then
+       call this%explicit_filter_y%free()
+    end if
+    if (allocated(this%explicit_filter_z)) then
+       call this%explicit_filter_z%free()
+    end if
+
   end subroutine fluid_scheme_free
 
   !> Validate that all fields, solvers etc necessary for
