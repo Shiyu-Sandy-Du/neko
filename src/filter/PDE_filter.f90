@@ -1,4 +1,4 @@
-! Copyright (c) 2023, The Neko Authors
+! Copyright (c) 2024-2025, The Neko Authors
 ! All rights reserved.
 !
 ! Redistribution and use in source and binary forms, with or without
@@ -9,8 +9,7 @@
 !     notice, this list of conditions and the following disclaimer.
 !
 !   * Redistributions in binary form must reproduce the above
-!     copyright notice, this list of conditions and the following
-!     disclaimer in the documentation and/or other materials provided
+!     copyright notice, this list of conditions and/or other materials provided
 !     with the distribution.
 !
 !   * Neither the name of the authors nor the names of its
@@ -61,12 +60,19 @@ module PDE_filter
   use device_jacobi, only: device_jacobi_t
   use sx_jacobi, only: sx_jacobi_t
   use hsmg, only: hsmg_t
-  use utils, only: neko_error
-  use device_math, only: device_cfill, device_subcol3, device_cmult
+  use utils, only: neko_error, neko_type_error
+  use device_math, only: device_cfill, device_subcol3, device_cmult, device_copy
   use projection, only : projection_t
   use time_step_controller, only : time_step_controller_t
+  use device, only : HOST_TO_DEVICE, device_memcpy
   implicit none
   private
+
+  ! List of all possible types created by the factory routine
+  character(len=20) :: FILTER_DELTA_KNOWN_TYPES(3) = [character(len=20) :: &
+       "maxGLL", &
+       "averageGLL", &
+       "localGLL"]
 
   !> A PDE based filter mapping $\rho \mapsto \tilde{\rho}$,
   !! see Lazarov & O. Sigmund 2010,
@@ -89,7 +95,7 @@ module PDE_filter
 
      ! Inputs from the user
      !> filter radius
-     real(kind=rp) :: r
+     type(field_t) :: r2
      !> tolerance for PDE filter
      real(kind=rp) :: abstol_filt
      !> max iterations for PDE filter
@@ -110,8 +116,10 @@ module PDE_filter
      !> Constructor from json.
      procedure, pass(this) :: init => PDE_filter_init_from_json
      !> Actual constructor.
-     procedure, pass(this) :: init_from_components => &
-          PDE_filter_init_from_components
+     procedure, pass(this) :: init_from_components_field => &
+          PDE_filter_init_from_components_field
+     procedure, pass(this) :: init_from_components_uniform => &
+          PDE_filter_init_from_components_uniform
      !> Destructor.
      procedure, pass(this) :: free => PDE_filter_free
      !> Apply the filter
@@ -125,9 +133,26 @@ contains
     class(PDE_filter_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in) :: coef
+    character(len=:), allocatable :: delta_name
+    real(kind=rp) :: delta_value
 
     ! user parameters
-    call json_get(json, "filter.radius", this%r)
+    if (json%valid_path("filter.delta_field") .and. &
+    .not. json%valid_path("filter.delta_value")) then
+       call json_get(json, "filter.delta_field", delta_name)
+
+    else if (.not. json%valid_path("filter.delta_field") .and. &
+    json%valid_path("filter.delta_value")) then
+       call json_get(json, "filter.delta_value", delta_value)
+
+    else if (.not. json%valid_path("filter.delta_field") .and. &
+    .not. json%valid_path("filter.delta_value")) then
+       call neko_error("Please provide a delta field name or &
+       &delta value to the PDE filter")
+    else
+       call neko_error("Please not specify a delta field name or &
+       &delta value to the PDE filter together")
+    end if
 
     call json_get_or_default(json, "filter.tolerance", this%abstol_filt, &
          1.0e-10_rp)
@@ -148,15 +173,29 @@ contains
          this%projection_activ_step, 0)
 
     call this%init_base(json, coef)
-    call PDE_filter_init_from_components(this, coef)
+    if (json%valid_path("filter.delta_field")) then
+       call PDE_filter_init_from_components_field(this, &
+       coef, delta_name)
+    else
+       call PDE_filter_init_from_components_uniform(this, &
+       coef, delta_value)
+    end if
 
   end subroutine PDE_filter_init_from_json
 
   !> Actual constructor.
-  subroutine PDE_filter_init_from_components(this, coef)
+  subroutine PDE_filter_init_from_components_field(this, coef, &
+  delta_name)
     class(PDE_filter_t), intent(inout) :: this
     type(coef_t), intent(in) :: coef
-    integer :: n
+    character(len=:), allocatable, intent(in) :: delta_name
+    real(kind=rp) :: di, dj, dk, delta_local
+    real(kind=rp) :: delta(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv)
+    integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
+    real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
+    integer :: lx_half, ly_half, lz_half
+    real(kind=rp) :: volume_element
+    real(kind=rp) :: G_cutoff = 0.5_rp
 
     n = this%coef%dof%size()
 
@@ -166,6 +205,7 @@ contains
     ! init the b and x in Ax=b
     call this%RHS%init(this%coef%dof)
     call this%d_F_out%init(this%coef%dof)
+    call this%r2%init(this%coef%dof)
 
     ! Setup backend dependent Ax routines
     call ax_helm_factory(this%Ax, full_formulation = .false.)
@@ -179,12 +219,179 @@ contains
                                       this%coef, this%coef%dof, &
                                       this%coef%gs_h, &      
                                       this%bclst_filt, this%precon_type_filt)
-      
+   
     ! set up projection
     call this%projection%init(this%coef%dof%size(), this%projection_dim, &
          this%projection_activ_step)
 
-  end subroutine PDE_filter_init_from_components
+    ! set up a delta field to generate r2
+    lx_half = coef%Xh%lx / 2
+    ly_half = coef%Xh%ly / 2
+    lz_half = coef%Xh%lz / 2
+
+    if (delta_name .eq. "maxGLL") then
+       ! use a same length scale throughout an entire element
+       ! the length scale is based on maximum GLL spacing
+       do e = 1, coef%msh%nelv
+          di = (coef%dof%x(lx_half, 1, 1, e) &
+              - coef%dof%x(lx_half + 1, 1, 1, e))**2 &
+             + (coef%dof%y(lx_half, 1, 1, e) &
+              - coef%dof%y(lx_half + 1, 1, 1, e))**2 &
+             + (coef%dof%z(lx_half, 1, 1, e) &
+              - coef%dof%z(lx_half + 1, 1, 1, e))**2
+
+          dj = (coef%dof%x(1, ly_half, 1, e) &
+              - coef%dof%x(1, ly_half + 1, 1, e))**2 &
+             + (coef%dof%y(1, ly_half, 1, e) &
+              - coef%dof%y(1, ly_half + 1, 1, e))**2 &
+             + (coef%dof%z(1, ly_half, 1, e) &
+              - coef%dof%z(1, ly_half + 1, 1, e))**2
+
+          dk = (coef%dof%x(1, 1, lz_half, e) &
+              - coef%dof%x(1, 1, lz_half + 1, e))**2 &
+             + (coef%dof%y(1, 1, lz_half, e) &
+              - coef%dof%y(1, 1, lz_half + 1, e))**2 &
+             + (coef%dof%z(1, 1, lz_half, e) &
+              - coef%dof%z(1, 1, lz_half + 1, e))**2
+          di = sqrt(di)
+          dj = sqrt(dj)
+          dk = sqrt(dk)
+          delta(:,:,:,e) = (di * dj * dk)**(1.0_rp / 3.0_rp)
+       end do
+    else if (delta_name .eq. "averageGLL") then
+       ! use a same length scale throughout an entire element
+       ! the length scale is based on (volume)^(1/3)/(N+1)
+       do e = 1, coef%msh%nelv
+          volume_element = 0.0_rp
+          do k = 1, coef%Xh%lx * coef%Xh%ly * coef%Xh%lz
+             volume_element = volume_element + coef%B(k, 1, 1, e)
+          end do
+          delta(:,:,:,e) = (volume_element / (coef%Xh%lx - 1) &
+            / (coef%Xh%ly - 1) / (coef%Xh%lz - 1))**(1.0_rp / 3.0_rp)
+       end do
+    else if (delta_name .eq. "localGLL") then
+       do e = 1, coef%msh%nelv
+          do k = 1, coef%Xh%lz
+             km = max(1, k-1)
+             kp = min(coef%Xh%lz, k+1)
+
+             do j = 1, coef%Xh%ly
+                jm = max(1, j-1)
+                jp = min(coef%Xh%ly, j+1)
+
+                do i = 1, coef%Xh%lx
+                   im = max(1, i-1)
+                   ip = min(coef%Xh%lx, i+1)
+
+                   di = (coef%dof%x(ip, j, k, e) - &
+                         coef%dof%x(im, j, k, e))**2 &
+                      + (coef%dof%y(ip, j, k, e) - &
+                         coef%dof%y(im, j, k, e))**2 &
+                      + (coef%dof%z(ip, j, k, e) - &
+                         coef%dof%z(im, j, k, e))**2
+
+                   dj = (coef%dof%x(i, jp, k, e) - &
+                         coef%dof%x(i, jm, k, e))**2 &
+                      + (coef%dof%y(i, jp, k, e) - &
+                         coef%dof%y(i, jm, k, e))**2 &
+                      + (coef%dof%z(i, jp, k, e) - &
+                         coef%dof%z(i, jm, k, e))**2
+
+                   dk = (coef%dof%x(i, j, kp, e) - &
+                         coef%dof%x(i, j, km, e))**2 &
+                      + (coef%dof%y(i, j, kp, e) - &
+                         coef%dof%y(i, j, km, e))**2 &
+                      + (coef%dof%z(i, j, kp, e) - &
+                         coef%dof%z(i, j, km, e))**2
+
+                   di = sqrt(di) / (ip - im)
+                   dj = sqrt(dj) / (jp - jm)
+                   dk = sqrt(dk) / (kp - km)
+                   delta(i,j,k,e) = (di * dj * dk)**(1.0_rp / 3.0_rp)
+                end do
+             end do
+          end do
+       end do
+    else
+       call neko_type_error("delta_field for filter", &
+            delta_name, FILTER_DELTA_KNOWN_TYPES)
+       stop
+    end if
+
+    ! set up coefficient for the laplacian on the LES and RHS
+    do e = 1, this%coef%msh%nelv
+       do k = 1, this%coef%Xh%lz
+          do j = 1, this%coef%Xh%ly
+             do i = 1, this%coef%Xh%lz
+                delta_local = delta(i,j,k,e)
+                this%r2%x(i,j,k,e) = -1.0_rp * delta_local * delta_local &
+                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff)
+             end do
+          end do
+       end do    
+    end do
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(this%r2%x, this%r2%x_d, this%r2%dof%size(), &
+            HOST_TO_DEVICE, sync = .false.)
+    end if
+
+  end subroutine PDE_filter_init_from_components_field
+
+  subroutine PDE_filter_init_from_components_uniform(this, coef, &
+  delta_value)
+    class(PDE_filter_t), intent(inout) :: this
+    type(coef_t), intent(in) :: coef
+    real(kind=rp), intent(in) :: delta_value
+    real(kind=rp) :: di, dj, dk, delta_min
+    integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
+    real(kind=rp) :: delta_edge(2,2,2)
+    real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
+    real(kind=rp) :: G_cutoff = 0.5_rp
+
+    n = this%coef%dof%size()
+
+    ! init the bc list (all Neuman BCs, will remain empty)
+    call this%bclst_filt%init()
+
+    ! init the b and x in Ax=b
+    call this%RHS%init(this%coef%dof)
+    call this%d_F_out%init(this%coef%dof)
+    call this%r2%init(this%coef%dof)
+
+    ! Setup backend dependent Ax routines
+    call ax_helm_factory(this%Ax, full_formulation = .false.)
+
+    ! set up krylov solver
+    call krylov_solver_factory(this%ksp_filt, n, this%ksp_solver, &
+         this%ksp_max_iter, this%abstol_filt)
+
+    ! set up preconditioner
+    call filter_precon_factory(this%pc_filt, this%ksp_filt, &                      
+                                      this%coef, this%coef%dof, &
+                                      this%coef%gs_h, &      
+                                      this%bclst_filt, this%precon_type_filt)
+   
+    ! set up projection
+    call this%projection%init(this%coef%dof%size(), this%projection_dim, &
+         this%projection_activ_step)
+
+    ! set up coefficient for the laplacian on the LES and RHS
+    do e = 1, this%coef%msh%nelv
+       do k = 1, this%coef%Xh%lz
+          do j = 1, this%coef%Xh%ly
+             do i = 1, this%coef%Xh%lz
+                this%r2%x(i,j,k,e) = -1.0_rp * delta_value * delta_value &
+                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff)
+             end do
+          end do
+       end do
+    end do
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(this%r2%x, this%r2%x_d, this%r2%dof%size(), &
+            HOST_TO_DEVICE, sync = .false.)
+    end if
+
+  end subroutine PDE_filter_init_from_components_uniform
 
   !> Destructor.
   subroutine PDE_filter_free(this)
@@ -208,6 +415,7 @@ contains
     call this%projection%free()
     call this%RHS%free()
     call this%d_F_out%free()
+    call this%r2%free()  ! Free the r2 field
 
     call this%free_base()
 
@@ -229,23 +437,17 @@ contains
 
     ! set up Helmholtz operators and RHS
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       ! TODO
-       ! I think this is correct but I've never tested it
-       call device_cfill(this%coef%h1_d, this%r**2, n)
+       call device_copy(this%coef%h1_d, this%r2%x_d, n)
        call device_cfill(this%coef%h2_d, 1.0_rp, n)
     else
        do i = 1, n
-          ! h1 is already negative in its definition
-          this%coef%h1(i,1,1,1) = this%r**2
-          ! ax_helm includes the mass matrix in h2
+          this%coef%h1(i,1,1,1) = this%r2%x(i,1,1,1)
           this%coef%h2(i,1,1,1) = 1.0_rp
        end do
     end if
     this%coef%ifh2 = .true.
 
     ! compute the A(F_in) component of the RHS
-    ! (note, to be safe with the inout intent we first copy F_in to the
-    !  temporary d_F_out)
     call field_copy(this%d_F_out, F_in)
     call this%Ax%compute(this%RHS%x, this%d_F_out%x, this%coef, this%coef%msh, &
         this%coef%Xh)
@@ -255,7 +457,6 @@ contains
        call device_cmult(this%RHS%x_d, -1.0_rp, n)
     else
        do i = 1, n
-          ! mass matrix should be included here
           this%RHS%x(i,1,1,1) = F_in%x(i,1,1,1) * this%coef%B(i,1,1,1) &
               - this%RHS%x(i,1,1,1)
        end do
@@ -287,7 +488,6 @@ contains
     call this%pc_filt%update()
 
     if (this%if_log) then
-       ! write it all out
        call neko_log%message('Filter')
 
        write(log_buf, '(A,A,A)') 'Iterations:   ',&

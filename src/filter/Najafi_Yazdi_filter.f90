@@ -389,8 +389,9 @@ contains
              do i = 1, this%coef%Xh%lz
                 delta_local = delta(i,j,k,e)
                 this%alpha2%x(i,j,k,e) = -1.0_rp * delta_local * delta_local &
-                     / pi / pi * (1 - 1/G_cutoff * &
-                     (1 - delta_min * delta_min / delta_local / delta_local))
+                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff * &
+                     (1.0_rp - delta_min * delta_min / &
+                     delta_local / delta_local))
              end do
           end do
        end do
@@ -506,8 +507,9 @@ contains
           do j = 1, this%coef%Xh%ly
              do i = 1, this%coef%Xh%lz
                 this%alpha2%x(i,j,k,e) = -1.0_rp * delta_value * delta_value &
-                     / pi / pi * (1 - 1/G_cutoff * &
-                     (1 - delta_min * delta_min / delta_value / delta_value))
+                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff * &
+                     (1.0_rp - delta_min * delta_min / &
+                     delta_value / delta_value))
              end do
           end do
        end do
