@@ -107,6 +107,9 @@ module PDE_filter
      integer :: ksp_n, n, i
      !> If write out iteration info
      logical :: if_log
+     !> Apply filter only close to elementary interfaces
+     logical :: interface_only
+     integer :: adjacent_idx
 
      !> Projection related attributes to reduce the number of iterations
      type(projection_t) :: projection
@@ -153,6 +156,11 @@ contains
        call neko_error("Please not specify a delta field name or &
        &delta value to the PDE filter together")
     end if
+
+    call json_get_or_default(json, "filter.interface_only", &
+         this%interface_only, .false.)
+    call json_get_or_default(json, "filter.adjacent_idx", &
+         this%adjacent_idx, 0)
 
     call json_get_or_default(json, "filter.tolerance", this%abstol_filt, &
          1.0e-10_rp)
@@ -316,6 +324,13 @@ contains
        call neko_type_error("delta_field for filter", &
             delta_name, FILTER_DELTA_KNOWN_TYPES)
        stop
+    end if
+
+    if (this%interface_only) then
+       delta(2 + this%adjacent_idx : this%coef%Xh%lx - 1 - this%adjacent_idx, &
+             2 + this%adjacent_idx : this%coef%Xh%ly - 1 - this%adjacent_idx, &
+             2 + this%adjacent_idx : this%coef%Xh%lz - 1 - this%adjacent_idx, &
+             :) = 0.0_rp
     end if
 
     ! set up coefficient for the laplacian on the LES and RHS
