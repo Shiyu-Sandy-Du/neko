@@ -96,6 +96,8 @@ module PDE_filter
      ! Inputs from the user
      !> filter radius
      type(field_t) :: r2
+     !> Transfer function at curoff wavenumber
+     real(kind=rp) :: G_cutoff
      !> tolerance for PDE filter
      real(kind=rp) :: abstol_filt
      !> max iterations for PDE filter
@@ -161,6 +163,8 @@ contains
          this%interface_only, .false.)
     call json_get_or_default(json, "filter.adjacent_idx", &
          this%adjacent_idx, 0)
+    call json_get_or_default(json, "filter.G_cutoff", &
+         this%G_cutoff, 0.5_rp)
 
     call json_get_or_default(json, "filter.tolerance", this%abstol_filt, &
          1.0e-10_rp)
@@ -203,7 +207,6 @@ contains
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
     integer :: lx_half, ly_half, lz_half
     real(kind=rp) :: volume_element
-    real(kind=rp) :: G_cutoff = 0.5_rp
 
     n = this%coef%dof%size()
 
@@ -340,7 +343,7 @@ contains
              do i = 1, this%coef%Xh%lz
                 delta_local = delta(i,j,k,e)
                 this%r2%x(i,j,k,e) = -1.0_rp * delta_local * delta_local &
-                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff)
+                     / pi / pi * (1.0_rp - 1.0_rp/this%G_cutoff)
              end do
           end do
        end do    
@@ -361,7 +364,6 @@ contains
     integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
     real(kind=rp) :: delta_edge(2,2,2)
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
-    real(kind=rp) :: G_cutoff = 0.5_rp
 
     n = this%coef%dof%size()
 
@@ -396,7 +398,7 @@ contains
           do j = 1, this%coef%Xh%ly
              do i = 1, this%coef%Xh%lz
                 this%r2%x(i,j,k,e) = -1.0_rp * delta_value * delta_value &
-                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff)
+                     / pi / pi * (1.0_rp - 1.0_rp/this%G_cutoff)
              end do
           end do
        end do
