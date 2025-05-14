@@ -102,6 +102,8 @@ module Najafi_Yazdi_filter
      ! Inputs from the user
      !> filter radius
      type(field_t) :: alpha2, beta2
+     !> Transfer function at curoff wavenumber
+     real(kind=rp) :: G_cutoff
      !> tolerance for PDE filter
      real(kind=rp) :: abstol_filt
      !> max iterations for PDE filter
@@ -113,6 +115,9 @@ module Najafi_Yazdi_filter
      integer :: ksp_n, n, i
      !> If write out iteration info
      logical :: if_log
+     !> Apply filter only close to elementary interfaces
+     logical :: interface_only
+     integer :: adjacent_idx
 
      !> Projection related attributes to reduce the number of iterations
      type(projection_t) :: projection
@@ -159,6 +164,13 @@ contains
        call neko_error("Please not specify a delta field name or &
        &delta value to the PDE filter together")
     end if
+    
+    call json_get_or_default(json, "filter.interface_only", &
+         this%interface_only, .false.)
+    call json_get_or_default(json, "filter.adjacent_idx", &
+         this%adjacent_idx, 0)
+    call json_get_or_default(json, "filter.G_cutoff", &
+         this%G_cutoff, 0.5_rp)
 
     call json_get_or_default(json, "filter.tolerance", this%abstol_filt, &
          1.0e-10_rp)
@@ -202,7 +214,6 @@ contains
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
     integer :: lx_half, ly_half, lz_half
     real(kind=rp) :: volume_element
-    real(kind=rp) :: G_cutoff = 0.5_rp
 
     n = this%coef%dof%size()
 
@@ -327,6 +338,13 @@ contains
        stop
     end if
 
+    if (this%interface_only) then
+       delta(2 + this%adjacent_idx : this%coef%Xh%lx - 1 - this%adjacent_idx, &
+             2 + this%adjacent_idx : this%coef%Xh%ly - 1 - this%adjacent_idx, &
+             2 + this%adjacent_idx : this%coef%Xh%lz - 1 - this%adjacent_idx, &
+             :) = 0.0_rp
+    end if
+
     ! set up coefficient for the laplacian on the LES and RHS
     do e = 1, this%coef%msh%nelv
        do k = 1, 2
@@ -389,7 +407,7 @@ contains
              do i = 1, this%coef%Xh%lz
                 delta_local = delta(i,j,k,e)
                 this%alpha2%x(i,j,k,e) = -1.0_rp * delta_local * delta_local &
-                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff * &
+                     / pi / pi * (1.0_rp - 1.0_rp/this%G_cutoff * &
                      (1.0_rp - delta_min * delta_min / &
                      delta_local / delta_local))
              end do
@@ -415,7 +433,6 @@ contains
     integer :: n, i, j, k, e, im, ip, jm, jp, km, kp
     real(kind=rp) :: delta_edge(2,2,2)
     real(kind=rp) :: pi = 4.0_rp * atan(1.0_rp)
-    real(kind=rp) :: G_cutoff = 0.5_rp
 
     n = this%coef%dof%size()
 
@@ -507,7 +524,7 @@ contains
           do j = 1, this%coef%Xh%ly
              do i = 1, this%coef%Xh%lz
                 this%alpha2%x(i,j,k,e) = -1.0_rp * delta_value * delta_value &
-                     / pi / pi * (1.0_rp - 1.0_rp/G_cutoff * &
+                     / pi / pi * (1.0_rp - 1.0_rp/this%G_cutoff * &
                      (1.0_rp - delta_min * delta_min / &
                      delta_value / delta_value))
              end do
