@@ -338,13 +338,6 @@ contains
        stop
     end if
 
-    if (this%interface_only) then
-       delta(2 + this%adjacent_idx : this%coef%Xh%lx - 1 - this%adjacent_idx, &
-             2 + this%adjacent_idx : this%coef%Xh%ly - 1 - this%adjacent_idx, &
-             2 + this%adjacent_idx : this%coef%Xh%lz - 1 - this%adjacent_idx, &
-             :) = 0.0_rp
-    end if
-
     ! set up coefficient for the laplacian on the LES and RHS
     do e = 1, this%coef%msh%nelv
        do k = 1, 2
@@ -415,6 +408,16 @@ contains
        end do
        
     end do
+    if (this%interface_only) then
+       this%beta2%x(2 + this%adjacent_idx:this%coef%Xh%lx-1-this%adjacent_idx, &
+         2 + this%adjacent_idx : this%coef%Xh%ly - 1 - this%adjacent_idx, &
+         2 + this%adjacent_idx : this%coef%Xh%lz - 1 - this%adjacent_idx, &
+         :) = 0.0_rp
+       this%alpha2%x(2 + this%adjacent_idx:this%coef%Xh%lx-1-this%adjacent_idx, &
+         2 + this%adjacent_idx : this%coef%Xh%ly - 1 - this%adjacent_idx, &
+         2 + this%adjacent_idx : this%coef%Xh%lz - 1 - this%adjacent_idx, &
+         :) = 0.0_rp
+    end if
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_memcpy(this%beta2%x, this%beta2%x_d, this%beta2%dof%size(), &
             HOST_TO_DEVICE, sync = .false.)
