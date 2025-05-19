@@ -74,6 +74,9 @@ module fluid_scheme_base
      type(field_t), pointer :: v => null() !< y-component of Velocity
      type(field_t), pointer :: w => null() !< z-component of Velocity
      type(field_t), pointer :: p => null() !< Pressure
+     type(field_t), pointer :: check1 => null() !< Check array
+     type(field_t), pointer :: check2 => null() !< Check array
+     type(field_t), pointer :: check3 => null() !< Check array
      type(field_series_t) :: ulag, vlag, wlag !< fluid field (lag)
 
      !> Checkpoint

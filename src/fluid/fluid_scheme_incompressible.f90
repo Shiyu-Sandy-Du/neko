@@ -231,7 +231,7 @@ contains
        call json_get(params, 'case.fluid.explicit_filtered_les', &
                      this%explicit_filtered_les)
        if (this%explicit_filtered_les) then
-          this%variable_material_properties = .false.
+         !  this%variable_material_properties = .false.
           call json_extract_object(params, "case.fluid", fluid_subdict)
           call json_get(fluid_subdict, 'filter.type', filter_type)
           call filter_factory(this%explicit_filter_x, filter_type, &
@@ -370,6 +370,13 @@ contains
     this%v => neko_field_registry%get_field('v')
     this%w => neko_field_registry%get_field('w')
 
+    call neko_field_registry%add_field(this%dm_Xh, 'check1')
+    this%check1 => neko_field_registry%get_field('check1')
+    call neko_field_registry%add_field(this%dm_Xh, 'check2')
+    this%check2 => neko_field_registry%get_field('check2')
+    call neko_field_registry%add_field(this%dm_Xh, 'check3')
+    this%check3 => neko_field_registry%get_field('check3')
+
     !! Initialize time-lag fields
     call this%ulag%init(this%u, 2)
     call this%vlag%init(this%v, 2)
@@ -427,6 +434,9 @@ contains
     nullify(this%v)
     nullify(this%w)
     nullify(this%p)
+    nullify(this%check1)
+    nullify(this%check2)
+    nullify(this%check3)
     
     if (this%variable_material_properties) then
        nullify(this%u_e)

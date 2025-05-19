@@ -53,7 +53,7 @@ module fluid_pnpn
   use projection, only : projection_t
   use projection_vel, only : projection_vel_t
   use device, only : device_memcpy, HOST_TO_DEVICE, device_event_sync, &
-       glb_cmd_event
+       glb_cmd_event, DEVICE_TO_HOST
   use advection, only : advection_t, advection_factory
   use profiler, only : profiler_start_region, profiler_end_region
   use json_module, only : json_file, json_core, json_value
@@ -77,11 +77,13 @@ module fluid_pnpn
   use bc_list, only: bc_list_t
   use zero_dirichlet, only : zero_dirichlet_t
   use utils, only : neko_error, neko_type_error
-  use field_math, only : field_add2, field_copy, field_rzero
+  use field_math, only : field_add2, field_copy, field_rzero, field_sub2
+  use device_math, only : device_copy
   use bc, only : bc_t
   use file, only : file_t
   use operators, only : ortho
-  use math, only : copy
+!   use math, only : copy
+  use PDE_filter, only : PDE_filter_t
   use filter, only : field_make_strong, field_make_weak, field_inv_mult
   use time_state, only : time_state_t
   implicit none
@@ -628,6 +630,7 @@ contains
          rho => this%rho, mu => this%mu, oifs => this%oifs, &
          rho_field => this%rho_field, mu_field => this%mu_field, &
          f_x => this%f_x, f_y => this%f_y, f_z => this%f_z, &
+         advx => this%advx, advy => this%advy, advz => this%advz, &
          t => time%t, tstep => time%tstep, dt => time%dt, &
          ext_bdf => this%ext_bdf, event => glb_cmd_event)
 
@@ -663,29 +666,46 @@ contains
               rho, dt, n)
       else
          ! Add the advection operators to the right-hand-side.
+         ! call field_rzero(advx)
+         ! call field_rzero(advy)
+         ! call field_rzero(advz)
          call this%adv%compute(u, v, w, &
                               f_x, f_y, f_z, &
                               Xh, this%c_Xh, dm_Xh%size())
          if (this%explicit_filtered_les .eqv. .true.) then
-            call field_make_strong(this%f_x, this%c_Xh)
-            call field_make_strong(this%f_y, this%c_Xh)
-            call field_make_strong(this%f_z, this%c_Xh)
-            call gs_Xh%op(this%f_x, GS_OP_ADD)
-            call gs_Xh%op(this%f_y, GS_OP_ADD)
-            call gs_Xh%op(this%f_z, GS_OP_ADD)
-            call field_inv_mult(this%f_x, this%c_Xh)
-            call field_inv_mult(this%f_y, this%c_Xh)
-            call field_inv_mult(this%f_z, this%c_Xh)
-            call field_copy(this%wa, this%f_x)
-            call this%explicit_filter_x%apply(this%f_x, this%wa, tstep, dt_controller)
-            call field_copy(this%wa, this%f_y)
-            call this%explicit_filter_y%apply(this%f_y, this%wa, tstep, dt_controller)
-            call field_copy(this%wa, this%f_z)
-            call this%explicit_filter_z%apply(this%f_z, this%wa, tstep, dt_controller)
-            call field_make_weak(this%f_x, this%c_Xh)
-            call field_make_weak(this%f_y, this%c_Xh)
-            call field_make_weak(this%f_z, this%c_Xh)
+            call field_make_strong(f_x, this%c_Xh)
+            call field_make_strong(f_y, this%c_Xh)
+            call field_make_strong(f_z, this%c_Xh)
+            call gs_Xh%op(f_x, GS_OP_ADD)
+            call gs_Xh%op(f_y, GS_OP_ADD)
+            call gs_Xh%op(f_z, GS_OP_ADD)
+            call field_inv_mult(f_x, this%c_Xh)
+            call field_inv_mult(f_y, this%c_Xh)
+            call field_inv_mult(f_z, this%c_Xh)
+            call field_copy(this%check1, f_x)
+            call field_copy(this%wa, f_x)
+            call this%explicit_filter_x%apply(f_x, this%wa, tstep, dt_controller)
+            call field_copy(this%wa, f_y)
+            call this%explicit_filter_y%apply(f_y, this%wa, tstep, dt_controller)
+            ! call field_sub2(this%check1, this%check2)
+            ! select type (filt => this%explicit_filter_x)
+            ! type is (PDE_filter_t)
+            !    call field_copy(this%check2, filt%r2)
+            ! end select
+            ! call device_memcpy(this%c_Xh%h1, this%c_Xh%h1_d, f_x%dof%size(), DEVICE_TO_HOST, sync = .true.)
+            ! call device_copy(this%check1%x_d, this%c_Xh%h1_d, f_x%dof%size())
+            call field_copy(this%wa, f_z)
+            call this%explicit_filter_z%apply(f_z, this%wa, tstep, dt_controller)
+            call field_copy(this%check2, f_x)
+
+            call field_make_weak(f_x, this%c_Xh)
+            call field_make_weak(f_y, this%c_Xh)
+            call field_make_weak(f_z, this%c_Xh)
          end if
+         ! call field_copy(this%check1, f_x)
+         ! call field_add2(f_x, advx)
+         ! call field_add2(f_y, advy)
+         ! call field_add2(f_z, advz)
          
          ! At this point the RHS contains the sum of the advection operator and
          ! additional source terms, evaluated using the velocity field from the
@@ -723,12 +743,15 @@ contains
            this%bc_prs_surface, this%bc_sym_surface,&
            Ax_prs, ext_bdf%diffusion_coeffs(1), dt, &
            mu_field, rho_field, event)
-
+      
       ! De-mean the pressure residual when no strong pressure boundaries present
       if (.not. this%prs_dirichlet) call ortho(p_res%x, this%glb_n_points, n)
 
       call gs_Xh%op(p_res, GS_OP_ADD, event)
       call device_event_sync(event)
+      
+      call field_copy(this%check3, p_res)
+      call field_make_strong(this%check3, this%c_Xh)
 
       ! Set the residual to zero at strong pressure boundaries.
       call this%bclst_dp%apply_scalar(p_res%x, p%dof%size(), t, tstep)
