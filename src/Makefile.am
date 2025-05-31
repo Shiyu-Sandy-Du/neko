@@ -312,6 +312,7 @@ neko_fortran_SOURCES = \
 	simulation_components/derivative_simcomp.f90\
 	simulation_components/les_simcomp.f90\
 	simulation_components/simulation_component_fctry.f90\
+	simulation_components/entropy_viscosity.f90\
 	source_terms/source_term.f90\
 	source_terms/coriolis_source_term.f90\
 	source_terms/bcknd/cpu/coriolis_source_term_cpu.f90\
