@@ -46,7 +46,7 @@ submodule (simulation_component) simulation_component_fctry
   use divergence_simcomp, only : divergence_t
   use derivative_simcomp, only : derivative_t
   use spectral_error, only: spectral_error_t
-  use entropy_viscosity, only : entropy_viscosity_t
+  use residual_viscosity, only : residual_viscosity_t
   use utils, only : neko_type_error, neko_type_registration_error
   implicit none
 
@@ -64,7 +64,7 @@ submodule (simulation_component) simulation_component_fctry
        "weak_grad", &
        "force_torque", &
        "spectral_error", &
-       "entropy_viscosity"]
+       "residual_viscosity"]
 
 contains
 
@@ -128,8 +128,8 @@ contains
        allocate(fluid_stats_simcomp_t::object)
     case ("spectral_error")
        allocate(spectral_error_t::object)
-    case ("entropy_viscosity")
-       allocate(entropy_viscosity_t::object)
+    case ("residual_viscosity")
+       allocate(residual_viscosity_t::object)
     case default
        do i = 1, simcomp_registry_size
           if (trim(type_name) == &
