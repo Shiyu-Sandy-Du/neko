@@ -278,7 +278,8 @@ contains
 
     ! local temporal change part
     call field_copy(s2, s, n)
-    ! call field_col2(s2, s, n)
+    ! call field_absval(s2)
+    ! call field_col3(s2, s, s, n)
     call field_copy(ta, s2)
     call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
     call invcol2(wa%x, coef%B, n)
@@ -290,8 +291,8 @@ contains
     call adv%compute_scalar(u, v, w, s2, ta, &
             Xh, coef, n)
     call invcol2(ta%x, coef%B, n)
-    call gs%op(ta, GS_OP_ADD)
-    call col2(ta%x, coef%mult, n)
+    ! call gs%op(ta, GS_OP_ADD)
+    ! call col2(ta%x, coef%mult, n)
     call field_sub2(D, ta, n)
     call field_copy(residual_viscosity, D)
     call field_absval(residual_viscosity)
@@ -309,15 +310,15 @@ contains
               1.0/maxval(abs_var_s2%x(:,:,:,e)), n_el)
        end if
     end do
-    call gs%op(abs_var_s2, GS_OP_ADD)
-    call col2(abs_var_s2%x, coef%mult, n)
+    ! call gs%op(abs_var_s2, GS_OP_ADD)
+    ! call col2(abs_var_s2%x, coef%mult, n)
 
     ! it should be scaled by f(ext_bdf%diffusion_time_order)
     ! preliminary, f = 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
     ! Could be determined afterwards
     call field_cmult(residual_viscosity, &
          this%c_E)
-    call field_col2(residual_viscosity, abs_var_s2)
+    ! call field_col2(residual_viscosity, abs_var_s2)
     
 
     end associate
