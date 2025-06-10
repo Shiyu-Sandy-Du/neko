@@ -27,6 +27,7 @@ neko_fortran_SOURCES = \
 	math/math.f90\
 	math/mathops.f90\
 	math/fast3d.f90\
+	math/spectral_vanishing_viscosity.f90\
 	sem/space.f90\
 	sem/map_1d.f90\
 	sem/map_2d.f90\

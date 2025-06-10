@@ -37,7 +37,9 @@ module spectral_vanishing_viscosity
   use elementwise_filter, only: elementwise_filter_t
   use utils, only : neko_error
   use json_module, only : json_file
-  use json_utils, only : json_get_or_default
+  use json_utils, only : json_get
+  use coefs, only : coef_t
+  use math, only : cfill
   implicit none
   private
 
@@ -45,11 +47,42 @@ module spectral_vanishing_viscosity
   type, public :: svv_t
     !> filter
     type(elementwise_filter_t) :: filter
+    !> coef
+    type(coef_t), pointer :: coef
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
   contains
-    procedure, pass(this) :: init => svv_init
-    procedure, pass(this) :: free => svv_free
+    procedure, pass(this) :: init => svv_init_from_json
+    ! procedure, pass(this) :: free => svv_free
   end type svv_t
+
+contains
+  !> Constructor
+  subroutine svv_init_from_json(this, json, coef)
+    class(svv_t), intent(inout) :: this
+    type(json_file), intent(inout) :: json
+    type(coef_t), intent(in), target :: coef
+    real(kind=rp) :: nu_svv
+    integer :: i
+
+    this%coef => coef
+
+    ! set up the viscosity coefficient field 
+    call json_get(json, "svv.nu", nu_svv)
+    allocate(this%h1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
+    call cfill(this%h1, nu_svv, coef%dof%size())
+
+    ! set up the filter
+    this%filter%filter_type = "nonBoyd"
+    call this%filter%init_from_components(coef%Xh%lx, this%filter%filter_type)
+    ! assign the SVV Kernel
+    do i = 1, this%coef%Xh%lx
+       this%filter%trnsfr(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
+                              ** ((this%coef%Xh%lx - 1.0_rp) / 2.0_rp)
+    end do
+    ! build the 1d elementwise filter
+    call this%filter%build_1d()
+
+  end subroutine
 
 end module spectral_vanishing_viscosity

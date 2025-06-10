@@ -77,6 +77,7 @@ module scalar_scheme
   use scratch_registry, only : neko_scratch_registry
   use time_state, only : time_state_t
   use device, only : device_memcpy, DEVICE_TO_HOST
+  use spectral_vanishing_viscosity, only : svv_t
   implicit none
 
   !> Base type for a scalar advection-diffusion solver.
@@ -135,6 +136,9 @@ module scalar_scheme
      real(kind=rp) :: pr_turb
      !> Field list with cp and lambda
      type(field_list_t) :: material_properties
+     !> Is SVV enabled?
+     logical :: svv_enabled
+     type(svv_t) :: svv
      !> Is lambda varying in time? Currently only due to LES models.
      logical :: variable_material_properties = .false.
      procedure(user_material_properties), nopass, pointer :: &
@@ -309,6 +313,16 @@ contains
     !
     call this%set_material_properties(params, user)
 
+    !
+    ! Spectral Vanishing viscosity
+    !
+    if (params%valid_path('svv')) then
+       call json_get(params, 'svv.enabled', &
+            this%svv_enabled)
+       if (this%svv_enabled .eqv. .true.) then
+          call this%svv%init(params, this%c_Xh)
+       end if
+    end if
 
     !
     ! Turbulence modelling and variable material properties
