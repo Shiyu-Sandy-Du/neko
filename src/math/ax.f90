@@ -36,6 +36,7 @@ module ax_product
   use coefs, only : coef_t
   use space, only : space_t
   use mesh, only : mesh_t
+  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
@@ -52,9 +53,11 @@ module ax_product
      !! @param object The matrix-vector product type to be allocated.
      !! @param full_formulation Whether to use the formulation with the full
      !! viscous stress tensor, not assuming constant material properties.
-     module subroutine ax_helm_factory(object, full_formulation)
+     !! @param svv The object for spectral vanishing viscosity stabilisation
+     module subroutine ax_helm_factory(object, full_formulation, svv)
        class(ax_t), allocatable, intent(inout) :: object
        logical, intent(in) :: full_formulation
+       type(svv_t), intent(in), target, optional :: svv
      end subroutine ax_helm_factory
   end interface
 

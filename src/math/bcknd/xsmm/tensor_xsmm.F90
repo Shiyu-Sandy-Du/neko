@@ -81,8 +81,9 @@ contains
 
   subroutine tnsr3d_el_xsmm(v, nv, u, nu, A, Bt, Ct)
     integer, intent(in) :: nv, nu
-    real(kind=rp), intent(inout) :: v(nv*nv*nv), u(nu*nu*nu)
-    real(kind=rp), intent(inout) :: A(nv,nu),Bt(nu, nv),Ct(nu,nv)
+    real(kind=rp), intent(inout) :: v(nv*nv*nv)
+    real(kind=rp), intent(in) :: u(nu*nu*nu)
+    real(kind=rp), intent(in) :: A(nv,nu),Bt(nu, nv),Ct(nu,nv)
     real(kind=rp) :: work(0:nu**2*nv), work2(0:nu*nv**2)
     integer :: i, nunu, nvnu, nvnv
 

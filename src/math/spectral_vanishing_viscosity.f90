@@ -77,11 +77,23 @@ contains
     call this%filter%init_from_components(coef%Xh%lx, this%filter%filter_type)
     ! assign the SVV Kernel
     do i = 1, this%coef%Xh%lx
+      !  if (i .eq. 2) then
+      !     this%filter%trnsfr(i) = 1.0_rp
+      !  else
+      !     this%filter%trnsfr(i) = 0.0_rp
+      !  end if 
+      !  this%filter%trnsfr(i) = 1.0_rp
        this%filter%trnsfr(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
                               ** ((this%coef%Xh%lx - 1.0_rp) / 2.0_rp)
     end do
     ! build the 1d elementwise filter
     call this%filter%build_1d()
+    ! do i = 1, this%coef%Xh%lx
+    !    write(*,'(5E12.4E2)') this%filter%fh(i,:)
+    ! end do
+    ! do i = 1, this%coef%Xh%lx
+    !    write(*,'(5E12.4E2)') this%filter%fht(i,:)
+    ! end do
 
   end subroutine
 

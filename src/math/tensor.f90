@@ -169,8 +169,9 @@ contains
   !! performed on a single element.
   subroutine tnsr3d_el(v, nv, u, nu, A, Bt, Ct)
     integer, intent(in) :: nv, nu
-    real(kind=rp), intent(inout) :: v(nv*nv*nv), u(nu*nu*nu)
-    real(kind=rp), intent(inout) :: A(nv,nu),Bt(nu, nv),Ct(nu,nv)
+    real(kind=rp), intent(inout) :: v(nv*nv*nv) 
+    real(kind=rp), intent(in) :: u(nu*nu*nu)
+    real(kind=rp), intent(in) :: A(nv,nu),Bt(nu, nv),Ct(nu,nv)
 
     if (NEKO_BCKND_SX .eq. 1) then
        call tnsr3d_el_sx(v, nv, u, nu, A, Bt, Ct)

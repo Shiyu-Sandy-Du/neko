@@ -188,7 +188,11 @@ contains
     call this%scheme_init(msh, coef, gs, params, scheme, user, rho)
 
     ! Setup backend dependent Ax routines
-    call ax_helm_factory(this%ax, full_formulation = .false.)
+    if (this%svv_enabled) then
+       call ax_helm_factory(this%ax, full_formulation = .false., svv = this%svv)
+    else
+       call ax_helm_factory(this%ax, full_formulation = .false.)
+    end if
 
     ! Setup backend dependent scalar residual routines
     call scalar_residual_factory(this%res)

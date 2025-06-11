@@ -37,6 +37,7 @@ module ax_helm_svv_cpu
   use space, only : space_t
   use mesh, only : mesh_t
   use math, only : addcol4
+  use tensor, only : tnsr3d_el, tnsr3d
   use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
@@ -45,7 +46,7 @@ module ax_helm_svv_cpu
   type, public, extends(ax_helm_svv_t) :: ax_helm_svv_cpu_t
    contains
      !> Compute the product.
-     procedure, nopass :: compute => ax_helm_svv_compute
+     procedure, pass(this) :: compute => ax_helm_svv_compute
   end type ax_helm_svv_cpu_t
 
 contains
@@ -58,12 +59,14 @@ contains
   !! @param Xh Function space \f$ X_h \f$.
   !! @note Since this is a performance-crtical routine, it is implemented in
   !! several kernels corresponding to different polynmial orders.
-  subroutine ax_helm_svv_compute(w, u, coef, msh, Xh)
+  subroutine ax_helm_svv_compute(this, w, u, coef, msh, Xh)
+    class(ax_helm_svv_cpu_t), intent(in) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef
     real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
+    integer :: i
 
    !  select case(Xh%lx)
    !  case (14)
@@ -175,14 +178,26 @@ contains
     real(kind=rp) :: ur(lx, lx, lx)
     real(kind=rp) :: us(lx, lx, lx)
     real(kind=rp) :: ut(lx, lx, lx)
+   !  real(kind=rp) :: u_svv(lx, lx, lx, n)
     real(kind=rp) :: ur_svv(lx, lx, lx)
     real(kind=rp) :: us_svv(lx, lx, lx)
     real(kind=rp) :: ut_svv(lx, lx, lx)
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
+    real(kind=rp) :: ident(lx, lx)
     real(kind=rp) :: tmp
     integer :: e, i, j, k, l
+
+    do i = 1, lx
+       do j = 1, lx
+          if (i .eq. j) then
+             ident(i,j) = 1.0_rp
+          else
+             ident(i,j) = 0.0_rp
+          end if
+       end do
+    end do
 
     do e = 1, n
        do j = 1, lx * lx
@@ -219,36 +234,46 @@ contains
 
        do i = 1, lx*lx*lx
           ur(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
-                    + dsdx(i,1,1,e) * wus(i,1,1) &
-                    + dtdx(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
+                     + dsdx(i,1,1,e) * wus(i,1,1) &
+                     + dtdx(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
           us(i,1,1) = (drdy(i,1,1,e) * wur(i,1,1) &
-                    + dsdy(i,1,1,e) * wus(i,1,1) &
-                    + dtdy(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
+                     + dsdy(i,1,1,e) * wus(i,1,1) &
+                     + dtdy(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
           ut(i,1,1) = (drdz(i,1,1,e) * wur(i,1,1) &
-                    + dsdz(i,1,1,e) * wus(i,1,1) &
-                    + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
+                     + dsdz(i,1,1,e) * wus(i,1,1) &
+                     + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
-       !!! spatial convolution for spectral vanishing
-       call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, svv_Qt)
-       call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, svv_Qt)
-       call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, svv_Qt)
+      !  ! spatial convolution for spectral vanishing
+       call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, ident)
+       call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, ident)
+       call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, ident)
 
-       !!! multiply the viscosity
        do i = 1, lx*lx*lx
+          ! multiply the viscosity
           ur_h(i,1,1) = (svv_h1(i,1,1,e) * ur_svv(i,1,1) + &
                         h1(i,1,1,e) * ur(i,1,1)) * weights3(i,1,1)
           us_h(i,1,1) = (svv_h1(i,1,1,e) * us_svv(i,1,1) + &
                         h1(i,1,1,e) * us(i,1,1)) * weights3(i,1,1)
           ut_h(i,1,1) = (svv_h1(i,1,1,e) * ut_svv(i,1,1) + &
                         h1(i,1,1,e) * ut(i,1,1)) * weights3(i,1,1)
+          ! utilize wur, wus, wut as work arrays again
+          wur(i,1,1) = drdx(i,1,1,e) * ur_h(i,1,1) &
+                     + drdy(i,1,1,e) * us_h(i,1,1) &
+                     + drdz(i,1,1,e) * ut_h(i,1,1)
+          wus(i,1,1) = dsdx(i,1,1,e) * ur_h(i,1,1) &
+                     + dsdy(i,1,1,e) * us_h(i,1,1) &
+                     + dsdz(i,1,1,e) * ut_h(i,1,1)
+          wut(i,1,1) = dtdx(i,1,1,e) * ur_h(i,1,1) &
+                     + dtdy(i,1,1,e) * us_h(i,1,1) &
+                     + dtdz(i,1,1,e) * ut_h(i,1,1)
        end do
 
        do j = 1, lx*lx
           do i = 1, lx
              tmp = 0.0_rp
              do k = 1, lx
-                tmp = tmp + Dxt(i,k) * ur_h(k,j,1)
+                tmp = tmp + Dxt(i,k) * wur(k,j,1)
              end do
              w(i,j,1,e) = tmp
           end do
@@ -259,7 +284,7 @@ contains
              do i = 1, lx
                 tmp = 0.0_rp
                 do l = 1, lx
-                   tmp = tmp + Dyt(j,l) * us_h(i,l,k)
+                   tmp = tmp + Dyt(j,l) * wus(i,l,k)
                 end do
                 w(i,j,k,e) = w(i,j,k,e) + tmp
              end do
@@ -270,7 +295,7 @@ contains
           do i = 1, lx*lx
              tmp = 0.0_rp
              do l = 1, lx
-                tmp = tmp + Dzt(k,l) * ut_h(i,1,l)
+                tmp = tmp + Dzt(k,l) * wut(i,1,l)
              end do
              w(i,1,k,e) = w(i,1,k,e) + tmp
           end do
