@@ -125,7 +125,7 @@ module scalar_scheme
      !> Checkpoint for restarts.
      type(chkp_t), pointer :: chkp => null()
      !> The turbulent kinematic viscosity field name
-     character(len=:), allocatable :: nut_field_name
+     character(len=:), allocatable :: nut_field_name, nue_field_name
      !> Density.
      type(field_t), pointer :: rho => null()
      !> Thermal diffusivity.
@@ -349,13 +349,18 @@ contains
        call json_get(params, 'Pr_t', this%pr_turb)
        call json_get(params, 'nut_field', this%nut_field_name)
        this%variable_material_properties = .true.
+    else if (params%valid_path('nue_field')) then
+       call json_get(params, 'nue_field', this%nue_field_name)
+       this%variable_material_properties = .true.
     else if (.not. associated(user%material_properties, &
          dummy_user_material_properties)) then
        this%nut_field_name = ""
+       this%nue_field_name = ""
        this%variable_material_properties = .true.
     end if
 
-    write(log_buf, '(A,L1)') 'LES        : ', this%variable_material_properties
+    write(log_buf, '(A,L1)') 'variable diffusivity        : ', &
+         this%variable_material_properties
     call neko_log%message(log_buf)
 
 
@@ -512,7 +517,7 @@ contains
     class(scalar_scheme_t), intent(inout) :: this
     real(kind=rp),intent(in) :: t
     integer, intent(in) :: tstep
-    type(field_t), pointer :: nut
+    type(field_t), pointer :: nut, nue
     integer :: index
     ! Factor to transform nu_t to lambda_t
     type(field_t), pointer :: lambda_factor
@@ -531,6 +536,19 @@ contains
        call field_col3(lambda_factor, this%cp, this%rho)
        call field_col2(lambda_factor, nut)
        call field_cmult(lambda_factor, 1.0_rp / this%pr_turb)
+       call field_add2(this%lambda, lambda_factor)
+       call neko_scratch_registry%relinquish_field(index)
+    end if
+
+    if (this%variable_material_properties .and. &
+         len(trim(this%nue_field_name)) > 0) then
+       nue => neko_field_registry%get_field(this%nue_field_name)
+
+       ! lambda = lambda + rho * cp * nue
+       call neko_scratch_registry%request_field(lambda_factor, index)
+
+       call field_col3(lambda_factor, this%cp, this%rho)
+       call field_col2(lambda_factor, nue)
        call field_add2(this%lambda, lambda_factor)
        call neko_scratch_registry%relinquish_field(index)
     end if

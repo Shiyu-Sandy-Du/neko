@@ -46,11 +46,12 @@ submodule (simulation_component) simulation_component_fctry
   use divergence_simcomp, only : divergence_t
   use derivative_simcomp, only : derivative_t
   use spectral_error, only: spectral_error_t
+  use residual_viscosity, only : residual_viscosity_t
   use utils, only : neko_type_error, neko_type_registration_error
   implicit none
 
   ! List of all possible types created by the factory routine
-  character(len=20) :: SIMCOMPS_KNOWN_TYPES(12) = [character(len=20) :: &
+  character(len=20) :: SIMCOMPS_KNOWN_TYPES(13) = [character(len=20) :: &
        "lambda2", &
        "probes", &
        "les_model", &
@@ -62,7 +63,8 @@ submodule (simulation_component) simulation_component_fctry
        "derivative", &
        "weak_grad", &
        "force_torque", &
-       "spectral_error"]
+       "spectral_error", &
+       "residual_viscosity"]
 
 contains
 
@@ -126,6 +128,8 @@ contains
        allocate(fluid_stats_simcomp_t::object)
     case ("spectral_error")
        allocate(spectral_error_t::object)
+    case ("residual_viscosity")
+       allocate(residual_viscosity_t::object)
     case default
        do i = 1, simcomp_registry_size
           if (trim(type_name) == &
