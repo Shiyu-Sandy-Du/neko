@@ -439,6 +439,11 @@ contains
          call add2s2(s%x, ds%x, 1.0_rp, n)
       end if
 
+      ! Update SVV if needed
+      if (this%svv_enabled) then
+         call this%svv%update(tstep)
+      end if
+
       call scalar_step_info(tstep, t, dt, ksp_results)
 
     end associate

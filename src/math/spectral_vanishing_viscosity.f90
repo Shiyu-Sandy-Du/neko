@@ -54,9 +54,10 @@ module spectral_vanishing_viscosity
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
     !> a pointer pointing to a potentially variable viscosity field
-    type(field_t), pointer :: nue
+    character(len=:), allocatable :: nue_field_name
+    type(field_t), pointer :: nue => NULL()
     !> a logical to identify whether h1 is time variable
-    logical :: tvar_h1
+    logical :: tvar_h1 = .false.
   contains
     procedure, pass(this) :: init => svv_init_from_json
     ! procedure, pass(this) :: free => svv_free
@@ -70,7 +71,7 @@ contains
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in), target :: coef
     real(kind=rp) :: nu_val
-    character(len=:), allocatable :: nu_type, nue_field_name
+    character(len=:), allocatable :: nu_type
     integer :: i
 
     this%coef => coef
@@ -84,9 +85,7 @@ contains
        call cfill(this%h1, nu_val, coef%dof%size())
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
-       call json_get(json, "svv.nu.field_name", nue_field_name)
-       this%nue => neko_field_registry%get_field(nue_field_name)
-       call copy(this%h1, this%nue%x, coef%dof%size())
+       call json_get(json, "svv.nu.field_name", this%nue_field_name)
     case default
        call neko_error("Invalid nu.type for svv")
     end select
@@ -105,8 +104,15 @@ contains
   end subroutine svv_init_from_json
 
   !> Update of h1 is it's time varying
-  subroutine update_h1(this)
+  subroutine update_h1(this, tstep)
     class(svv_t), intent(inout) :: this
+    integer, intent(in) :: tstep
+
+    if (.not. this%tvar_h1) return
+
+    if (tstep .eq. 1) then
+       this%nue => neko_field_registry%get_field(this%nue_field_name)
+    end if
 
     call copy(this%h1, this%nue%x, this%coef%dof%size())
 
