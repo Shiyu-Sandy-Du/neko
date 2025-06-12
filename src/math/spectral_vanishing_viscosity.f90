@@ -35,11 +35,13 @@
 module spectral_vanishing_viscosity
   use num_types, only : rp
   use elementwise_filter, only: elementwise_filter_t
+  use field_registry, only : neko_field_registry
+  use field, only : field_t
   use utils, only : neko_error
   use json_module, only : json_file
-  use json_utils, only : json_get
+  use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
-  use math, only : cfill
+  use math, only : cfill, copy
   implicit none
   private
 
@@ -51,9 +53,14 @@ module spectral_vanishing_viscosity
     type(coef_t), pointer :: coef
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
+    !> a pointer pointing to a potentially variable viscosity field
+    type(field_t), pointer :: nue
+    !> a logical to identify whether h1 is time variable
+    logical :: tvar_h1
   contains
     procedure, pass(this) :: init => svv_init_from_json
     ! procedure, pass(this) :: free => svv_free
+    procedure, pass(this) :: update => update_h1
   end type svv_t
 
 contains
@@ -62,39 +69,47 @@ contains
     class(svv_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in), target :: coef
-    real(kind=rp) :: nu_svv
+    real(kind=rp) :: nu_val
+    character(len=:), allocatable :: nu_type, nue_field_name
     integer :: i
 
     this%coef => coef
 
-    ! set up the viscosity coefficient field 
-    call json_get(json, "svv.nu", nu_svv)
+    ! set up the viscosity coefficient field
     allocate(this%h1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
-    call cfill(this%h1, nu_svv, coef%dof%size())
+    call json_get(json, "svv.nu.type", nu_type)
+    select case (trim(nu_type))
+    case ("value")
+       call json_get(json, "svv.nu.value", nu_val)
+       call cfill(this%h1, nu_val, coef%dof%size())
+    case ("field")
+       call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
+       call json_get(json, "svv.nu.field_name", nue_field_name)
+       this%nue => neko_field_registry%get_field(nue_field_name)
+       call copy(this%h1, this%nue%x, coef%dof%size())
+    case default
+       call neko_error("Invalid nu.type for svv")
+    end select
 
     ! set up the filter
     this%filter%filter_type = "nonBoyd"
     call this%filter%init_from_components(coef%Xh%lx, this%filter%filter_type)
     ! assign the SVV Kernel
     do i = 1, this%coef%Xh%lx
-      !  if (i .eq. 2) then
-      !     this%filter%trnsfr(i) = 1.0_rp
-      !  else
-      !     this%filter%trnsfr(i) = 0.0_rp
-      !  end if 
-      !  this%filter%trnsfr(i) = 1.0_rp
        this%filter%trnsfr(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
                               ** ((this%coef%Xh%lx - 1.0_rp) / 2.0_rp)
     end do
     ! build the 1d elementwise filter
     call this%filter%build_1d()
-    ! do i = 1, this%coef%Xh%lx
-    !    write(*,'(5E12.4E2)') this%filter%fh(i,:)
-    ! end do
-    ! do i = 1, this%coef%Xh%lx
-    !    write(*,'(5E12.4E2)') this%filter%fht(i,:)
-    ! end do
 
-  end subroutine
+  end subroutine svv_init_from_json
+
+  !> Update of h1 is it's time varying
+  subroutine update_h1(this)
+    class(svv_t), intent(inout) :: this
+
+    call copy(this%h1, this%nue%x, this%coef%dof%size())
+
+  end subroutine update_h1
 
 end module spectral_vanishing_viscosity
