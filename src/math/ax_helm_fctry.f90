@@ -64,6 +64,8 @@ contains
 
     if (present(svv)) then
        svv_enabled = .true.
+    else
+       svv_enabled = .false.
     end if
 
     if (full_formulation .and. svv_enabled) then

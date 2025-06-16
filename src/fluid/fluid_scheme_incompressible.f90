@@ -341,11 +341,13 @@ contains
     !
     ! Spectral Vanishing viscosity
     !
-    if (params%valid_path('svv')) then
-       call json_get(params, 'svv.enabled', &
+    if (params%valid_path('case.fluid.svv')) then
+       call json_extract_object(params, &
+            'case.fluid', json_subdict)
+       call json_get(json_subdict, 'svv.enabled', &
             this%svv_enabled)
        if (this%svv_enabled .eqv. .true.) then
-          call this%svv%init(params, this%c_Xh)
+          call this%svv%init(json_subdict, this%c_Xh)
        end if
     end if
 
