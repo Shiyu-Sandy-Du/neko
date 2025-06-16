@@ -77,6 +77,7 @@ module fluid_scheme_incompressible
   use shear_stress, only : shear_stress_t
   use device, only : device_event_sync, glb_cmd_event, DEVICE_TO_HOST, &
        device_memcpy
+  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
@@ -102,6 +103,10 @@ module fluid_scheme_incompressible
      type(fluid_stats_t) :: stats !< Fluid statistics
      type(mean_sqr_flow_t) :: mean_sqr !< Mean squared flow field
      logical :: forced_flow_rate = .false. !< Is the flow rate forced?
+
+     !> Is SVV enabled?
+     logical :: svv_enabled
+     type(svv_t) :: svv
 
      !> The turbulent kinematic viscosity field name
      character(len=:), allocatable :: nut_field_name
@@ -332,6 +337,17 @@ contains
     ! Initialize the source term
     call this%source_term%init(this%f_x, this%f_y, this%f_z, this%c_Xh, user)
     call this%source_term%add(params, 'case.fluid.source_terms')
+
+    !
+    ! Spectral Vanishing viscosity
+    !
+    if (params%valid_path('svv')) then
+       call json_get(params, 'svv.enabled', &
+            this%svv_enabled)
+       if (this%svv_enabled .eqv. .true.) then
+          call this%svv%init(params, this%c_Xh)
+       end if
+    end if
 
 
   end subroutine fluid_scheme_init_base
