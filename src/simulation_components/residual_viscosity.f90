@@ -35,6 +35,7 @@
 !! The values are stored in the field registry under the name 'residual_viscosity'
 
 module residual_viscosity
+  use neko_config, only : NEKO_BCKND_DEVICE
   use num_types, only : rp
   use json_module, only : json_file
   use simulation_component, only : simulation_component_t
@@ -54,6 +55,7 @@ module residual_viscosity
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2
   use math, only : invcol2, col2, cadd, absval, cfill, vlsc2
+  use device_math, only : device_invcol2
   use gather_scatter, only : GS_OP_ADD
   use device
   implicit none
@@ -276,13 +278,34 @@ contains
 
     ! call field_rzero(s2, n)
 
-    ! local temporal change part
+    ! local temporal change part    ! associate(u => this%u, v => this%v, w => this%w, &
+    !           s => this%s, wa => this%wa, &
+    !           abx1 => this%abx1, abx2 => this%abx2, &
+    !           coef => this%coef, &
+    !           rho => this%scalar%rho, dt => time%dt, &
+    !           adv => this%scalar%adv, &
+    !           makeext => this%scalar%makeext, &
+    !           s2lag => this%s2lag, ext_bdf => this%fluid%ext_bdf, &
+    !           Xh => this%scalar%Xh)
+    
+    ! n = s%dof%size()
+    ! call field_rzero(wa)
+    ! call adv%compute_scalar(u, v, w, s, wa, &
+    !           Xh, coef, n)
+    ! call makeext%compute_scalar(abx1, abx2, wa%x, &
+    !           rho%x(1,1,1,1), es2 => this%s2, xt_bdf%advection_coeffs, n)
+
+    ! end associate
     call field_copy(s2, s, n)
     ! call field_absval(s2)
     ! call field_col3(s2, s, s, n)
     call field_copy(ta, s2)
     call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-    call invcol2(wa%x, coef%B, n)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call invcol2(wa%x, coef%B, n)
+    else
+       call device_invcol2(wa%x_d, coef%B_d, n)
+    end if
     call field_sub2(ta, wa)
     call field_copy(D, ta)
 
@@ -290,26 +313,30 @@ contains
     call field_rzero(ta, n)
     call adv%compute_scalar(u, v, w, s2, ta, &
             Xh, coef, n)
-    call invcol2(ta%x, coef%B, n)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call invcol2(ta%x, coef%B, n)
+    else
+       call device_invcol2(ta%x_d, coef%B_d, n)
+    end if
     ! call gs%op(ta, GS_OP_ADD)
     ! call col2(ta%x, coef%mult, n)
     call field_sub2(D, ta, n)
     call field_copy(residual_viscosity, D)
     call field_absval(residual_viscosity)
 
-    call field_copy(abs_var_s2, s2)
-    do e = 1, coef%msh%nelv
-       int_s2_el = vlsc2(s2%x(:,:,:,e), coef%B(:,:,:,e), n_el)
-       avg_s2_el = -1.0_rp * int_s2_el/this%volume_el%x(1,1,1,e)
-       call cadd(abs_var_s2%x(:,:,:,e), avg_s2_el, n_el)
-       call absval(abs_var_s2%x(:,:,:,e), n_el)
-       if (maxval(abs_var_s2%x(:,:,:,e)) .lt. tol) then
-         call cfill(abs_var_s2%x(:,:,:,e), 0.0_rp, n_el)
-       else
-         call cfill(abs_var_s2%x(:,:,:,e), &
-              1.0/maxval(abs_var_s2%x(:,:,:,e)), n_el)
-       end if
-    end do
+    ! call field_copy(abs_var_s2, s2)
+    ! do e = 1, coef%msh%nelv
+    !    int_s2_el = vlsc2(s2%x(:,:,:,e), coef%B(:,:,:,e), n_el)
+    !    avg_s2_el = -1.0_rp * int_s2_el/this%volume_el%x(1,1,1,e)
+    !    call cadd(abs_var_s2%x(:,:,:,e), avg_s2_el, n_el)
+    !    call absval(abs_var_s2%x(:,:,:,e), n_el)
+    !    if (maxval(abs_var_s2%x(:,:,:,e)) .lt. tol) then
+    !      call cfill(abs_var_s2%x(:,:,:,e), 0.0_rp, n_el)
+    !    else
+    !      call cfill(abs_var_s2%x(:,:,:,e), &
+    !           1.0/maxval(abs_var_s2%x(:,:,:,e)), n_el)
+    !    end if
+    ! end do
     ! call gs%op(abs_var_s2, GS_OP_ADD)
     ! call col2(abs_var_s2%x, coef%mult, n)
 
