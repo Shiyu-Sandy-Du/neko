@@ -60,7 +60,7 @@ module coriolis_source_term
      procedure, pass(this) :: init => coriolis_source_term_init_from_json
      !> The costrucructor from type components.
      procedure, pass(this) :: init_from_compenents => &
-          coriolis_source_term_init_from_components
+     coriolis_source_term_init_from_components
      !> Destructor.
      procedure, pass(this) :: free => coriolis_source_term_free
      !> Computes the source term and adds the result to `fields`.
@@ -72,11 +72,13 @@ contains
   !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
   !! @param coef The SEM coeffs.
-  subroutine coriolis_source_term_init_from_json(this, json, fields, coef)
+  !! @param variable_name The name of the variable for this source term.
+  subroutine coriolis_source_term_init_from_json(this, json, fields, coef, variable_name)
     class(coriolis_source_term_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(field_list_t), intent(in), target :: fields
     type(coef_t), intent(in), target :: coef
+    character(len=*), intent(in) :: variable_name
     ! Rotation vector and geostrophic wind
     real(kind=rp), allocatable :: rotation_vec(:), u_geo(:)
     ! Alternative parameters to set the rotation vector
@@ -119,7 +121,7 @@ contains
 
 
     call coriolis_source_term_init_from_components(this, fields, rotation_vec, &
-         u_geo, coef, start_time, end_time)
+    u_geo, coef, start_time, end_time)
 
   end subroutine coriolis_source_term_init_from_json
 
@@ -131,7 +133,7 @@ contains
   !! @param start_time When to start adding the source term.
   !! @param end_time When to stop adding the source term.
   subroutine coriolis_source_term_init_from_components(this, fields, omega, &
-       u_geo, coef, start_time, end_time)
+  u_geo, coef, start_time, end_time)
     class(coriolis_source_term_t), intent(inout) :: this
     class(field_list_t), intent(in), target :: fields
     real(kind=rp), intent(in) :: omega(3)
@@ -173,10 +175,10 @@ contains
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call coriolis_source_term_compute_device(u, v, w, this%fields, &
-            this%omega, this%u_geo)
+       this%omega, this%u_geo)
     else
        call coriolis_source_term_compute_cpu(u, v, w, this%fields, this%omega, &
-            this%u_geo)
+       this%u_geo)
     end if
   end subroutine coriolis_source_term_compute
 

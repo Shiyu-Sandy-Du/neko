@@ -44,11 +44,11 @@ submodule (source_term) source_term_fctry
 
   ! List of all possible types created by the factory routine
   character(len=20) :: SOURCE_KNOWN_TYPES(5) = [character(len=20) :: &
-       "constant", &
-       "boussinesq", &
-       "coriolis", &
-       "gradient_jump_penalty", &
-       "brinkman"]
+  "constant", &
+  "boussinesq", &
+  "coriolis", &
+  "gradient_jump_penalty", &
+  "brinkman"]
 
 contains
 
@@ -56,11 +56,12 @@ contains
   !! @param json JSON object initializing the source term.
   !! @param fields The list of fields updated by the source term.
   !! @param coef The SEM coefficients.
-  module subroutine source_term_factory(object, json, fields, coef)
+  module subroutine source_term_factory(object, json, fields, coef, variable_name)
     class(source_term_t), allocatable, intent(inout) :: object
     type(json_file), intent(inout) :: json
     type(field_list_t), intent(inout) :: fields
     type(coef_t), intent(inout) :: coef
+    character(len=*), intent(in) :: variable_name
     character(len=:), allocatable :: type_name
     character(len=:), allocatable :: type_string
 
@@ -70,7 +71,7 @@ contains
     call source_term_allocator(object, type_name)
 
     ! Initialize
-    call object%init(json, fields, coef)
+    call object%init(json, fields, coef, variable_name)
 
   end subroutine source_term_factory
 
