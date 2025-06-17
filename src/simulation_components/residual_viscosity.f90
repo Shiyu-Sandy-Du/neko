@@ -42,7 +42,10 @@ module residual_viscosity
   use field_registry, only : neko_field_registry
   use scratch_registry, only : neko_scratch_registry
   use json_utils, only : json_get
-  use field, only : field_t
+  use field, only : field_t, field_ptr_t
+  use rhs_maker, only : rhs_maker_bdf_t
+  use advection, only : advection_t
+  use time_scheme_controller, only : time_scheme_controller_t
   use coefs, only : coef_t
   use field_series, only : field_series_t
   use time_state, only : time_state_t
@@ -50,7 +53,7 @@ module residual_viscosity
   use field_writer, only : field_writer_t
   use time_based_controller, only : time_based_controller_t
   use fluid_pnpn, only : fluid_pnpn_t
-  use scalar_pnpn, only : scalar_pnpn_t
+  use scalars, only : scalars_t
   use utils, only : neko_error
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2
@@ -71,28 +74,33 @@ module residual_viscosity
      !> Z velocity component.
      type(field_t), pointer :: w
      !> Scalar field
-     type(field_t), pointer :: s
+     integer :: n_scalars = 0
+     type(field_ptr_t), allocatable :: s(:)
      !> coef
      type(coef_t), pointer :: coef
      !> Some field to be used
-     type(field_t) :: abx1, abx2, volume_el
-     type(field_t) :: s2, abs_var_s2
-     type(field_series_t) :: s2lag
+     type(field_t), allocatable :: abx1(:), abx2(:)
+     type(field_t) :: volume_el
+     type(field_t), allocatable :: s2(:)
+     type(field_series_t), allocatable :: s2lag(:)
 
      !> X residual_viscosity component.
-     type(field_t), pointer :: residual_viscosity
+     type(field_ptr_t), allocatable :: residual_viscosity(:)
 
      !> Residual.
-     type(field_t) :: D
+     type(field_t), allocatable :: D(:)
      !> work array.
-     type(field_t) :: wa
+     type(field_t), allocatable :: wa(:)
 
      !> Output writer.
      type(field_writer_t) :: writer
 
-     !> A pointer point to the time scheme
+     !> A pointer pointing to the time scheme
      type(fluid_pnpn_t), pointer :: fluid
-     type(scalar_pnpn_t), pointer :: scalar
+     type(scalars_t), pointer :: scalars
+     class(rhs_maker_bdf_t), pointer :: makebdf
+     class(advection_t), pointer :: adv
+     type(time_scheme_controller_t), pointer :: ext_bdf
 
    contains
      !> Constructor from json.
@@ -114,56 +122,76 @@ contains
     class(residual_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
-    character(len=20) :: fields(1)
-    type(field_t), pointer :: u, v, w, residual_viscosity
-
-    ! Add fields keyword to the json so that the field_writer picks it up.
-    ! Will also add fields to 	simulation_components/residual_viscosity.f90\the registry.
-    fields(1) = "residual_viscosity"
-    call json%add("fields", fields)
 
     call this%init_base(json, case)
-    call this%writer%init(json, case)
-
+    
     call json_get(json, "c_E", this%c_E)
 
-    call this%init_common(case)
+    call this%init_common(json, case)
   end subroutine residual_viscosity_init_from_json
 
   !> Common part of constructors.
-  subroutine residual_viscosity_init_common(this, case)
+  subroutine residual_viscosity_init_common(this, json, case)
     class(residual_viscosity_t), intent(inout) :: this
+    type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
+    character(len=20), allocatable :: fields(:)
     integer :: e, k
     real(kind=rp) :: volume_element
 
+    this%scalars => case%scalars
+    this%n_scalars = size(this%scalars%scalar_fields)
+    allocate(fields(this%n_scalars))
+    do k = 1, this%n_scalars
+       write(fields(k), '(A,I0)') 'res_visc_s', k
+    end do
+    ! Add fields keyword to the json so that the field_writer picks it up.
+    ! Will also add fields to 	simulation_components/residual_viscosity.f90\the registry.
+    call json%add("fields", fields)
+    call this%writer%init(json, case)
+
     this%coef => case%fluid%c_Xh
-
-    this%u => neko_field_registry%get_field("u")
-    this%v => neko_field_registry%get_field("v")
-    this%w => neko_field_registry%get_field("w")
-    this%s => neko_field_registry%get_field("s")
-    this%residual_viscosity => neko_field_registry%get_field("residual_viscosity")
-
-    call this%s2%init(this%u%dof)
-    call this%abs_var_s2%init(this%u%dof)
-    call this%s2lag%init(this%s2, 2)
-    call this%D%init(this%u%dof)
-    call this%wa%init(this%u%dof)
-    call this%abx1%init(this%u%dof)
-    call this%abx2%init(this%u%dof)
-    call this%volume_el%init(this%u%dof)
 
     select type (f1 => case%fluid)
     type is (fluid_pnpn_t)
       this%fluid => f1
+      this%makebdf => f1%makebdf
+      this%adv => f1%adv
+      this%ext_bdf => f1%ext_bdf
     class default
       call neko_error("For fluid, residual &
       &viscosity currently only support pnpn scheme")
     end select
 
-    this%scalar => case%scalar
-    call field_rzero(this%wa)
+    this%u => neko_field_registry%get_field("u")
+    this%v => neko_field_registry%get_field("v")
+    this%w => neko_field_registry%get_field("w")
+
+    call this%volume_el%init(this%u%dof)
+
+    allocate(this%s2(this%n_scalars))
+    allocate(this%s2lag(this%n_scalars))
+    allocate(this%D(this%n_scalars))
+    allocate(this%wa(this%n_scalars))
+    allocate(this%abx1(this%n_scalars))
+    allocate(this%abx2(this%n_scalars))
+    allocate(this%s(this%n_scalars))
+    allocate(this%residual_viscosity(this%n_scalars))
+
+    do k = 1, this%n_scalars
+       this%residual_viscosity(k)%ptr => &
+              neko_field_registry%get_field(fields(k))
+       call this%s2(k)%init(this%u%dof)
+       call this%s2lag(k)%init(this%s2(k), 2)
+       call this%D(k)%init(this%u%dof)
+       call this%wa(k)%init(this%u%dof)
+       call this%abx1(k)%init(this%u%dof)
+       call this%abx2(k)%init(this%u%dof)
+       
+       this%s(k)%ptr => this%scalars%scalar_fields(k)%s
+
+       call field_rzero(this%wa(k))
+    end do
 
     do e = 1, this%coef%msh%nelv
        volume_element = 0.0_rp
@@ -186,42 +214,23 @@ contains
   subroutine residual_viscosity_preprocess(this, time)
     class(residual_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    integer :: n
-
-    !!! estimate by the difference of the extrapolated and the solved advection
-    ! associate(u => this%u, v => this%v, w => this%w, &
-    !           s => this%s, wa => this%wa, &
-    !           abx1 => this%abx1, abx2 => this%abx2, &
-    !           coef => this%coef, &
-    !           rho => this%scalar%rho, dt => time%dt, &
-    !           adv => this%scalar%adv, &
-    !           makeext => this%scalar%makeext, &
-    !           s2lag => this%s2lag, ext_bdf => this%fluid%ext_bdf, &
-    !           Xh => this%scalar%Xh)
+    integer :: i, n
     
-    ! n = s%dof%size()
-    ! call field_rzero(wa)
-    ! call adv%compute_scalar(u, v, w, s, wa, &
-    !           Xh, coef, n)
-    ! call makeext%compute_scalar(abx1, abx2, wa%x, &
-    !           rho%x(1,1,1,1), es2 => this%s2, xt_bdf%advection_coeffs, n)
-
-    ! end associate
-    
-    !! estimate by ds/dt + ui ds/dxi
-    associate(s => this%s, s2 => this%s2, wa => this%wa, &
-              coef => this%coef, &
-              rho => this%scalar%rho, dt => time%dt, &
-              makebdf => this%scalar%makebdf, &
-              s2lag => this%s2lag, ext_bdf => this%fluid%ext_bdf)
-    
-    n = s%dof%size()
-    call field_rzero(wa)
-    call makebdf%compute_scalar(s2lag, wa%x, s2, coef%B, rho%x(1,1,1,1), &
-            dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
-    call s2lag%update()
-
-    end associate
+    do i = 1, this%n_scalars
+       !! estimate by ds/dt + ui ds/dxi
+       associate(s => this%s(i)%ptr, s2 => this%s2(i), wa => this%wa(i), &
+                 coef => this%coef, &
+                 rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
+                 makebdf => this%makebdf, &
+                 s2lag => this%s2lag(i), ext_bdf => this%ext_bdf)
+      
+       n = s%dof%size()
+       call field_rzero(wa)
+       call makebdf%compute_scalar(s2lag, wa%x, s2, coef%B, rho%x(1,1,1,1), &
+               dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+       call s2lag%update()
+       end associate
+    end do
 
   end subroutine residual_viscosity_preprocess
 
@@ -232,55 +241,60 @@ contains
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: ta ! temporal array
     integer :: temp_indices
-    integer :: n, n_el, e
+    integer :: i, n, n_el, e
     real(kind=rp) :: int_s2_el, avg_s2_el
     real(kind=rp) :: tol = 1e-7
 
-    call neko_scratch_registry%request_field(ta, temp_indices)
+    do i = 1, this%n_scalars
 
-    associate(s => this%s, s2 => this%s2, ext_bdf => this%fluid%ext_bdf, &
-              dt => time%dt, coef => this%coef, wa => this%wa, &
-              D => this%D, gs => this%coef%gs_h, adv => this%scalar%adv, &
-              u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-              residual_viscosity => this%residual_viscosity, &
-              abs_var_s2 => this%abs_var_s2)
+       call neko_scratch_registry%request_field(ta, temp_indices)
 
-    n = s%dof%size()
-    n_el = coef%Xh%lx*coef%Xh%ly*coef%Xh%lz
+       associate(s => this%s(i)%ptr, s2 => this%s2(i), &
+                 ext_bdf => this%ext_bdf, &
+                 dt => time%dt, coef => this%coef, wa => this%wa(i), &
+                 D => this%D(i), gs => this%coef%gs_h, &
+                 adv => this%adv, &
+                 u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+                 residual_viscosity => this%residual_viscosity(i)%ptr)
 
-    call field_copy(s2, s, n)
-    call field_copy(ta, s2)
-    call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       call invcol2(wa%x, coef%B, n)
-    else
-       call device_invcol2(wa%x_d, coef%B_d, n)
-    end if
-    call field_sub2(ta, wa)
-    call field_copy(D, ta)
+       n = s%dof%size()
+       n_el = coef%Xh%lx*coef%Xh%ly*coef%Xh%lz
 
-    ! advection part
-    call field_rzero(ta, n)
-    call adv%compute_scalar(u, v, w, s2, ta, &
-            Xh, coef, n)
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       call invcol2(ta%x, coef%B, n)
-    else
-       call device_invcol2(ta%x_d, coef%B_d, n)
-    end if
-    call field_sub2(D, ta, n)
-    call field_copy(residual_viscosity, D)
-    call field_absval(residual_viscosity)
+       call field_copy(s2, s, n)
+       call field_copy(ta, s2)
+       call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(wa%x_d, coef%B_d, n)
+       else
+          call invcol2(wa%x, coef%B, n)
+       end if
+       call field_sub2(ta, wa)
+       call field_copy(D, ta)
 
-    ! it should be scaled by f(ext_bdf%diffusion_time_order)
-    ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
-    ! Could be determined afterwards
-    call field_cmult(residual_viscosity, &
-         this%c_E)
+       ! advection part
+       call field_rzero(ta, n)
+       call adv%compute_scalar(u, v, w, s2, ta, &
+              Xh, coef, n)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(ta%x_d, coef%B_d, n)
+       else
+          call invcol2(ta%x, coef%B, n)
+       end if
+       call field_sub2(D, ta, n)
+       call field_copy(residual_viscosity, D)
+       call field_absval(residual_viscosity)
 
-    end associate
+       ! it should be scaled by f(ext_bdf%diffusion_time_order)
+       ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
+       ! Could be determined afterwards
+       call field_cmult(residual_viscosity, &
+           this%c_E)
 
-    call neko_scratch_registry%relinquish_field(temp_indices)
+       end associate
+
+       call neko_scratch_registry%relinquish_field(temp_indices)
+
+    end do
 
   end subroutine residual_viscosity_compute
 
