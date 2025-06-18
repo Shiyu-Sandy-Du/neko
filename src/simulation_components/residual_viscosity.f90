@@ -268,7 +268,7 @@ contains
        !! estimate by the difference of the extrapolated and the solved advection
        associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, D => this%D(i), &
-                 adv => this%adv, &
+                 adv => this%adv, gs => this%coef%gs_h, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
                  residual_viscosity => this%residual_viscosity(i)%ptr)
 
@@ -281,13 +281,19 @@ contains
        else
           call invcol2(D%x, coef%B, n)
        end if
+       
+       call gs%op(D, GS_OP_ADD)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_col2(D%x_d, coef%mult_d, n)
+       else
+          call col2(D%x, coef%mult, n)
+       end if
        call field_copy(residual_viscosity, D)
        call field_absval(residual_viscosity)
        ! it should be scaled by f(ext_bdf%diffusion_time_order) and also dt
        ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
        ! Could be determined afterwards
-       call field_cmult(residual_viscosity, &
-           this%c_E)
+       call field_cmult(residual_viscosity, this%c_E)
 
        end associate
 
