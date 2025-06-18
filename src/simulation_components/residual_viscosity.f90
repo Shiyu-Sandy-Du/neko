@@ -156,6 +156,7 @@ contains
     type is (fluid_pnpn_t)
       this%fluid => f1
       this%makebdf => f1%makebdf
+      this%makeext => f1%makeabf
       this%adv => f1%adv
       this%ext_bdf => f1%ext_bdf
     class default
@@ -272,6 +273,7 @@ contains
                  residual_viscosity => this%residual_viscosity(i)%ptr)
 
        n = s%dof%size()
+       call field_rzero(ta)
        call adv%compute_scalar(u, v, w, s, ta, Xh, coef, n)
        call field_sub2(D, ta, n)
        if (NEKO_BCKND_DEVICE .eq. 1) then
