@@ -43,7 +43,7 @@ module residual_viscosity
   use scratch_registry, only : neko_scratch_registry
   use json_utils, only : json_get
   use field, only : field_t, field_ptr_t
-  use rhs_maker, only : rhs_maker_bdf_t
+  use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t
   use advection, only : advection_t
   use time_scheme_controller, only : time_scheme_controller_t
   use coefs, only : coef_t
@@ -98,6 +98,7 @@ module residual_viscosity
      type(fluid_pnpn_t), pointer :: fluid
      type(scalars_t), pointer :: scalars
      class(rhs_maker_bdf_t), pointer :: makebdf
+     class(rhs_maker_ext_t), pointer :: makeext
      class(advection_t), pointer :: adv
      type(time_scheme_controller_t), pointer :: ext_bdf
 
@@ -215,18 +216,37 @@ contains
     integer :: i, n
     
     do i = 1, this%n_scalars
-       !! estimate by ds/dt + ui ds/dxi
-       associate(s => this%s(i)%ptr, wa => this%wa(i), &
+       !! estimate by the difference of the extrapolated and the solved advection
+       associate(u => this%u, v => this%v, w => this%w, &
+                 s => this%s(i)%ptr, D => this%D(i), &
+                 abx1 => this%abx1(i), abx2 => this%abx2(i), &
                  coef => this%coef, &
                  rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
-                 makebdf => this%makebdf, &
-                 slag => this%slag(i)%ptr, ext_bdf => this%ext_bdf)
+                 adv => this%adv, &
+                 makeext => this%makeext, ext_bdf => this%ext_bdf, &
+                 Xh => this%coef%Xh)
       
        n = s%dof%size()
-       call field_rzero(wa)
-       call makebdf%compute_scalar(slag, wa%x, s, coef%B, rho%x(1,1,1,1), &
-               dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+       call field_rzero(D)
+       call adv%compute_scalar(u, v, w, s, D, &
+                Xh, coef, n)
+       call makeext%compute_scalar(abx1, abx2, D%x, &
+                rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
+
        end associate
+       
+      !  !! estimate by ds/dt + ui ds/dxi
+      !  associate(s => this%s(i)%ptr, wa => this%wa(i), &
+      !            coef => this%coef, &
+      !            rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
+      !            makebdf => this%makebdf, &
+      !            slag => this%slag(i)%ptr, ext_bdf => this%ext_bdf)
+      
+      !  n = s%dof%size()
+      !  call field_rzero(wa)
+      !  call makebdf%compute_scalar(slag, wa%x, s, coef%B, rho%x(1,1,1,1), &
+      !          dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+      !  end associate
     end do
 
   end subroutine residual_viscosity_preprocess
@@ -244,45 +264,71 @@ contains
 
        call neko_scratch_registry%request_field(ta, temp_indices)
 
+       !! estimate by the difference of the extrapolated and the solved advection
        associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
-                 dt => time%dt, coef => this%coef, wa => this%wa(i), &
-                 D => this%D(i), gs => this%coef%gs_h, &
+                 dt => time%dt, coef => this%coef, D => this%D(i), &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
                  residual_viscosity => this%residual_viscosity(i)%ptr)
 
        n = s%dof%size()
-
-       call field_copy(ta, s)
-       call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_invcol2(wa%x_d, coef%B_d, n)
-       else
-          call invcol2(wa%x, coef%B, n)
-       end if
-       call field_sub2(ta, wa)
-       call field_copy(D, ta)
-
-       ! advection part
-       call field_rzero(ta, n)
-       call adv%compute_scalar(u, v, w, s, ta, &
-              Xh, coef, n)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_invcol2(ta%x_d, coef%B_d, n)
-       else
-          call invcol2(ta%x, coef%B, n)
-       end if
+       call adv%compute_scalar(u, v, w, s, ta, Xh, coef, n)
        call field_sub2(D, ta, n)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(D%x_d, coef%B_d, n)
+       else
+          call invcol2(D%x, coef%B, n)
+       end if
        call field_copy(residual_viscosity, D)
        call field_absval(residual_viscosity)
-
-       ! it should be scaled by f(ext_bdf%diffusion_time_order)
+       ! it should be scaled by f(ext_bdf%diffusion_time_order) and also dt
        ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
        ! Could be determined afterwards
        call field_cmult(residual_viscosity, &
            this%c_E)
 
        end associate
+
+       !! estimate by ds/dt + ui ds/dxi
+      !  associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
+      !            dt => time%dt, coef => this%coef, wa => this%wa(i), &
+      !            D => this%D(i), gs => this%coef%gs_h, &
+      !            adv => this%adv, &
+      !            u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+      !            residual_viscosity => this%residual_viscosity(i)%ptr)
+
+      !  n = s%dof%size()
+
+      !  call field_copy(ta, s)
+      !  call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+      !  if (NEKO_BCKND_DEVICE .eq. 1) then
+      !     call device_invcol2(wa%x_d, coef%B_d, n)
+      !  else
+      !     call invcol2(wa%x, coef%B, n)
+      !  end if
+      !  call field_sub2(ta, wa)
+      !  call field_copy(D, ta)
+
+      !  ! advection part
+      !  call field_rzero(ta, n)
+      !  call adv%compute_scalar(u, v, w, s, ta, &
+      !         Xh, coef, n)
+      !  if (NEKO_BCKND_DEVICE .eq. 1) then
+      !     call device_invcol2(ta%x_d, coef%B_d, n)
+      !  else
+      !     call invcol2(ta%x, coef%B, n)
+      !  end if
+      !  call field_sub2(D, ta, n)
+      !  call field_copy(residual_viscosity, D)
+      !  call field_absval(residual_viscosity)
+
+      !  ! it should be scaled by f(ext_bdf%diffusion_time_order)
+      !  ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
+      !  ! Could be determined afterwards
+      !  call field_cmult(residual_viscosity, &
+      !      this%c_E)
+
+      !  end associate
 
        call neko_scratch_registry%relinquish_field(temp_indices)
 
