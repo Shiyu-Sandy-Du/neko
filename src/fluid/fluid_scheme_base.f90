@@ -103,7 +103,7 @@ module fluid_scheme_base
      type(field_t) :: rho
 
      !> The dynamic viscosity
-     type(field_t) :: mu
+     type(field_t) :: mu, mu1, mu2, mu3
 
      !> A helper that packs material properties to pass to the user routine.
      type(field_list_t) :: material_properties

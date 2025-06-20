@@ -41,6 +41,7 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_full_cpu, only : ax_helm_full_cpu_t
   use ax_helm_full_device, only : ax_helm_full_device_t
   use ax_helm_svv_cpu, only : ax_helm_svv_cpu_t
+  use ax_helm_diffcomp_cpu, only : ax_helm_diffcomp_cpu_t
   use spectral_vanishing_viscosity, only : svv_t
   use utils, only : neko_error
   implicit none
@@ -52,10 +53,11 @@ contains
   !! @param object The matrix-vector product type to be allocated.
   !! @param full_formulation Whether to use the formulation with the full
   !! viscous stress tensor, not assuming constant material properties.
-  module subroutine ax_helm_factory(object, full_formulation, svv)
+  module subroutine ax_helm_factory(object, full_formulation, svv, diffcomp)
     class(ax_t), allocatable, intent(inout) :: object
     logical, intent(in) :: full_formulation
     type(svv_t), intent(in), target, optional :: svv
+    logical, intent(in), optional :: diffcomp
     logical :: svv_enabled = .false.
 
     if (allocated(object)) then
@@ -94,6 +96,16 @@ contains
          type is (ax_helm_svv_cpu_t)
             f%svv => svv
          end select
+      end if
+    else if (present(diffcomp) .and. diffcomp) then
+      if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
+         call neko_error("diffcomp is only available &
+                        &on the CPU")
+      else if (NEKO_BCKND_DEVICE .eq. 1) then
+         call neko_error("diffcomp is only available &
+                        &on the CPU")
+      else
+         allocate(ax_helm_diffcomp_cpu_t::object)
       end if
     else
        if (NEKO_BCKND_SX .eq. 1) then

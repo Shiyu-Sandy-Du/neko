@@ -82,6 +82,9 @@ module coefs
      real(kind=rp), allocatable :: dtdx(:,:,:,:), dtdy(:,:,:,:), dtdz(:,:,:,:)
 
      real(kind=rp), allocatable :: h1(:,:,:,:) !< Stiffness scaling
+     real(kind=rp), allocatable :: h1_1(:,:,:,:) !< ... scaling on component 1
+     real(kind=rp), allocatable :: h1_2(:,:,:,:) !< ... scaling on component 1
+     real(kind=rp), allocatable :: h1_3(:,:,:,:) !< ... scaling on component 1
      real(kind=rp), allocatable :: h2(:,:,:,:) !< Mass scaling
      logical :: ifh2 !< True if h2 .ne. 0
 
@@ -133,6 +136,9 @@ module coefs
      type(c_ptr) :: dtdz_d = C_NULL_PTR
      type(c_ptr) :: mult_d = C_NULL_PTR
      type(c_ptr) :: h1_d = C_NULL_PTR
+     type(c_ptr) :: h1_1_d = C_NULL_PTR
+     type(c_ptr) :: h1_2_d = C_NULL_PTR
+     type(c_ptr) :: h1_3_d = C_NULL_PTR
      type(c_ptr) :: h2_d = C_NULL_PTR
      type(c_ptr) :: jac_d = C_NULL_PTR
      type(c_ptr) :: jacinv_d = C_NULL_PTR
@@ -260,6 +266,9 @@ contains
     allocate(this%Binv(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
 
     allocate(this%h1(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
+    allocate(this%h1_1(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
+    allocate(this%h1_2(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
+    allocate(this%h1_3(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
     allocate(this%h2(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
 
     allocate(this%mult(this%Xh%lx, this%Xh%ly, this%Xh%lz, this%msh%nelv))
@@ -304,6 +313,9 @@ contains
 
        call device_map(this%mult, this%mult_d, n)
        call device_map(this%h1, this%h1_d, n)
+       call device_map(this%h1_1, this%h1_1_d, n)
+       call device_map(this%h1_2, this%h1_2_d, n)
+       call device_map(this%h1_3, this%h1_3_d, n)
        call device_map(this%h2, this%h2_d, n)
 
        call device_map(this%jac, this%jac_d, n)
@@ -333,13 +345,25 @@ contains
     ! We can probably find a prettier solution
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_rone(this%h1_d, n)
+       call device_rone(this%h1_1_d, n)
+       call device_rone(this%h1_2_d, n)
+       call device_rone(this%h1_3_d, n)
        call device_rone(this%h2_d, n)
        call device_memcpy(this%h1, this%h1_d, n, &
+                          DEVICE_TO_HOST, sync=.false.)
+       call device_memcpy(this%h1_1, this%h1_1_d, n, &
+                          DEVICE_TO_HOST, sync=.false.)
+       call device_memcpy(this%h1_2, this%h1_2_d, n, &
+                          DEVICE_TO_HOST, sync=.false.)
+       call device_memcpy(this%h1_3, this%h1_3_d, n, &
                           DEVICE_TO_HOST, sync=.false.)
        call device_memcpy(this%h2, this%h2_d, n, &
                           DEVICE_TO_HOST, sync=.false.)
     else
        call rone(this%h1,n)
+       call rone(this%h1_1,n)
+       call rone(this%h1_2,n)
+       call rone(this%h1_3,n)
        call rone(this%h2,n)
     end if
 
@@ -490,6 +514,18 @@ contains
        deallocate(this%h1)
     end if
 
+    if(allocated(this%h1_1)) then
+       deallocate(this%h1_1)
+    end if
+
+    if(allocated(this%h1_2)) then
+       deallocate(this%h1_2)
+    end if
+
+    if(allocated(this%h1_3)) then
+       deallocate(this%h1_3)
+    end if
+
     if(allocated(this%h2)) then
        deallocate(this%h2)
     end if
@@ -621,6 +657,18 @@ contains
 
     if (c_associated(this%h1_d)) then
        call device_free(this%h1_d)
+    end if
+
+    if (c_associated(this%h1_1_d)) then
+       call device_free(this%h1_1_d)
+    end if
+
+    if (c_associated(this%h1_2_d)) then
+       call device_free(this%h1_2_d)
+    end if
+
+    if (c_associated(this%h1_3_d)) then
+       call device_free(this%h1_3_d)
     end if
 
     if (c_associated(this%h2_d)) then

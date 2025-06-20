@@ -29,8 +29,8 @@ module pnpn_res_sx
 contains
 
   subroutine pnpn_prs_res_sx_compute(p, p_res, u, v, w, u_e, v_e, w_e, f_x, &
-       f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd, dt, mu, &
-       rho, event)
+       f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd, dt, &
+       mu1, mu2, mu3, rho, event)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -42,7 +42,7 @@ contains
     class(ax_t), intent(inout) :: Ax
     real(kind=rp), intent(in) :: bd
     real(kind=rp), intent(in) :: dt
-    type(field_t), intent(in) :: mu
+    type(field_t), intent(in) :: mu1, mu2, mu3
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
     real(kind=rp) :: dtbd, rho_val, mu_val
@@ -64,7 +64,7 @@ contains
 
     ! We assume the material properties are constant
     rho_val = rho%x(1,1,1,1)
-    mu_val = mu%x(1,1,1,1)
+    mu_val = mu1%x(1,1,1,1)
     do i = 1, n
        c_Xh%h1(i,1,1,1) = 1.0_rp / rho_val
        c_Xh%h2(i,1,1,1) = 0.0_rp
@@ -137,7 +137,7 @@ contains
   end subroutine pnpn_prs_res_sx_compute
 
   subroutine pnpn_vel_res_sx_compute(Ax, u, v, w, u_res, v_res, w_res, &
-       p, f_x, f_y, f_z, c_Xh, msh, Xh, mu, rho, bd, dt, n)
+       p, f_x, f_y, f_z, c_Xh, msh, Xh, mu1, mu2, mu3, rho, bd, dt, n)
     class(ax_t), intent(in) :: Ax
     type(mesh_t), intent(inout) :: msh
     type(space_t), intent(inout) :: Xh
@@ -145,7 +145,7 @@ contains
     type(field_t), intent(inout) :: u_res, v_res, w_res
     type(field_t), intent(in) :: f_x, f_y, f_z
     type(coef_t), intent(inout) :: c_Xh
-    type(field_t), intent(in) :: mu
+    type(field_t), intent(in) :: mu1, mu2, mu3
     type(field_t), intent(in) :: rho
     real(kind=rp), intent(in) :: bd
     real(kind=rp), intent(in) :: dt
@@ -156,7 +156,7 @@ contains
     real(kind=rp) :: rho_val, mu_val
 
     rho_val = rho%x(1,1,1,1)
-    mu_val = mu%x(1,1,1,1)
+    mu_val = mu1%x(1,1,1,1)
 
     do i = 1, n
        c_Xh%h1(i,1,1,1) = mu_val
