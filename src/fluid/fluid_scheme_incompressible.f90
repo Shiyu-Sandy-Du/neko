@@ -73,7 +73,7 @@ module fluid_scheme_incompressible
   use utils, only : neko_error, neko_warning
   use field_series, only : field_series_t
   use time_step_controller, only : time_step_controller_t
-  use field_math, only : field_cfill, field_add2s2, field_addcol3, field_copy
+  use field_math, only : field_cfill, field_add2s2, field_addcol3, field_copy, field_rzero
   use shear_stress, only : shear_stress_t
   use device, only : device_event_sync, glb_cmd_event, DEVICE_TO_HOST, &
        device_memcpy
@@ -603,6 +603,10 @@ contains
        nut => neko_field_registry%get_field(this%nut_field_name)
        call field_addcol3(this%mu, nut, this%rho)
     end if
+
+    call field_copy(this%mu1, this%mu)
+    call field_copy(this%mu2, this%mu)
+    call field_copy(this%mu3, this%mu)
 
     if (len(trim(this%nus1_field_name)) > 0) then
        nus1 => neko_field_registry%get_field(this%nus1_field_name)

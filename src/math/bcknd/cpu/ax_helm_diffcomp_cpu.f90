@@ -164,7 +164,7 @@ contains
                 end do
                 wus(i,j,k) = t1
                 wvs(i,j,k) = t2
-                wvs(i,j,k) = t3
+                wws(i,j,k) = t3
              end do
           end do
        end do

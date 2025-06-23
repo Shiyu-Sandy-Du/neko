@@ -69,9 +69,6 @@ contains
     mu_val3 = mu3%x(1,1,1,1)
     do i = 1, n
        c_Xh%h1(i,1,1,1) = 1.0_rp / rho_val
-       c_Xh%h1_1(i,1,1,1) = 1.0_rp / rho_val
-       c_Xh%h1_2(i,1,1,1) = 1.0_rp / rho_val
-       c_Xh%h1_3(i,1,1,1) = 1.0_rp / rho_val
        c_Xh%h2(i,1,1,1) = 0.0_rp
     end do
     c_Xh%ifh2 = .false.
@@ -82,11 +79,11 @@ contains
     ! ta = f / rho - wa * mu / rho * B
     do concurrent (i = 1:n)
        ta1%x(i,1,1,1) = f_x%x(i,1,1,1) / rho_val &
-            - ((wa1%x(i,1,1,1) * (mu_val1 / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa1%x(i,1,1,1) * (mu1%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
        ta2%x(i,1,1,1) = f_y%x(i,1,1,1) / rho_val &
-            - ((wa2%x(i,1,1,1) * (mu_val2 / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa2%x(i,1,1,1) * (mu2%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
        ta3%x(i,1,1,1) = f_z%x(i,1,1,1) / rho_val &
-            - ((wa3%x(i,1,1,1) * (mu_val3 / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa3%x(i,1,1,1) * (mu3%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
     end do
 
     call gs_Xh%op(ta1, GS_OP_ADD)
@@ -168,9 +165,9 @@ contains
 
     do concurrent (i = 1:n)
        c_Xh%h1(i,1,1,1) = mu_val1
-       c_Xh%h1_1(i,1,1,1) = mu_val1
-       c_Xh%h1_2(i,1,1,1) = mu_val2
-       c_Xh%h1_3(i,1,1,1) = mu_val3
+       c_Xh%h1_1(i,1,1,1) = mu1%x(i,1,1,1)
+       c_Xh%h1_2(i,1,1,1) = mu2%x(i,1,1,1)
+       c_Xh%h1_3(i,1,1,1) = mu3%x(i,1,1,1)
        c_Xh%h2(i,1,1,1) = rho_val * bd / dt
     end do
     c_Xh%ifh2 = .true.
