@@ -45,7 +45,7 @@ contains
     type(field_t), intent(in) :: mu1, mu2, mu3
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
-    real(kind=rp) :: dtbd, rho_val, mu_val1, mu_val2, mu_val3
+    real(kind=rp) :: dtbd, rho_val
     integer :: n
     integer :: i
     type(field_t), pointer :: ta1, ta2, ta3, wa1, wa2, wa3, work1, work2
@@ -64,9 +64,6 @@ contains
 
     ! We assume the material properties are constant
     rho_val = rho%x(1,1,1,1)
-    mu_val1 = mu1%x(1,1,1,1)
-    mu_val2 = mu2%x(1,1,1,1)
-    mu_val3 = mu3%x(1,1,1,1)
     do i = 1, n
        c_Xh%h1(i,1,1,1) = 1.0_rp / rho_val
        c_Xh%h2(i,1,1,1) = 0.0_rp
@@ -151,7 +148,7 @@ contains
     type(field_t), intent(in) :: rho
     real(kind=rp), intent(in) :: bd
     real(kind=rp), intent(in) :: dt
-    real(kind=rp) :: rho_val, mu_val1, mu_val2, mu_val3
+    real(kind=rp) :: rho_val, mu_val
     integer :: temp_indices(3)
     type(field_t), pointer :: ta1, ta2, ta3
     integer, intent(in) :: n
@@ -159,12 +156,10 @@ contains
 
     ! We assume the material properties are constant
     rho_val = rho%x(1,1,1,1)
-    mu_val1 = mu1%x(1,1,1,1)
-    mu_val2 = mu2%x(1,1,1,1)
-    mu_val3 = mu3%x(1,1,1,1)
+    mu_val = mu1%x(1,1,1,1)
 
     do concurrent (i = 1:n)
-       c_Xh%h1(i,1,1,1) = mu_val1
+       c_Xh%h1(i,1,1,1) = mu_val
        c_Xh%h1_1(i,1,1,1) = mu1%x(i,1,1,1)
        c_Xh%h1_2(i,1,1,1) = mu2%x(i,1,1,1)
        c_Xh%h1_3(i,1,1,1) = mu3%x(i,1,1,1)
