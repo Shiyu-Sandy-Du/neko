@@ -30,7 +30,8 @@
 ! ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ! POSSIBILITY OF SUCH DAMAGE.
 !
-module ax_helm_svv
+module ax_helm_svv_diffcomp
+  use utils, only : neko_error
   use ax_product, only : ax_t
   use num_types, only : rp
   use coefs, only : coef_t
@@ -42,41 +43,34 @@ module ax_helm_svv
   private
 
   !> Matrix-vector product for a Helmholtz problem.
-  type, public, abstract, extends(ax_t) :: ax_helm_svv_t
+  type, public, abstract, extends(ax_t) :: ax_helm_svv_diffcomp_t
      !> A pointer to the svv object
      type(svv_t), pointer :: svv 
    contains
-     !! Compute the product for 3 compenents of a vector field.
-     procedure, pass(this) :: compute_vector => ax_helm_svv_compute_vector
-  end type ax_helm_svv_t
+     !> Compute the product for 3 fields.
+     procedure, pass(this) :: compute => ax_helm_svv_diffcomp_compute
+  end type ax_helm_svv_diffcomp_t
 
 contains
-  !! Compute the product for 3 compenents of a vector field.
-  !! @details applies `compute` to one component at a time.
-  !! @param au Result for the first component of the vector.
-  !! @param av Result for the first component of the vector.
-  !! @param aw Result for the first component of the vector.
-  !! @param u The first component of the vector.
-  !! @param v The second component of the vector.
-  !! @param w The third component of the vector.
+
+  !> Compute the product for a single vector. Not implemented for the full
+  !! stress formulation.
+  !! @param w Vector of size @a (lx,ly,lz,nelv).
+  !! @param u Vector of size @a (lx,ly,lz,nelv).
   !! @param coef Coefficients.
   !! @param msh Mesh.
   !! @param Xh Function space \f$ X_h \f$.
-  subroutine ax_helm_svv_compute_vector(this, au, av, aw, u, v, w, coef, msh, Xh)
-    class(ax_helm_svv_t), intent(in) :: this
-    type(space_t), intent(in) :: Xh
+  subroutine ax_helm_svv_diffcomp_compute(this, w, u, coef, msh, Xh)
+    class(ax_helm_svv_diffcomp_t), intent(in) :: this
     type(mesh_t), intent(in) :: msh
+    type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef
-    real(kind=rp), intent(inout) :: au(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    real(kind=rp), intent(inout) :: av(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    real(kind=rp), intent(inout) :: aw(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
+    real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    real(kind=rp), intent(in) :: v(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    real(kind=rp), intent(in) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
 
-    call this%compute(au, u, coef, msh, Xh)
-    call this%compute(av, v, coef, msh, Xh)
-    call this%compute(aw, w, coef, msh, Xh)
-  end subroutine ax_helm_svv_compute_vector
+    call neko_error("The SVV Helmholtz operators with different " // &
+         "coefficient cannot be applied to a " // &
+         "single field.")
+  end subroutine ax_helm_svv_diffcomp_compute
 
-end module ax_helm_svv
+end module ax_helm_svv_diffcomp

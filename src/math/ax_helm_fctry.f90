@@ -42,6 +42,7 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_full_device, only : ax_helm_full_device_t
   use ax_helm_svv_cpu, only : ax_helm_svv_cpu_t
   use ax_helm_diffcomp_cpu, only : ax_helm_diffcomp_cpu_t
+  use ax_helm_svv_diffcomp_cpu, only : ax_helm_svv_diffcomp_cpu_t
   use spectral_vanishing_viscosity, only : svv_t
   use utils, only : neko_error
   implicit none
@@ -84,18 +85,34 @@ contains
          allocate(ax_helm_full_cpu_t::object)
       end if
     else if (svv_enabled) then
-      if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
-         call neko_error("svv is only available &
-                        &on the CPU")
-      else if (NEKO_BCKND_DEVICE .eq. 1) then
-         call neko_error("svv is only available &
-                        &on the CPU")
+      if (present(diffcomp) .and. diffcomp) then
+         if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
+            call neko_error("svv is only available &
+                           &on the CPU")
+         else if (NEKO_BCKND_DEVICE .eq. 1) then
+            call neko_error("svv is only available &
+                           &on the CPU")
+         else
+            allocate(ax_helm_svv_diffcomp_cpu_t::object)
+            select type (f => object)
+            type is (ax_helm_svv_diffcomp_cpu_t)
+               f%svv => svv
+            end select
+         end if
       else
-         allocate(ax_helm_svv_cpu_t::object)
-         select type (f => object)
-         type is (ax_helm_svv_cpu_t)
-            f%svv => svv
-         end select
+         if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
+            call neko_error("svv is only available &
+                           &on the CPU")
+         else if (NEKO_BCKND_DEVICE .eq. 1) then
+            call neko_error("svv is only available &
+                           &on the CPU")
+         else
+            allocate(ax_helm_svv_cpu_t::object)
+            select type (f => object)
+            type is (ax_helm_svv_cpu_t)
+               f%svv => svv
+            end select
+         end if
       end if
     else if (present(diffcomp) .and. diffcomp) then
       if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then

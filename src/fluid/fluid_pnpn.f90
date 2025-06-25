@@ -307,8 +307,15 @@ contains
     else
        ! Setup backend dependent Ax routines
        if (this%svv_enabled) then
-          call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
-                              svv = this%svv)
+          if (this%svv%eqn_number .eq. 1) then
+             call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
+                                  svv = this%svv)
+          else if (this%svv%eqn_number .eq. 3) then
+             call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
+                                  svv = this%svv, diffcomp = .true.)
+          else
+             call neko_error("Equation number for SVV has to be 1 or 3")
+          end if
        else
           if (this%resi_visc) then
              call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
