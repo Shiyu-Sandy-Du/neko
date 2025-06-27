@@ -105,7 +105,7 @@ module fluid_scheme_incompressible
      logical :: forced_flow_rate = .false. !< Is the flow rate forced?
 
      !> Is SVV enabled?
-     logical :: svv_enabled
+     logical :: svv_enabled = .false.
      type(svv_t) :: svv
 
      !> The turbulent kinematic viscosity field name
@@ -349,8 +349,8 @@ contains
     if (params%valid_path('case.fluid.svv')) then
        call json_extract_object(params, &
             'case.fluid', json_subdict)
-       call json_get(json_subdict, 'svv.enabled', &
-            this%svv_enabled)
+       call json_get_or_default(json_subdict, 'svv.enabled', &
+            this%svv_enabled, .false.)
        if (this%svv_enabled .eqv. .true.) then
           call this%svv%init(json_subdict, this%c_Xh)
        end if
