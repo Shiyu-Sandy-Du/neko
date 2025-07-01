@@ -142,6 +142,8 @@ contains
        nut%x(i,1,1,1) = c_dyn%x(i,1,1,1) * delta%x(i,1,1,1)**2 * s_abs%x(i,1,1,1)
     end do
 
+    call coef%gs_h%op(nut%x, s11%dof%size(), GS_OP_ADD)
+    call col2(nut%x, coef%mult, u%dof%size())
 
     call neko_scratch_registry%relinquish_field(temp_indices)
   end subroutine dynamic_smagorinsky_compute_cpu
@@ -242,23 +244,23 @@ contains
     call cmult(mij(1)%x, delta_ratio2, n)
 
     call test_filter%filter_3d(fs22, s22%x, nelv)
-    call col3(mij(2)%x, fs_abs, fs11, n)
+    call col3(mij(2)%x, fs_abs, fs22, n)
     call cmult(mij(2)%x, delta_ratio2, n)
 
     call test_filter%filter_3d(fs33, s33%x, nelv)
-    call col3(mij(3)%x, fs_abs, fs11, n)
+    call col3(mij(3)%x, fs_abs, fs33, n)
     call cmult(mij(3)%x, delta_ratio2, n)
 
     call test_filter%filter_3d(fs12, s12%x, nelv)
-    call col3(mij(4)%x, fs_abs, fs11, n)
+    call col3(mij(4)%x, fs_abs, fs12, n)
     call cmult(mij(4)%x, delta_ratio2, n)
 
     call test_filter%filter_3d(fs13, s13%x, nelv)
-    call col3(mij(5)%x, fs_abs, fs11, n)
+    call col3(mij(5)%x, fs_abs, fs13, n)
     call cmult(mij(5)%x, delta_ratio2, n)
 
     call test_filter%filter_3d(fs23, s23%x, nelv)
-    call col3(mij(6)%x, fs_abs, fs11, n)
+    call col3(mij(6)%x, fs_abs, fs23, n)
     call cmult(mij(6)%x, delta_ratio2, n)
 
     !! Substract the second term:
