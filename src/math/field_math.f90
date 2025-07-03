@@ -65,20 +65,21 @@ module field_math
   use math, only: rzero, rone, copy, cmult, cadd, cfill, invcol1, vdot3, add2, &
        add3, add4, sub2, sub3, add2s1, add2s2, addsqr2s2, cmult2, invcol2, &
        col2, col3, subcol3, add3s2, addcol3, addcol4, glsum, glsc2, glsc3, &
-       masked_gather_copy, masked_scatter_copy, absval
+       masked_gather_copy, masked_scatter_copy, absval, cadd2
   use device_math, only: device_rzero, device_rone, device_copy, device_cmult, &
        device_cadd, device_cfill, device_invcol1, device_vdot3, device_add2, &
        device_add3, device_add4, device_sub2, device_sub3, device_add2s1, &
        device_add2s2, device_addsqr2s2, device_cmult2, device_invcol2, &
        device_col2, device_col3, device_subcol3, device_add3s2, &
        device_addcol3, device_addcol4, device_glsum, device_glsc2, device_glsc3, &
-       device_masked_gather_copy, device_masked_scatter_copy, device_absval
+       device_masked_gather_copy, device_masked_scatter_copy, device_absval, &
+       device_cadd2
   use, intrinsic :: iso_c_binding, only: c_ptr
   implicit none
   private
 
   public :: field_rzero, field_rone, field_copy, field_cmult, &
-       field_cadd, field_cfill, field_invcol1, field_vdot3, &
+       field_cadd, field_cadd2, field_cfill, field_invcol1, field_vdot3, &
        field_add2, field_sub2, field_sub3, field_add2s1, &
        field_add2s2, field_addsqr2s2, field_cmult2, &
        field_invcol2, field_col2, field_col3, field_subcol3, &
@@ -185,6 +186,27 @@ contains
        call cadd(a%x, s, size)
     end if
   end subroutine field_cadd
+
+  !> Add a scalar to vector \f$ a_i = b_i + s \f$
+  subroutine field_cadd2(a, b, s, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    type(field_t), intent(in) :: b
+    real(kind=rp), intent(in) :: s
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_cadd2(a%x_d, b%x_d, s, size)
+    else
+       call cadd2(a%x, b%x, s, size)
+    end if
+  end subroutine field_cadd2
 
   !> Set all elements to a constant c \f$ a = c \f$
   subroutine field_cfill(a, c, n)
