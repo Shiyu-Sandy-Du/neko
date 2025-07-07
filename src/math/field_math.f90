@@ -65,7 +65,7 @@ module field_math
   use math, only: rzero, rone, copy, cmult, cadd, cfill, invcol1, vdot3, add2, &
        add3, add4, sub2, sub3, add2s1, add2s2, addsqr2s2, cmult2, invcol2, &
        col2, col3, subcol3, add3s2, addcol3, addcol4, glsum, glsc2, glsc3, &
-       masked_gather_copy, masked_scatter_copy, absval, cadd2
+       masked_gather_copy, masked_scatter_copy, absval, cadd2, square_root
   use device_math, only: device_rzero, device_rone, device_copy, device_cmult, &
        device_cadd, device_cfill, device_invcol1, device_vdot3, device_add2, &
        device_add3, device_add4, device_sub2, device_sub3, device_add2s1, &
@@ -85,7 +85,7 @@ module field_math
        field_invcol2, field_col2, field_col3, field_subcol3, &
        field_add3s2, field_addcol3, field_addcol4, field_glsum, &
        field_glsc2, field_glsc3, field_add3, field_masked_gather_copy, &
-       field_masked_scatter_copy, field_absval
+       field_masked_scatter_copy, field_absval, field_sqrt
 
 contains
 
@@ -758,6 +758,26 @@ contains
     end if
 
   end subroutine field_absval
+
+  !> Take the sqaure root of a field \f$ a = sqrt(a) \f$
+  subroutine field_sqrt(a, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       write(*,*)  "field_sqrt: device sqrt not implemented"
+    else
+       call square_root(a%x, size)
+    end if
+
+  end subroutine field_sqrt
 
 
 

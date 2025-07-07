@@ -43,6 +43,7 @@ module residual_viscosity
   use scratch_registry, only : neko_scratch_registry
   use json_utils, only : json_get
   use field, only : field_t, field_ptr_t
+  use field_series, only : field_series_t
   use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t
   use advection, only : advection_t
   use time_scheme_controller, only : time_scheme_controller_t
@@ -57,7 +58,7 @@ module residual_viscosity
   use utils, only : neko_error
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
-                         field_invcol2
+                         field_invcol2, field_sqrt
   use math, only : invcol2, col2, glsum, glsc2, glmax
   use device_math, only : device_invcol2
   use gather_scatter, only : GS_OP_ADD
@@ -79,10 +80,14 @@ module residual_viscosity
      type(field_t) :: w_var
      !> Velocity magnitude.
      type(field_t) :: vel_mag
+     !> work array for the temporal derivative
+     type(field_t), allocatable :: wa(:)
      !> Scalar field
      integer :: n_scalars = 0
      type(field_ptr_t), allocatable :: s(:)
      type(field_t), allocatable :: s_var(:)
+     type(field_t), allocatable :: E(:)
+     type(field_series_t), allocatable :: Elag(:)
      !> coef
      type(coef_t), pointer :: coef
      !> Some field to be used
@@ -150,12 +155,13 @@ contains
     else
        this%n_scalars = 0
     end if
-    allocate(fields(3+this%n_scalars))
-    fields(1) = 'res_visc_u'
-    fields(2) = 'res_visc_v'
-    fields(3) = 'res_visc_w'
+    allocate(fields(1+this%n_scalars))
+    write(*,*) "1+this%n_scalars: ", 1+this%n_scalars
+    fields(1) = 'res_visc_vel'
+   !  fields(2) = 'res_visc_v'
+   !  fields(3) = 'res_visc_w'
     do k = 1, this%n_scalars
-       write(fields(k+3), '(A,I0)') 'res_visc_s', k
+       write(fields(k+1), '(A,I0)') 'res_visc_s', k
     end do
     ! Add fields keyword to the json so that the field_writer picks it up.
     ! Will also add fields to 	simulation_components/residual_viscosity.f90\the registry.
@@ -180,27 +186,35 @@ contains
     this%v => neko_field_registry%get_field("v")
     this%w => neko_field_registry%get_field("w")
 
-    call this%u_var%init(u%dof)
-    call this%v_var%init(v%dof)
-    call this%w_var%init(w%dof)
-    call this%vel_mag%init(u%dof)
+    call this%u_var%init(this%u%dof)
+    call this%v_var%init(this%v%dof)
+    call this%w_var%init(this%w%dof)
+    call this%vel_mag%init(this%u%dof)
 
-    call this%h%init(this%u%dof)
+    call this%h_np2%init(this%u%dof)
 
     if (this%n_scalars .ne. 0) then
        allocate(this%s(this%n_scalars))
        allocate(this%s_var(this%n_scalars))
     end if
-
-    allocate(this%D(3+this%n_scalars))
-    allocate(this%abx1(3+this%n_scalars))
-    allocate(this%abx2(3+this%n_scalars))
     
-    allocate(this%residual_viscosity(3+this%n_scalars))
+    allocate(this%E(1+this%n_scalars))
+    allocate(this%Elag(1+this%n_scalars))
+    allocate(this%wa(1+this%n_scalars))
 
-    do k = 1, 3+this%n_scalars
+    allocate(this%D(1+this%n_scalars))
+    allocate(this%abx1(1+this%n_scalars))
+    allocate(this%abx2(1+this%n_scalars))
+    
+    allocate(this%residual_viscosity(1+this%n_scalars))
+
+    do k = 1, 1+this%n_scalars
        this%residual_viscosity(k)%ptr => &
               neko_field_registry%get_field(fields(k))
+
+       call this%E(k)%init(this%u%dof)
+       call this%Elag(k)%init(this%E(k), 2)
+       call this%wa(k)%init(this%u%dof)
 
        call this%D(k)%init(this%u%dof)
        call this%abx1(k)%init(this%u%dof)
@@ -222,7 +236,7 @@ contains
                           **(this%ext_bdf%diffusion_time_order + 2)
     end do
 
-    volume_domain = glsum(this%coef%B, u%dof%size())
+    this%volume_domain = glsum(this%coef%B, this%u%dof%size())
 
   end subroutine residual_viscosity_init_common
 
@@ -239,58 +253,79 @@ contains
     type(time_state_t), intent(in) :: time
     integer :: i, n
 
-    !! estimate by the difference of the extrapolated and the solved advection
-    associate(u => this%u, v => this%v, w => this%w, &
-              D => this%D, &
-              abx1 => this%abx1, abx2 => this%abx2, &
+   !  !! estimate by the difference of the extrapolated and the solved advection
+   !  associate(u => this%u, v => this%v, w => this%w, &
+   !            D => this%D, &
+   !            abx1 => this%abx1, abx2 => this%abx2, &
+   !            coef => this%coef, &
+   !            rho => this%fluid%rho, dt => time%dt, &
+   !            adv => this%adv, &
+   !            makeext => this%makeext, ext_bdf => this%ext_bdf, &
+   !            Xh => this%coef%Xh)
+  
+   !  n = u%dof%size()
+   !  call field_rzero(D(1))
+   !  call field_rzero(D(2))
+   !  call field_rzero(D(3))
+   !  call adv%compute(u, v, w, D(1), D(2), D(3), Xh, coef, n)
+   !  call makeext%compute_fluid(abx1(1), abx1(2), abx1(3), abx2(1), abx2(2), &
+   !          abx2(3), D(1)%x, D(2)%x, D(3)%x, &
+   !          rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
+
+   !  end associate
+
+    ! estimate by ds/dt + ui ds/dxi
+    associate(wa => this%wa(1), E => this%E(1), Elag => this%Elag(1), &
               coef => this%coef, &
               rho => this%fluid%rho, dt => time%dt, &
-              adv => this%adv, &
-              makeext => this%makeext, ext_bdf => this%ext_bdf, &
-              Xh => this%coef%Xh)
-  
-    n = u%dof%size()
-    call field_rzero(D(1))
-    call field_rzero(D(2))
-    call field_rzero(D(3))
-    call adv%compute(u, v, w, D(1), D(2), D(3), Xh, coef, n)
-    call makeext%compute_fluid(abx1(1), abx1(2), abx1(3), abx2(1), abx2(2), &
-            abx2(3), D(1)%x, D(2)%x, D(3)%x, &
-            rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
+              makebdf => this%makebdf, &
+              ext_bdf => this%ext_bdf)
 
+     n = wa%dof%size()
+     call field_rzero(wa)
+     call makebdf%compute_scalar(Elag, wa%x, E, coef%B, &
+               rho%x(1,1,1,1), dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+     call Elag%update()
+     
     end associate
     
     do i = 1, this%n_scalars
-       !! estimate by the difference of the extrapolated and the solved advection
-       associate(u => this%u, v => this%v, w => this%w, &
-                 s => this%s(i)%ptr, D => this%D(i+3), &
-                 abx1 => this%abx1(i+3), abx2 => this%abx2(i+3), &
-                 coef => this%coef, &
-                 rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
-                 adv => this%adv, &
-                 makeext => this%makeext, ext_bdf => this%ext_bdf, &
-                 Xh => this%coef%Xh)
-      
-       n = s%dof%size()
-       call field_rzero(D)
-       call adv%compute_scalar(u, v, w, s, D, &
-                Xh, coef, n)
-       call makeext%compute_scalar(abx1, abx2, D%x, &
-                rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
-
-       end associate
-       !  !! estimate by ds/dt + ui ds/dxi
-      !  associate(s => this%s(i)%ptr, wa => this%wa(i), &
+      !  !! estimate by the difference of the extrapolated and the solved advection
+      !  associate(u => this%u, v => this%v, w => this%w, &
+      !            s => this%s(i)%ptr, D => this%D(i+3), &
+      !            abx1 => this%abx1(i+3), abx2 => this%abx2(i+3), &
       !            coef => this%coef, &
       !            rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
-      !            makebdf => this%makebdf, &
-      !            slag => this%slag(i)%ptr, ext_bdf => this%ext_bdf)
+      !            adv => this%adv, &
+      !            makeext => this%makeext, ext_bdf => this%ext_bdf, &
+      !            Xh => this%coef%Xh)
       
       !  n = s%dof%size()
-      !  call field_rzero(wa)
-      !  call makebdf%compute_scalar(slag, wa%x, s, coef%B, rho%x(1,1,1,1), &
-      !          dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+      !  call field_rzero(D)
+      !  call adv%compute_scalar(u, v, w, s, D, &
+      !           Xh, coef, n)
+      !  call makeext%compute_scalar(abx1, abx2, D%x, &
+      !           rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
+
       !  end associate
+       !! estimate by ds/dt + ui ds/dxi
+       associate(wa => this%wa(i+1), &
+                 coef => this%coef, &
+                 rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
+                 makebdf => this%makebdf, E => this%E(i+1), &
+                 Elag => this%Elag(i+1), ext_bdf => this%ext_bdf)
+      
+       call field_rzero(wa)
+       call makebdf%compute_scalar(Elag, wa%x, E, coef%B, rho%x(1,1,1,1), &
+               dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(wa%x_d, coef%B_d, n)
+       else
+          call invcol2(wa%x, coef%B, n)
+       end if
+       call Elag%update()
+
+       end associate
     end do
 
   end subroutine residual_viscosity_preprocess
@@ -300,168 +335,212 @@ contains
   subroutine residual_viscosity_compute(this, time)
     class(residual_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    type(field_ptr_t) :: ta(3+this%n_scalars) ! temporal array
+    type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
     real(kind=rp) :: u_avg, v_avg, w_avg
     real(kind=rp) :: s_avg(this%n_scalars)
-    integer :: temp_indices(3+this%n_scalars)
+    integer :: temp_indices(1+this%n_scalars)
     integer :: i, j, n
-    real(kind=rp) :: scaling_uvw(3), scaling_s(this%n_scalars)
+    real(kind=rp) :: scaling_uvw(1), scaling_s(this%n_scalars)
 
-    do i = 1, 3+this%n_scalars
+    do i = 1, 1+this%n_scalars
        call neko_scratch_registry%request_field(ta(i)%ptr, temp_indices(i))
     end do
 
-    !! estimate by the difference of the extrapolated and the solved advection
-    associate(ext_bdf => this%ext_bdf, &
-              dt => time%dt, coef => this%coef, D => this%D, &
-              adv => this%adv, gs => this%coef%gs_h, ta => ta, &
-              u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-              residual_viscosity => this%residual_viscosity)
+   !  !! estimate by the difference of the extrapolated and the solved advection
+   !  associate(ext_bdf => this%ext_bdf, &
+   !            dt => time%dt, coef => this%coef, D => this%D, &
+   !            adv => this%adv, gs => this%coef%gs_h, ta => ta, &
+   !            u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+   !            residual_viscosity => this%residual_viscosity)
+
+   !  n = u%dof%size()
+   !  call field_rzero(ta(1)%ptr)
+   !  call field_rzero(ta(2)%ptr)
+   !  call field_rzero(ta(3)%ptr)
+   !  call adv%compute(u, v, w, ta(1)%ptr, ta(2)%ptr, ta(3)%ptr, Xh, coef, n)
+   !  call field_sub2(D(1), ta(1)%ptr, n)
+   !  call field_sub2(D(2), ta(2)%ptr, n)
+   !  call field_sub2(D(3), ta(3)%ptr, n)
+   !  if (NEKO_BCKND_DEVICE .eq. 1) then
+   !    call device_invcol2(D(1)%x_d, coef%B_d, n)
+   !    call device_invcol2(D(2)%x_d, coef%B_d, n)
+   !    call device_invcol2(D(3)%x_d, coef%B_d, n)
+   !  else
+   !    call invcol2(D(1)%x, coef%B, n)
+   !    call invcol2(D(2)%x, coef%B, n)
+   !    call invcol2(D(3)%x, coef%B, n)
+   !  end if
+    
+   !  call gs%op(D(1), GS_OP_ADD)
+   !  call gs%op(D(2), GS_OP_ADD)
+   !  call gs%op(D(3), GS_OP_ADD)
+   !  if (NEKO_BCKND_DEVICE .eq. 1) then
+   !    call device_col2(D(1)%x_d, coef%mult_d, n)
+   !    call device_col2(D(2)%x_d, coef%mult_d, n)
+   !    call device_col2(D(3)%x_d, coef%mult_d, n)
+   !  else
+   !    call col2(D(1)%x, coef%mult, n)
+   !    call col2(D(2)%x, coef%mult, n)
+   !    call col2(D(3)%x, coef%mult, n)
+   !  end if
+   !  call field_copy(residual_viscosity(1)%ptr, D(1))
+   !  call field_copy(residual_viscosity(2)%ptr, D(2))
+   !  call field_copy(residual_viscosity(3)%ptr, D(3))
+   !  call field_absval(residual_viscosity(1)%ptr)
+   !  call field_absval(residual_viscosity(2)%ptr)
+   !  call field_absval(residual_viscosity(3)%ptr)
+
+   !  call field_cmult(residual_viscosity(1)%ptr, this%c_E)
+   !  call field_cmult(residual_viscosity(2)%ptr, this%c_E)
+   !  call field_cmult(residual_viscosity(3)%ptr, this%c_E)
+
+   !  u_avg = - glsc2(u%x, coef%B, n) / this%volume_domain
+   !  v_avg = - glsc2(v%x, coef%B, n) / this%volume_domain
+   !  w_avg = - glsc2(w%x, coef%B, n) / this%volume_domain
+   !  call field_cadd2(this%u_var, u, u_avg)
+   !  call field_cadd2(this%v_var, v, v_avg)
+   !  call field_cadd2(this%w_var, w, w_avg)
+   !  call field_absval(this%u_var)
+   !  call field_absval(this%v_var)
+   !  call field_absval(this%w_var)
+
+   !  scaling_uvw(1) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
+   !                   glmax(this%u_var%x, u%dof%size())
+   !  scaling_uvw(2) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
+   !                   glmax(this%v_var%x, u%dof%size())
+   !  scaling_uvw(3) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
+   !                   glmax(this%w_var%x, u%dof%size())
+
+   !  end associate
+
+    ! estimate by ds/dt + ui ds/dxi
+    associate(u => this%u, v => this%v, w => this%w, E => this%E(1), ta => ta(1)%ptr, &
+             ext_bdf => this%ext_bdf, &
+             dt => time%dt, coef => this%coef, wa => this%wa(1), &
+             D => this%D(1), gs => this%coef%gs_h, &
+             adv => this%adv, &
+             Xh => this%coef%Xh, &
+             residual_viscosity => this%residual_viscosity(1)%ptr)
 
     n = u%dof%size()
-    call field_rzero(ta(1)%ptr)
-    call field_rzero(ta(2)%ptr)
-    call field_rzero(ta(3)%ptr)
-    call adv%compute(u, v, w, ta(1)%ptr, ta(2)%ptr, ta(3)%ptr, Xh, coef, n)
-    call field_sub2(D(1), ta(1)%ptr, n)
-    call field_sub2(D(2), ta(2)%ptr, n)
-    call field_sub2(D(3), ta(3)%ptr, n)
+
+    call field_col3(ta, u, u)
+    call field_copy(E, ta)
+    call field_col3(ta, v, v)
+    call field_col2(E, ta)
+    call field_col3(ta, w, w)
+    call field_col2(E, ta)
+    call field_sqrt(E)
+
+    call field_copy(ta, E)
+    call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+    call field_sub2(ta, wa)
+    call field_copy(D, ta)
+
+    ! advection part
+    call field_rzero(ta, n)
+    call adv%compute_scalar(u, v, w, E, ta, &
+         Xh, coef, n)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-      call device_invcol2(D(1)%x_d, coef%B_d, n)
-      call device_invcol2(D(2)%x_d, coef%B_d, n)
-      call device_invcol2(D(3)%x_d, coef%B_d, n)
+       call device_invcol2(ta%x_d, coef%B_d, n)
     else
-      call invcol2(D(1)%x, coef%B, n)
-      call invcol2(D(2)%x, coef%B, n)
-      call invcol2(D(3)%x, coef%B, n)
+       call invcol2(ta%x, coef%B, n)
     end if
-    
-    call gs%op(D(1), GS_OP_ADD)
-    call gs%op(D(2), GS_OP_ADD)
-    call gs%op(D(3), GS_OP_ADD)
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-      call device_col2(D(1)%x_d, coef%mult_d, n)
-      call device_col2(D(2)%x_d, coef%mult_d, n)
-      call device_col2(D(3)%x_d, coef%mult_d, n)
-    else
-      call col2(D(1)%x, coef%mult, n)
-      call col2(D(2)%x, coef%mult, n)
-      call col2(D(3)%x, coef%mult, n)
-    end if
-    call field_copy(residual_viscosity(1)%ptr, D(1))
-    call field_copy(residual_viscosity(2)%ptr, D(2))
-    call field_copy(residual_viscosity(3)%ptr, D(3))
-    call field_absval(residual_viscosity(1)%ptr)
-    call field_absval(residual_viscosity(2)%ptr)
-    call field_absval(residual_viscosity(3)%ptr)
+    call field_sub2(D, ta, n)
+    call field_copy(residual_viscosity, D)
+    call field_absval(residual_viscosity)
 
-    call field_cmult(residual_viscosity(1)%ptr, this%c_E)
-    call field_cmult(residual_viscosity(2)%ptr, this%c_E)
-    call field_cmult(residual_viscosity(3)%ptr, this%c_E)
+    ! it should be scaled by f(ext_bdf%diffusion_time_order)
+    ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
+    ! Could be determined afterwards
+    call field_cmult(residual_viscosity, &
+         this%c_E)
 
-    u_avg = - glsc2(u%x, coef%B, n) / this%volume_domain
-    v_avg = - glsc2(v%x, coef%B, n) / this%volume_domain
-    w_avg = - glsc2(w%x, coef%B, n) / this%volume_domain
-    call field_cadd2(this%u_var, u, u_avg)
-    call field_cadd2(this%v_var, v, v_avg)
-    call field_cadd2(this%w_var, w, w_avg)
-    call field_absval(this%u_var)
-    call field_absval(this%v_var)
-    call field_absval(this%w_var)
-
-    scaling_uvw(1) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-                     glmax(this%u_var%x, u%dof%size())
-    scaling_uvw(2) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-                     glmax(this%v_var%x, u%dof%size())
-    scaling_uvw(3) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-                     glmax(this%w_var%x, u%dof%size())
-
-    end associate
+   end associate
 
     do i = 1, this%n_scalars
 
-       !! estimate by the difference of the extrapolated and the solved advection
-       associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
-                 dt => time%dt, coef => this%coef, D => this%D(i+3), &
-                 adv => this%adv, gs => this%coef%gs_h, ta => ta(i+3)%ptr, &
-                 u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-                 s_avg => s_avg(i), s_var => this%s_var(i), &
-                 scaling_s => scaling_s(i), &
-                 residual_viscosity => this%residual_viscosity(i+3)%ptr)
-
-       n = s%dof%size()
-       call field_rzero(ta)
-       call adv%compute_scalar(u, v, w, s, ta, Xh, coef, n)
-       call field_sub2(D, ta, n)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_invcol2(D%x_d, coef%B_d, n)
-       else
-          call invcol2(D%x, coef%B, n)
-       end if
-       
-       call gs%op(D, GS_OP_ADD)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(D%x_d, coef%mult_d, n)
-       else
-          call col2(D%x, coef%mult, n)
-       end if
-       call field_absval(D)
-
-       
-       s_avg = - glsc2(s%x, coef%B, n) / this%volume_domain
-       call field_cadd2(s_var, s, s_avg)
-       call field_absval(s_var)
-
-       scaling_s = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-                     glmax(s_var%x, u%dof%size())
-
-       ! From now on, we use the D field to store the residual viscosity
-       call field_cmult(D, scaling_s)
-       call field_col2(D, this%h_np2)
-       do j = 1, ext_bdf%diffusion_time_order
-          call field_invcol2(D, this%vel_mag)
-       end do
-       end associate
-       !! estimate by ds/dt + ui ds/dxi
+      !  !! estimate by the difference of the extrapolated and the solved advection
       !  associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
-      !            dt => time%dt, coef => this%coef, wa => this%wa(i), &
-      !            D => this%D(i), gs => this%coef%gs_h, &
-      !            adv => this%adv, &
+      !            dt => time%dt, coef => this%coef, D => this%D(i+3), &
+      !            adv => this%adv, gs => this%coef%gs_h, ta => ta(i+3)%ptr, &
       !            u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-      !            residual_viscosity => this%residual_viscosity(i)%ptr)
+      !            s_avg => s_avg(i), s_var => this%s_var(i), &
+      !            scaling_s => scaling_s(i), &
+      !            residual_viscosity => this%residual_viscosity(i+3)%ptr)
 
       !  n = s%dof%size()
-
-      !  call field_copy(ta, s)
-      !  call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_invcol2(wa%x_d, coef%B_d, n)
-      !  else
-      !     call invcol2(wa%x, coef%B, n)
-      !  end if
-      !  call field_sub2(ta, wa)
-      !  call field_copy(D, ta)
-
-      !  ! advection part
-      !  call field_rzero(ta, n)
-      !  call adv%compute_scalar(u, v, w, s, ta, &
-      !         Xh, coef, n)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_invcol2(ta%x_d, coef%B_d, n)
-      !  else
-      !     call invcol2(ta%x, coef%B, n)
-      !  end if
+      !  call field_rzero(ta)
+      !  call adv%compute_scalar(u, v, w, s, ta, Xh, coef, n)
       !  call field_sub2(D, ta, n)
-      !  call field_copy(residual_viscosity, D)
-      !  call field_absval(residual_viscosity)
+      !  if (NEKO_BCKND_DEVICE .eq. 1) then
+      !     call device_invcol2(D%x_d, coef%B_d, n)
+      !  else
+      !     call invcol2(D%x, coef%B, n)
+      !  end if
+       
+      !  call gs%op(D, GS_OP_ADD)
+      !  if (NEKO_BCKND_DEVICE .eq. 1) then
+      !     call device_col2(D%x_d, coef%mult_d, n)
+      !  else
+      !     call col2(D%x, coef%mult, n)
+      !  end if
+      !  call field_absval(D)
 
-      !  ! it should be scaled by f(ext_bdf%diffusion_time_order)
-      !  ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
-      !  ! Could be determined afterwards
-      !  call field_cmult(residual_viscosity, &
-      !      this%c_E)
+       
+      !  s_avg = - glsc2(s%x, coef%B, n) / this%volume_domain
+      !  call field_cadd2(s_var, s, s_avg)
+      !  call field_absval(s_var)
 
+      !  scaling_s = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
+      !                glmax(s_var%x, u%dof%size())
+
+      !  ! From now on, we use the D field to store the residual viscosity
+      !  call field_cmult(D, scaling_s)
+      !  call field_col2(D, this%h_np2)
+      !  do j = 1, ext_bdf%diffusion_time_order
+      !     call field_invcol2(D, this%vel_mag)
+      !  end do
       !  end associate
+
+       ! estimate by ds/dt + ui ds/dxi
+       associate(s => this%s(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
+                 ext_bdf => this%ext_bdf, &
+                 dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
+                 D => this%D(i+1), gs => this%coef%gs_h, &
+                 adv => this%adv, &
+                 u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+                 residual_viscosity => this%residual_viscosity(i+1)%ptr)
+
+       n = s%dof%size()
+
+       call field_copy(E, s)
+       call field_absval(E)
+       call field_copy(ta, E)
+       call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+       call field_sub2(ta, wa)
+       call field_copy(D, ta)
+
+       ! advection part
+       call field_rzero(ta, n)
+       call adv%compute_scalar(u, v, w, E, ta, &
+              Xh, coef, n)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_invcol2(ta%x_d, coef%B_d, n)
+       else
+          call invcol2(ta%x, coef%B, n)
+       end if
+       call field_sub2(D, ta, n)
+       call field_copy(residual_viscosity, D)
+       call field_absval(residual_viscosity)
+
+       ! it should be scaled by f(ext_bdf%diffusion_time_order)
+       ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
+       ! Could be determined afterwards
+       call field_cmult(residual_viscosity, &
+           this%c_E)
+
+       end associate
     end do
 
     call neko_scratch_registry%relinquish_field(temp_indices)

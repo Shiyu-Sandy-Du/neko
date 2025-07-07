@@ -113,7 +113,7 @@ module math
   add3s2, subcol4, addcol3, addcol4, ascol5, p_update, x_update, glsc2, &
   glsc3, glsc4, sort, masked_copy, cfill_mask, relcmp, glimax, glimin, &
   swap, reord, flipv, cadd2, masked_gather_copy, absval, pwmax, pwmin, &
-  masked_scatter_copy, cdiv, cdiv2
+  masked_scatter_copy, cdiv, cdiv2, square_root
 
 contains
 
@@ -1232,6 +1232,19 @@ contains
        a(i) = abs(a(i))
     end do
   end subroutine absval
+
+  !> Take the square root of an array
+  !! @param[inout]   a     vector to be manipulated
+  !! @param[in]      n     array size
+  subroutine square_root(a, n)
+    integer, intent(in) :: n
+    real(kind=rp), dimension(n), intent(inout) :: a
+    integer :: i
+    do i = 1, n
+       a(i) = sqrt(a(i))
+    end do
+  end subroutine square_root
+
 
   ! ========================================================================== !
   ! Point-wise operations
