@@ -114,6 +114,9 @@ module fluid_scheme_incompressible
      !> The stabilization viscosity field name
      character(len=:), allocatable :: nue_field_name
 
+     ! The total viscosity field
+     type(field_t), pointer :: mu_tot => null()
+
      !> Global number of GLL points for the fluid (not unique)
      integer(kind=i8) :: glb_n_points
      !> Global number of GLL points for the fluid (unique)
@@ -197,7 +200,7 @@ contains
     call this%c_Xh%init(this%gs_Xh)
 
     ! Local scratch registry
-    this%scratch = scratch_registry_t(this%dm_Xh, 10, 2)
+    call this%scratch%init(this%dm_Xh, 10, 2)
 
     ! Assign a name
     call json_get_or_default(params, 'case.fluid.name', this%name, "fluid")
@@ -419,9 +422,9 @@ contains
     nullify(this%f_x)
     nullify(this%f_y)
     nullify(this%f_z)
-
-    call this%rho%free()
-    call this%mu%free()
+    nullify(this%rho)
+    nullify(this%mu)
+    nullify(this%mu_tot)
 
   end subroutine fluid_scheme_free
 
@@ -599,12 +602,23 @@ contains
 
     if (len(trim(this%nut_field_name)) > 0) then
        nut => neko_field_registry%get_field(this%nut_field_name)
-       call field_addcol3(this%mu, nut, this%rho)
-    end if
-
-    if (len(trim(this%nue_field_name)) > 0) then
-       nue => neko_field_registry%get_field(this%nue_field_name)
-       call field_addcol3(this%mu, nue, this%rho)
+       ! Copy material property
+       call field_copy(this%mu_tot, this%mu)
+       ! Add turbulent contribution
+       call field_addcol3(this%mu_tot, nut, this%rho)
+       if (len(trim(this%nue_field_name)) > 0) then
+          nue => neko_field_registry%get_field(this%nue_field_name)
+          ! Add entropy viscosity contribution
+          call field_addcol3(this%mu_tot, nue, this%rho)
+       end if
+    else
+       if (len(trim(this%nue_field_name)) > 0) then
+          ! Copy material property
+          call field_copy(this%mu_tot, this%mu)
+          ! Add entropy viscosity contribution
+          nue => neko_field_registry%get_field(this%nue_field_name)
+          call field_addcol3(this%mu_tot, nue, this%rho)
+       end if
     end if
 
     ! Since mu, rho is a field_t, and we use the %x(1,1,1,1)
@@ -613,9 +627,7 @@ contains
     ! values are also filled
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_memcpy(this%rho%x, this%rho%x_d, this%rho%size(), &
-            DEVICE_TO_HOST, sync = .false.)
-       call device_memcpy(this%mu%x, this%mu%x_d, this%mu%size(), &
-            DEVICE_TO_HOST, sync = .false.)
+            DEVICE_TO_HOST, sync=.false.)
     end if
   end subroutine fluid_scheme_update_material_properties
 
@@ -623,7 +635,7 @@ contains
   !! @param params The case paramter file.
   !! @param user The user interface.
   subroutine fluid_scheme_set_material_properties(this, params, user)
-    class(fluid_scheme_incompressible_t), intent(inout) :: this
+    class(fluid_scheme_incompressible_t), target, intent(inout) :: this
     type(json_file), intent(inout) :: params
     type(user_t), target, intent(in) :: user
     character(len=LOG_SIZE) :: log_buf
@@ -636,11 +648,16 @@ contains
 
     dummy_mp_ptr => dummy_user_material_properties
 
-    call this%mu%init(this%dm_Xh, "mu")
-    call this%rho%init(this%dm_Xh, "rho")
+    call neko_field_registry%add_field(this%dm_Xh, this%name // "_mu")
+    call neko_field_registry%add_field(this%dm_Xh, this%name // "_mu_tot")
+    call neko_field_registry%add_field(this%dm_Xh, this%name // "_rho")
+    this%mu => neko_field_registry%get_field(this%name // "_mu")
+    this%mu_tot => neko_field_registry%get_field(this%name // "_mu_tot")
+    this%rho => neko_field_registry%get_field(this%name // "_rho")
+
     call this%material_properties%init(2)
-    call this%material_properties%assign_to_field(1, this%rho)
-    call this%material_properties%assign_to_field(2, this%mu)
+    call this%material_properties%assign(1, this%rho)
+    call this%material_properties%assign(2, this%mu)
 
     if (.not. associated(user%material_properties, dummy_mp_ptr)) then
 
@@ -693,6 +710,7 @@ contains
     if (associated(user%material_properties, dummy_mp_ptr)) then
        ! Fill mu and rho field with the physical value
        call field_cfill(this%mu, const_mu)
+       call field_cfill(this%mu_tot, const_mu)
        call field_cfill(this%rho, const_rho)
 
 
@@ -702,6 +720,9 @@ contains
        call neko_log%message(log_buf)
     end if
 
+    ! Copy over material property to the total one
+    call field_copy(this%mu_tot, this%mu)
+
     ! Since mu, rho is a field_t, and we use the %x(1,1,1,1)
     ! host array data to pass constant density and viscosity
     ! to some routines, we need to make sure that the host
@@ -710,6 +731,8 @@ contains
        call device_memcpy(this%rho%x, this%rho%x_d, this%rho%size(), &
             DEVICE_TO_HOST, sync = .false.)
        call device_memcpy(this%mu%x, this%mu%x_d, this%mu%size(), &
+            DEVICE_TO_HOST, sync = .false.)
+       call device_memcpy(this%mu_tot%x, this%mu_tot%x_d, this%mu%size(), &
             DEVICE_TO_HOST, sync = .false.)
     end if
   end subroutine fluid_scheme_set_material_properties

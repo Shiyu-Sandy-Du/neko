@@ -101,8 +101,9 @@ contains
   !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
   !! @param coef The SEM coeffs.
-  !! @param variable_name The name of the variable for which the source term is
-  subroutine brinkman_source_term_init_from_json(this, json, fields, coef, variable_name)
+  !! @param variable_name The name of the variable where the source term acts.
+  subroutine brinkman_source_term_init_from_json(this, json, fields, coef, &
+       variable_name)
     class(brinkman_source_term_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(field_list_t), intent(in), target :: fields
@@ -303,7 +304,7 @@ contains
     ! ------------------------------------------------------------------------ !
     ! Load the immersed boundary mesh
 
-    mesh_file = file_t(mesh_file_name)
+    call mesh_file%init(mesh_file_name)
     call mesh_file%read(boundary_mesh)
 
     if (boundary_mesh%nelv .eq. 0) then

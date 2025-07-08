@@ -181,7 +181,7 @@ contains
     end if
 
     call this%init_from_components(coef, fields, start_time, end_time, a, b, &
-    variable_name)
+         variable_name)
 
   end subroutine gradient_jump_penalty_init
 
@@ -193,7 +193,7 @@ contains
   !! @param end_time When to stop adding the source term.
   !! @param variable_name The name of the variable for this source term.
   subroutine gradient_jump_penalty_init_from_components(this, coef, fields, &
-  start_time, end_time, a, b, variable_name)
+       start_time, end_time, a, b, variable_name)
     class(gradient_jump_penalty_t), intent(inout) :: this
     type(coef_t), target, intent(in) :: coef
     type(field_list_t), intent(in), target :: fields
@@ -216,7 +216,8 @@ contains
 
     if (fields%size() .eq. 1) then
        call this%s_fields%init(1)
-       call this%s_fields%assign(1, neko_field_registry%get_field(variable_name))
+       call this%s_fields%assign(1, &
+            neko_field_registry%get_field(variable_name))
     else if (fields%size() .eq. 3) then
        call this%s_fields%init(3)
        call this%s_fields%assign(1, this%u)
