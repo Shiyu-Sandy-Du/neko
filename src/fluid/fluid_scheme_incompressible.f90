@@ -112,9 +112,7 @@ module fluid_scheme_incompressible
      character(len=:), allocatable :: nut_field_name
 
      !> The stabilization viscosity field name
-     character(len=:), allocatable :: nus1_field_name
-     character(len=:), allocatable :: nus2_field_name
-     character(len=:), allocatable :: nus3_field_name
+     character(len=:), allocatable :: nue_field_name
 
      !> Global number of GLL points for the fluid (not unique)
      integer(kind=i8) :: glb_n_points
@@ -594,7 +592,7 @@ contains
     class(fluid_scheme_incompressible_t), intent(inout) :: this
     real(kind=rp), intent(in) :: t
     integer, intent(in) :: tstep
-    type(field_t), pointer :: nut, nus1, nus2, nus3
+    type(field_t), pointer :: nut, nue
 
     call this%user_material_properties(t, tstep, this%name, &
          this%material_properties)
@@ -604,17 +602,9 @@ contains
        call field_addcol3(this%mu, nut, this%rho)
     end if
 
-    call field_copy(this%mu1, this%mu)
-    call field_copy(this%mu2, this%mu)
-    call field_copy(this%mu3, this%mu)
-
-    if (len(trim(this%nus1_field_name)) > 0) then
-       nus1 => neko_field_registry%get_field(this%nus1_field_name)
-       nus2 => neko_field_registry%get_field(this%nus2_field_name)
-       nus3 => neko_field_registry%get_field(this%nus3_field_name)
-       call field_addcol3(this%mu1, nus1, this%rho)
-       call field_addcol3(this%mu2, nus2, this%rho)
-       call field_addcol3(this%mu3, nus3, this%rho)
+    if (len(trim(this%nue_field_name)) > 0) then
+       nue => neko_field_registry%get_field(this%nue_field_name)
+       call field_addcol3(this%mu, nue, this%rho)
     end if
 
     ! Since mu, rho is a field_t, and we use the %x(1,1,1,1)
@@ -647,9 +637,6 @@ contains
     dummy_mp_ptr => dummy_user_material_properties
 
     call this%mu%init(this%dm_Xh, "mu")
-    call this%mu1%init(this%dm_Xh, "mu1")
-    call this%mu2%init(this%dm_Xh, "mu2")
-    call this%mu3%init(this%dm_Xh, "mu3")
     call this%rho%init(this%dm_Xh, "rho")
     call this%material_properties%init(2)
     call this%material_properties%assign_to_field(1, this%rho)
@@ -725,9 +712,6 @@ contains
        call device_memcpy(this%mu%x, this%mu%x_d, this%mu%size(), &
             DEVICE_TO_HOST, sync = .false.)
     end if
-    call field_copy(this%mu1, this%mu)
-    call field_copy(this%mu2, this%mu)
-    call field_copy(this%mu3, this%mu)
   end subroutine fluid_scheme_set_material_properties
 
 end module fluid_scheme_incompressible

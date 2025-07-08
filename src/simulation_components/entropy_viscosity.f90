@@ -31,10 +31,10 @@
 ! POSSIBILITY OF SUCH DAMAGE.
 !
 !
-!> A simulation component that computes residual_viscosity
-!! The values are stored in the field registry under the name 'residual_viscosity'
+!> A simulation component that computes entropy_viscosity
+!! The values are stored in the field registry under the name 'entropy_viscosity'
 
-module residual_viscosity
+module entropy_viscosity
   use neko_config, only : NEKO_BCKND_DEVICE
   use num_types, only : rp
   use json_module, only : json_file
@@ -66,7 +66,7 @@ module residual_viscosity
   implicit none
   private
 
-  type, public, extends(simulation_component_t) :: residual_viscosity_t
+  type, public, extends(simulation_component_t) :: entropy_viscosity_t
      !> coefficient
      real(kind=rp) :: c_E
      !> X velocity component.
@@ -95,8 +95,8 @@ module residual_viscosity
      type(field_t) :: h_np2
      real(kind=rp) :: volume_domain
 
-     !> X residual_viscosity component.
-     type(field_ptr_t), allocatable :: residual_viscosity(:)
+     !> X entropy_viscosity component.
+     type(field_ptr_t), allocatable :: entropy_viscosity(:)
 
      !> Residual.
      type(field_t), allocatable :: D(:)
@@ -114,22 +114,22 @@ module residual_viscosity
 
    contains
      !> Constructor from json.
-     procedure, pass(this) :: init => residual_viscosity_init_from_json
+     procedure, pass(this) :: init => entropy_viscosity_init_from_json
      !> Common part of both constructors.
-     procedure, private, pass(this) :: init_common => residual_viscosity_init_common
+     procedure, private, pass(this) :: init_common => entropy_viscosity_init_common
      !> Destructor.
-     procedure, pass(this) :: free => residual_viscosity_free
+     procedure, pass(this) :: free => entropy_viscosity_free
      !> Part of the residual viscosity computation before the time stepping
-     procedure, pass(this) :: preprocess_ => residual_viscosity_preprocess
+     procedure, pass(this) :: preprocess_ => entropy_viscosity_preprocess
      !> Part of the residual viscosity computation after the time stepping
-     procedure, pass(this) :: compute_ => residual_viscosity_compute
-  end type residual_viscosity_t
+     procedure, pass(this) :: compute_ => entropy_viscosity_compute
+  end type entropy_viscosity_t
 
 contains
 
   !> Constructor from json.
-  subroutine residual_viscosity_init_from_json(this, json, case)
-    class(residual_viscosity_t), intent(inout) :: this
+  subroutine entropy_viscosity_init_from_json(this, json, case)
+    class(entropy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
 
@@ -138,11 +138,11 @@ contains
     call json_get(json, "c_E", this%c_E)
 
     call this%init_common(json, case)
-  end subroutine residual_viscosity_init_from_json
+  end subroutine entropy_viscosity_init_from_json
 
   !> Common part of constructors.
-  subroutine residual_viscosity_init_common(this, json, case)
-    class(residual_viscosity_t), intent(inout) :: this
+  subroutine entropy_viscosity_init_common(this, json, case)
+    class(entropy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
     character(len=20), allocatable :: fields(:)
@@ -156,14 +156,12 @@ contains
        this%n_scalars = 0
     end if
     allocate(fields(1+this%n_scalars))
-    fields(1) = 'res_visc_vel'
-   !  fields(2) = 'res_visc_v'
-   !  fields(3) = 'res_visc_w'
+    fields(1) = 'entr_visc_vel'
     do k = 1, this%n_scalars
-       write(fields(k+1), '(A,I0)') 'res_visc_s', k
+       write(fields(k+1), '(A,I0)') 'entr_visc_s', k
     end do
     ! Add fields keyword to the json so that the field_writer picks it up.
-    ! Will also add fields to 	simulation_components/residual_viscosity.f90\the registry.
+    ! Will also add fields to 	simulation_components/entropy_viscosity.f90\the registry.
     call json%add("fields", fields)
     call this%writer%init(json, case)
 
@@ -177,7 +175,7 @@ contains
       this%adv => f1%adv
       this%ext_bdf => f1%ext_bdf
     class default
-      call neko_error("For fluid, residual &
+      call neko_error("For fluid, entropy &
       &viscosity currently only support pnpn scheme")
     end select
 
@@ -205,10 +203,10 @@ contains
     allocate(this%abx1(1+this%n_scalars))
     allocate(this%abx2(1+this%n_scalars))
     
-    allocate(this%residual_viscosity(1+this%n_scalars))
+    allocate(this%entropy_viscosity(1+this%n_scalars))
 
     do k = 1, 1+this%n_scalars
-       this%residual_viscosity(k)%ptr => &
+       this%entropy_viscosity(k)%ptr => &
               neko_field_registry%get_field(fields(k))
 
        call this%E(k)%init(this%u%dof)
@@ -237,43 +235,22 @@ contains
 
     this%volume_domain = glsum(this%coef%B, this%u%dof%size())
 
-  end subroutine residual_viscosity_init_common
+  end subroutine entropy_viscosity_init_common
 
   !> Destructor.
-  subroutine residual_viscosity_free(this)
-    class(residual_viscosity_t), intent(inout) :: this
+  subroutine entropy_viscosity_free(this)
+    class(entropy_viscosity_t), intent(inout) :: this
     call this%free_base()
-  end subroutine residual_viscosity_free
+  end subroutine entropy_viscosity_free
 
-  !> Part of the residual_viscosity computation before the time stepping.
+  !> Part of the entropy_viscosity computation before the time stepping.
   !! @param time The time state.
-  subroutine residual_viscosity_preprocess(this, time)
-    class(residual_viscosity_t), intent(inout) :: this
+  subroutine entropy_viscosity_preprocess(this, time)
+    class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     integer :: i, n
 
-   !  !! estimate by the difference of the extrapolated and the solved advection
-   !  associate(u => this%u, v => this%v, w => this%w, &
-   !            D => this%D, &
-   !            abx1 => this%abx1, abx2 => this%abx2, &
-   !            coef => this%coef, &
-   !            rho => this%fluid%rho, dt => time%dt, &
-   !            adv => this%adv, &
-   !            makeext => this%makeext, ext_bdf => this%ext_bdf, &
-   !            Xh => this%coef%Xh)
-  
-   !  n = u%dof%size()
-   !  call field_rzero(D(1))
-   !  call field_rzero(D(2))
-   !  call field_rzero(D(3))
-   !  call adv%compute(u, v, w, D(1), D(2), D(3), Xh, coef, n)
-   !  call makeext%compute_fluid(abx1(1), abx1(2), abx1(3), abx2(1), abx2(2), &
-   !          abx2(3), D(1)%x, D(2)%x, D(3)%x, &
-   !          rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
-
-   !  end associate
-
-    ! estimate by ds/dt + ui ds/dxi
+    ! Time lag part for the BDF scheme of dE/dt
     associate(wa => this%wa(1), E => this%E(1), Elag => this%Elag(1), &
               coef => this%coef, &
               rho => this%fluid%rho, dt => time%dt, &
@@ -289,25 +266,7 @@ contains
     end associate
     
     do i = 1, this%n_scalars
-      !  !! estimate by the difference of the extrapolated and the solved advection
-      !  associate(u => this%u, v => this%v, w => this%w, &
-      !            s => this%s(i)%ptr, D => this%D(i+3), &
-      !            abx1 => this%abx1(i+3), abx2 => this%abx2(i+3), &
-      !            coef => this%coef, &
-      !            rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
-      !            adv => this%adv, &
-      !            makeext => this%makeext, ext_bdf => this%ext_bdf, &
-      !            Xh => this%coef%Xh)
-      
-      !  n = s%dof%size()
-      !  call field_rzero(D)
-      !  call adv%compute_scalar(u, v, w, s, D, &
-      !           Xh, coef, n)
-      !  call makeext%compute_scalar(abx1, abx2, D%x, &
-      !           rho%x(1,1,1,1), ext_bdf%advection_coeffs, n)
-
-      !  end associate
-       !! estimate by ds/dt + ui ds/dxi
+       ! Time lag part for the BDF scheme of dE/dt
        associate(wa => this%wa(i+1), &
                  coef => this%coef, &
                  rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
@@ -327,12 +286,12 @@ contains
        end associate
     end do
 
-  end subroutine residual_viscosity_preprocess
+  end subroutine entropy_viscosity_preprocess
 
-  !> Part of the residual_viscosity computation after the time stepping.
+  !> Part of the entropy_viscosity computation after the time stepping.
   !! @param time The time state.
-  subroutine residual_viscosity_compute(this, time)
-    class(residual_viscosity_t), intent(inout) :: this
+  subroutine entropy_viscosity_compute(this, time)
+    class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
     real(kind=rp) :: u_avg, v_avg, w_avg
@@ -345,81 +304,14 @@ contains
        call neko_scratch_registry%request_field(ta(i)%ptr, temp_indices(i))
     end do
 
-   !  !! estimate by the difference of the extrapolated and the solved advection
-   !  associate(ext_bdf => this%ext_bdf, &
-   !            dt => time%dt, coef => this%coef, D => this%D, &
-   !            adv => this%adv, gs => this%coef%gs_h, ta => ta, &
-   !            u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-   !            residual_viscosity => this%residual_viscosity)
-
-   !  n = u%dof%size()
-   !  call field_rzero(ta(1)%ptr)
-   !  call field_rzero(ta(2)%ptr)
-   !  call field_rzero(ta(3)%ptr)
-   !  call adv%compute(u, v, w, ta(1)%ptr, ta(2)%ptr, ta(3)%ptr, Xh, coef, n)
-   !  call field_sub2(D(1), ta(1)%ptr, n)
-   !  call field_sub2(D(2), ta(2)%ptr, n)
-   !  call field_sub2(D(3), ta(3)%ptr, n)
-   !  if (NEKO_BCKND_DEVICE .eq. 1) then
-   !    call device_invcol2(D(1)%x_d, coef%B_d, n)
-   !    call device_invcol2(D(2)%x_d, coef%B_d, n)
-   !    call device_invcol2(D(3)%x_d, coef%B_d, n)
-   !  else
-   !    call invcol2(D(1)%x, coef%B, n)
-   !    call invcol2(D(2)%x, coef%B, n)
-   !    call invcol2(D(3)%x, coef%B, n)
-   !  end if
-    
-   !  call gs%op(D(1), GS_OP_ADD)
-   !  call gs%op(D(2), GS_OP_ADD)
-   !  call gs%op(D(3), GS_OP_ADD)
-   !  if (NEKO_BCKND_DEVICE .eq. 1) then
-   !    call device_col2(D(1)%x_d, coef%mult_d, n)
-   !    call device_col2(D(2)%x_d, coef%mult_d, n)
-   !    call device_col2(D(3)%x_d, coef%mult_d, n)
-   !  else
-   !    call col2(D(1)%x, coef%mult, n)
-   !    call col2(D(2)%x, coef%mult, n)
-   !    call col2(D(3)%x, coef%mult, n)
-   !  end if
-   !  call field_copy(residual_viscosity(1)%ptr, D(1))
-   !  call field_copy(residual_viscosity(2)%ptr, D(2))
-   !  call field_copy(residual_viscosity(3)%ptr, D(3))
-   !  call field_absval(residual_viscosity(1)%ptr)
-   !  call field_absval(residual_viscosity(2)%ptr)
-   !  call field_absval(residual_viscosity(3)%ptr)
-
-   !  call field_cmult(residual_viscosity(1)%ptr, this%c_E)
-   !  call field_cmult(residual_viscosity(2)%ptr, this%c_E)
-   !  call field_cmult(residual_viscosity(3)%ptr, this%c_E)
-
-   !  u_avg = - glsc2(u%x, coef%B, n) / this%volume_domain
-   !  v_avg = - glsc2(v%x, coef%B, n) / this%volume_domain
-   !  w_avg = - glsc2(w%x, coef%B, n) / this%volume_domain
-   !  call field_cadd2(this%u_var, u, u_avg)
-   !  call field_cadd2(this%v_var, v, v_avg)
-   !  call field_cadd2(this%w_var, w, w_avg)
-   !  call field_absval(this%u_var)
-   !  call field_absval(this%v_var)
-   !  call field_absval(this%w_var)
-
-   !  scaling_uvw(1) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-   !                   glmax(this%u_var%x, u%dof%size())
-   !  scaling_uvw(2) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-   !                   glmax(this%v_var%x, u%dof%size())
-   !  scaling_uvw(3) = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-   !                   glmax(this%w_var%x, u%dof%size())
-
-   !  end associate
-
-    ! estimate by ds/dt + ui ds/dxi
+    ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
     associate(u => this%u, v => this%v, w => this%w, E => this%E(1), ta => ta(1)%ptr, &
              ext_bdf => this%ext_bdf, &
              dt => time%dt, coef => this%coef, wa => this%wa(1), &
              D => this%D(1), gs => this%coef%gs_h, &
              adv => this%adv, &
              Xh => this%coef%Xh, &
-             residual_viscosity => this%residual_viscosity(1)%ptr)
+             entropy_viscosity => this%entropy_viscosity(1)%ptr)
 
     n = u%dof%size()
 
@@ -452,70 +344,23 @@ contains
        call col2(ta%x, coef%mult, n)
     end if
     call field_sub2(D, ta, n)
-    call field_copy(residual_viscosity, D)
-    call field_absval(residual_viscosity)
+    call field_copy(entropy_viscosity, D)
+    call field_absval(entropy_viscosity)
 
-    ! it should be scaled by f(ext_bdf%diffusion_time_order)
-    ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
-    ! Could be determined afterwards
-    call field_cmult(residual_viscosity, &
+    call field_cmult(entropy_viscosity, &
          this%c_E)
 
    end associate
 
     do i = 1, this%n_scalars
-
-      !  !! estimate by the difference of the extrapolated and the solved advection
-      !  associate(s => this%s(i)%ptr, ext_bdf => this%ext_bdf, &
-      !            dt => time%dt, coef => this%coef, D => this%D(i+3), &
-      !            adv => this%adv, gs => this%coef%gs_h, ta => ta(i+3)%ptr, &
-      !            u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-      !            s_avg => s_avg(i), s_var => this%s_var(i), &
-      !            scaling_s => scaling_s(i), &
-      !            residual_viscosity => this%residual_viscosity(i+3)%ptr)
-
-      !  n = s%dof%size()
-      !  call field_rzero(ta)
-      !  call adv%compute_scalar(u, v, w, s, ta, Xh, coef, n)
-      !  call field_sub2(D, ta, n)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_invcol2(D%x_d, coef%B_d, n)
-      !  else
-      !     call invcol2(D%x, coef%B, n)
-      !  end if
-       
-      !  call gs%op(D, GS_OP_ADD)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_col2(D%x_d, coef%mult_d, n)
-      !  else
-      !     call col2(D%x, coef%mult, n)
-      !  end if
-      !  call field_absval(D)
-
-       
-      !  s_avg = - glsc2(s%x, coef%B, n) / this%volume_domain
-      !  call field_cadd2(s_var, s, s_avg)
-      !  call field_absval(s_var)
-
-      !  scaling_s = this%c_E / (dt ** ext_bdf%diffusion_time_order) / &
-      !                glmax(s_var%x, u%dof%size())
-
-      !  ! From now on, we use the D field to store the residual viscosity
-      !  call field_cmult(D, scaling_s)
-      !  call field_col2(D, this%h_np2)
-      !  do j = 1, ext_bdf%diffusion_time_order
-      !     call field_invcol2(D, this%vel_mag)
-      !  end do
-      !  end associate
-
-       ! estimate by ds/dt + ui ds/dxi
+       ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
        associate(s => this%s(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
                  D => this%D(i+1), gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-                 residual_viscosity => this%residual_viscosity(i+1)%ptr)
+                 entropy_viscosity => this%entropy_viscosity(i+1)%ptr)
 
        n = s%dof%size()
 
@@ -542,13 +387,10 @@ contains
           call col2(ta%x, coef%mult, n)
        end if
        call field_sub2(D, ta, n)
-       call field_copy(residual_viscosity, D)
-       call field_absval(residual_viscosity)
+       call field_copy(entropy_viscosity, D)
+       call field_absval(entropy_viscosity)
 
-       ! it should be scaled by f(ext_bdf%diffusion_time_order)
-       ! preliminary, f could be 0.01937*exp(-5.7363*ext_bdf%diffusion_time_order)
-       ! Could be determined afterwards
-       call field_cmult(residual_viscosity, &
+       call field_cmult(entropy_viscosity, &
            this%c_E)
 
        end associate
@@ -556,6 +398,6 @@ contains
 
     call neko_scratch_registry%relinquish_field(temp_indices)
 
-  end subroutine residual_viscosity_compute
+  end subroutine entropy_viscosity_compute
 
-end module residual_viscosity
+end module entropy_viscosity

@@ -53,19 +53,12 @@ module spectral_vanishing_viscosity
     type(coef_t), pointer :: coef
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
-    real(kind=rp), allocatable :: h1_1(:,:,:,:)
-    real(kind=rp), allocatable :: h1_2(:,:,:,:)
-    real(kind=rp), allocatable :: h1_3(:,:,:,:)
     !> a pointer pointing to a potentially variable viscosity field
-    character(len=:), allocatable :: nue_field_name_1
-    character(len=:), allocatable :: nue_field_name_2
-    character(len=:), allocatable :: nue_field_name_3
+    character(len=:), allocatable :: nue_field_name
     type(field_t), pointer :: nue
     type(field_ptr_t) :: nue_uvw(3)
     !> a logical to identify whether h1 is time variable
     logical :: tvar_h1 = .false.
-    !> number of equation coupled
-    integer :: eqn_number
   contains
     procedure, pass(this) :: init => svv_init_from_json
     ! procedure, pass(this) :: free => svv_free
@@ -86,42 +79,15 @@ contains
 
     ! set up the viscosity coefficient field
     allocate(this%h1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
-    allocate(this%h1_1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
-    allocate(this%h1_2(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
-    allocate(this%h1_3(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
     call rzero(this%h1, this%coef%dof%size())
-    call rzero(this%h1_1, this%coef%dof%size())
-    call rzero(this%h1_2, this%coef%dof%size())
-    call rzero(this%h1_3, this%coef%dof%size())
     call json_get(json, "svv.nu.type", nu_type)
     select case (trim(nu_type))
     case ("value")
        call json_get(json, "svv.nu.value", nu_val)
        call cfill(this%h1, nu_val, coef%dof%size())
-       this%eqn_number = 1
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
-       call json_get(json, "svv.eqn_number", this%eqn_number)
-
-       select case (this%eqn_number)
-       case(1)
-          call json_get(json, "svv.nu.field_name", this%nue_field_name_1)
-       case(3)
-          call json_get(json, "svv.nu.field_name", nue_field_name_tmp)
-          allocate(character(len=len_trim(nue_field_name_tmp) + 2) &
-                  :: this%nue_field_name_1)
-          allocate(character(len=len_trim(nue_field_name_tmp) + 2) &
-                  :: this%nue_field_name_2)
-          allocate(character(len=len_trim(nue_field_name_tmp) + 2) &
-                  :: this%nue_field_name_3)
-          write(this%nue_field_name_1, '(A,A)') nue_field_name_tmp, "_u"
-          write(this%nue_field_name_2, '(A,A)') nue_field_name_tmp, "_v"
-          write(this%nue_field_name_3, '(A,A)') nue_field_name_tmp, "_w"
-       case default
-          call neko_error("SVV eqn_number has to be 1 or 3")
-       end select
-
-       
+       call json_get(json, "svv.nu.field_name", this%nue_field_name)
     case default
        call neko_error("Invalid nu.type for svv")
     end select
@@ -147,25 +113,10 @@ contains
     if (.not. this%tvar_h1) return
 
     if (tstep .eq. 1) then
-       if (this%eqn_number .eq. 1) then
-          this%nue => neko_field_registry%get_field(this%nue_field_name_1)
-       else
-          this%nue_uvw(1)%ptr => &
-            neko_field_registry%get_field(this%nue_field_name_1)
-          this%nue_uvw(2)%ptr => &
-            neko_field_registry%get_field(this%nue_field_name_2)
-          this%nue_uvw(3)%ptr => &
-            neko_field_registry%get_field(this%nue_field_name_3)
-       end if
+       this%nue => neko_field_registry%get_field(this%nue_field_name)
     end if
 
-    if (this%eqn_number .eq. 1) then
-       call copy(this%h1, this%nue%x, this%coef%dof%size())
-    else
-       call copy(this%h1_1, this%nue_uvw(1)%ptr%x, this%coef%dof%size())
-       call copy(this%h1_2, this%nue_uvw(2)%ptr%x, this%coef%dof%size())
-       call copy(this%h1_3, this%nue_uvw(3)%ptr%x, this%coef%dof%size())
-    end if
+    call copy(this%h1, this%nue%x, this%coef%dof%size())
 
   end subroutine update_h1
 

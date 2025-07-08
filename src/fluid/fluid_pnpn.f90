@@ -188,8 +188,8 @@ module fluid_pnpn
      !> Whether to use the full formulation of the viscous stress term
      logical :: full_stress_formulation = .false.
 
-     !> Whether to use the residual viscosity stabilization
-     logical :: resi_visc = .false.
+     !> Whether to use the entropy viscosity stabilization
+     logical :: entr_visc = .false.
 
    contains
      !> Constructor.
@@ -281,17 +281,15 @@ contains
 
     call json_get_or_default(params, "case.fluid.full_stress_formulation", &
          this%full_stress_formulation, .false.)
-    call json_get_or_default(params, "case.fluid.residual_viscosity", &
-         this%resi_visc, .false.)
+    call json_get_or_default(params, "case.fluid.entropy_viscosity", &
+         this%entr_visc, .false.)
 
-    if (this%resi_visc) then
-       this%nus1_field_name = "res_visc_u"
-       this%nus2_field_name = "res_visc_v"
-       this%nus3_field_name = "res_visc_w"
+    if (this%entr_visc) then
+       this%nue_field_name = "entr_visc_vel"
     end if
 
-    if (this%full_stress_formulation .and. this%resi_visc) then
-       call neko_error("You cannot use residual viscosity stabilization " // &
+    if (this%full_stress_formulation .and. this%entr_visc) then
+       call neko_error("You cannot use entropy viscosity stabilization " // &
             "with the full stress formulation.")
     end if
 
@@ -307,22 +305,10 @@ contains
     else
        ! Setup backend dependent Ax routines
        if (this%svv_enabled) then
-          if (this%svv%eqn_number .eq. 1) then
-             call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
-                                  svv = this%svv)
-          else if (this%svv%eqn_number .eq. 3) then
-             call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
-                                  svv = this%svv, diffcomp = .true.)
-          else
-             call neko_error("Equation number for SVV has to be 1 or 3")
-          end if
+          call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
+                               svv = this%svv)
        else
-          if (this%resi_visc) then
-             call ax_helm_factory(this%Ax_vel, full_formulation = .false., &
-                  diffcomp = .true.)
-          else
-             call ax_helm_factory(this%Ax_vel, full_formulation = .false.)
-          end if
+          call ax_helm_factory(this%Ax_vel, full_formulation = .false.)
        end if
 
        ! Setup backend dependent prs residual routines
@@ -676,7 +662,6 @@ contains
          pr_projection_dim => this%pr_projection_dim, &
          oifs => this%oifs, &
          rho => this%rho, mu => this%mu, &
-         mu1 => this%mu1, mu2 => this%mu2, mu3 => this%mu3, &
          f_x => this%f_x, f_y => this%f_y, f_z => this%f_z, &
          t => time%t, tstep => time%tstep, dt => time%dt, &
          ext_bdf => this%ext_bdf, event => glb_cmd_event)
@@ -753,7 +738,7 @@ contains
            c_Xh, gs_Xh, &
            this%bc_prs_surface, this%bc_sym_surface,&
            Ax_prs, ext_bdf%diffusion_coeffs(1), dt, &
-           mu1, mu2, mu3, rho, event)
+           mu, rho, event)
 
       ! De-mean the pressure residual when no strong pressure boundaries present
       if (.not. this%prs_dirichlet) call ortho(p_res%x, this%glb_n_points, n)
@@ -797,7 +782,7 @@ contains
            p, &
            f_x, f_y, f_z, &
            c_Xh, msh, Xh, &
-           mu1, mu2, mu3, rho, ext_bdf%diffusion_coeffs(1), &
+           mu, rho, ext_bdf%diffusion_coeffs(1), &
            dt, dm_Xh%size())
 
       call gs_Xh%op(u_res, GS_OP_ADD, event)

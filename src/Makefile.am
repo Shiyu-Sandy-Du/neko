@@ -257,13 +257,9 @@ neko_fortran_SOURCES = \
 	math/ax_helm.f90\
 	math/ax_helm_full.f90\
 	math/ax_helm_svv.f90\
-	math/ax_helm_diffcomp.f90\
-	math/ax_helm_svv_diffcomp.f90\
 	math/bcknd/cpu/ax_helm_cpu.f90\
 	math/bcknd/cpu/ax_helm_full_cpu.f90\
 	math/bcknd/cpu/ax_helm_svv_cpu.f90\
-	math/bcknd/cpu/ax_helm_diffcomp_cpu.f90\
-	math/bcknd/cpu/ax_helm_svv_diffcomp_cpu.f90\
 	math/bcknd/sx/ax_helm_sx.f90\
 	math/bcknd/xsmm/ax_helm_xsmm.F90\
 	math/bcknd/device/ax_helm_device.F90\
@@ -325,7 +321,7 @@ neko_fortran_SOURCES = \
 	simulation_components/derivative_simcomp.f90\
 	simulation_components/les_simcomp.f90\
 	simulation_components/simulation_component_fctry.f90\
-	simulation_components/residual_viscosity.f90\
+	simulation_components/entropy_viscosity.f90\
 	source_terms/source_term.f90\
 	source_terms/coriolis_source_term.f90\
 	source_terms/bcknd/cpu/coriolis_source_term_cpu.f90\

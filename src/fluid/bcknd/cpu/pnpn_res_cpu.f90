@@ -30,7 +30,7 @@ contains
 
   subroutine pnpn_prs_res_cpu_compute(p, p_res, u, v, w, u_e, v_e, w_e, f_x, &
        f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd, dt, &
-       mu1, mu2, mu3, rho, event)
+       mu, rho, event)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -42,7 +42,7 @@ contains
     class(ax_t), intent(inout) :: Ax
     real(kind=rp), intent(in) :: bd
     real(kind=rp), intent(in) :: dt
-    type(field_t), intent(in) :: mu1, mu2, mu3
+    type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
     real(kind=rp) :: dtbd, rho_val
@@ -76,11 +76,11 @@ contains
     ! ta = f / rho - wa * mu / rho * B
     do concurrent (i = 1:n)
        ta1%x(i,1,1,1) = f_x%x(i,1,1,1) / rho_val &
-            - ((wa1%x(i,1,1,1) * (mu1%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa1%x(i,1,1,1) * (mu%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
        ta2%x(i,1,1,1) = f_y%x(i,1,1,1) / rho_val &
-            - ((wa2%x(i,1,1,1) * (mu2%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa2%x(i,1,1,1) * (mu%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
        ta3%x(i,1,1,1) = f_z%x(i,1,1,1) / rho_val &
-            - ((wa3%x(i,1,1,1) * (mu3%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
+            - ((wa3%x(i,1,1,1) * (mu%x(i,1,1,1) / rho_val)) * c_Xh%B(i,1,1,1))
     end do
 
     call gs_Xh%op(ta1, GS_OP_ADD)
@@ -136,7 +136,7 @@ contains
   end subroutine pnpn_prs_res_cpu_compute
 
   subroutine pnpn_vel_res_cpu_compute(Ax, u, v, w, u_res, v_res, w_res, &
-       p, f_x, f_y, f_z, c_Xh, msh, Xh, mu1, mu2, mu3, rho, bd, dt, n)
+       p, f_x, f_y, f_z, c_Xh, msh, Xh, mu, rho, bd, dt, n)
     class(ax_t), intent(in) :: Ax
     type(mesh_t), intent(inout) :: msh
     type(space_t), intent(inout) :: Xh
@@ -144,7 +144,7 @@ contains
     type(field_t), intent(inout) :: u_res, v_res, w_res
     type(field_t), intent(in) :: f_x, f_y, f_z
     type(coef_t), intent(inout) :: c_Xh
-    type(field_t), intent(in) :: mu1, mu2, mu3
+    type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     real(kind=rp), intent(in) :: bd
     real(kind=rp), intent(in) :: dt
@@ -156,13 +156,10 @@ contains
 
     ! We assume the material properties are constant
     rho_val = rho%x(1,1,1,1)
-    mu_val = mu1%x(1,1,1,1)
+    mu_val = mu%x(1,1,1,1)
 
     do concurrent (i = 1:n)
        c_Xh%h1(i,1,1,1) = mu_val
-       c_Xh%h1_1(i,1,1,1) = mu1%x(i,1,1,1)
-       c_Xh%h1_2(i,1,1,1) = mu2%x(i,1,1,1)
-       c_Xh%h1_3(i,1,1,1) = mu3%x(i,1,1,1)
        c_Xh%h2(i,1,1,1) = rho_val * bd / dt
     end do
     c_Xh%ifh2 = .true.

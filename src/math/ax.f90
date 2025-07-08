@@ -54,11 +54,10 @@ module ax_product
      !! @param full_formulation Whether to use the formulation with the full
      !! viscous stress tensor, not assuming constant material properties.
      !! @param svv The object for spectral vanishing viscosity stabilisation
-     module subroutine ax_helm_factory(object, full_formulation, svv, diffcomp)
+     module subroutine ax_helm_factory(object, full_formulation, svv)
        class(ax_t), allocatable, intent(inout) :: object
        logical, intent(in) :: full_formulation
        type(svv_t), intent(in), target, optional :: svv
-       logical, intent(in), optional :: diffcomp
      end subroutine ax_helm_factory
   end interface
 
