@@ -41,7 +41,7 @@ module entropy_viscosity
   use simulation_component, only : simulation_component_t
   use field_registry, only : neko_field_registry
   use scratch_registry, only : neko_scratch_registry
-  use json_utils, only : json_get
+  use json_utils, only : json_get, json_extract_object
   use field, only : field_t, field_ptr_t
   use field_series, only : field_series_t
   use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t
@@ -56,6 +56,7 @@ module entropy_viscosity
   use fluid_pnpn, only : fluid_pnpn_t
   use scalars, only : scalars_t
   use utils, only : neko_error
+  use elementwise_filter, only : elementwise_filter_t
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
                          field_invcol2, field_sqrt
@@ -69,6 +70,9 @@ module entropy_viscosity
   type, public, extends(simulation_component_t) :: entropy_viscosity_t
      !> coefficient
      real(kind=rp) :: c_E
+     !> A low pass filter for the field
+     type(elementwise_filter_t) :: filter
+     logical :: if_filter = .false.
      !> X velocity component.
      type(field_t), pointer :: u
      type(field_t) :: u_var
@@ -145,6 +149,7 @@ contains
     class(entropy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
+    type(json_file) :: json_subdict
     character(len=20), allocatable :: fields(:)
     integer :: e, k
     real(kind=rp) :: volume_element
@@ -166,6 +171,15 @@ contains
     call this%writer%init(json, case)
 
     this%coef => case%fluid%c_Xh
+    
+    ! Set up the filter
+    if (json%valid_path("filter")) then
+       this%if_filter = .true.
+       call json_extract_object(json, "filter", json_subdict)
+       call this%filter%init(json_subdict, this%coef)
+       this%filter%trnsfr(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
+       call this%filter%build_1d()
+    end if
 
     select type (f1 => case%fluid)
     type is (fluid_pnpn_t)
@@ -294,14 +308,25 @@ contains
     class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
+    type(field_ptr_t) :: fs(this%n_scalars)
+    type(field_t), pointer :: fu, fv, fw
     real(kind=rp) :: u_avg, v_avg, w_avg
     real(kind=rp) :: s_avg(this%n_scalars)
     integer :: temp_indices(1+this%n_scalars)
+    integer :: filt_field_indices(3+this%n_scalars)
     integer :: i, j, n
     real(kind=rp) :: scaling_uvw(1), scaling_s(this%n_scalars)
 
     do i = 1, 1+this%n_scalars
        call neko_scratch_registry%request_field(ta(i)%ptr, temp_indices(i))
+    end do
+
+    call neko_scratch_registry%request_field(fu, filt_field_indices(1))
+    call neko_scratch_registry%request_field(fv, filt_field_indices(2))
+    call neko_scratch_registry%request_field(fw, filt_field_indices(3))
+    do i = 1, this%n_scalars
+       call neko_scratch_registry%request_field(fs(i)%ptr, &
+            filt_field_indices(3+i))
     end do
 
     ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
@@ -315,13 +340,45 @@ contains
 
     n = u%dof%size()
 
-    call field_col3(ta, u, u)
-    call field_copy(E, ta)
-    call field_col3(ta, v, v)
-    call field_col2(E, ta)
-    call field_col3(ta, w, w)
-    call field_col2(E, ta)
-    call field_sqrt(E)
+    if (this%if_filter) then
+
+      call this%filter%apply(fu, u)
+      call this%filter%apply(fv, v)
+      call this%filter%apply(fw, w)
+      
+      call field_sub2(fu, u)
+      call field_sub2(fv, v)
+      call field_sub2(fw, w)
+
+      call gs%op(fu, GS_OP_ADD)
+      call gs%op(fv, GS_OP_ADD)
+      call gs%op(fw, GS_OP_ADD)
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_col2(fu%x_d, coef%mult_d, n)
+         call device_col2(fv%x_d, coef%mult_d, n)
+         call device_col2(fw%x_d, coef%mult_d, n)
+      else
+         call col2(fu%x, coef%mult, n)
+         call col2(fv%x, coef%mult, n)
+         call col2(fw%x, coef%mult, n)
+      end if
+
+      call field_col3(ta, fu, fu)
+      call field_copy(E, ta)
+      call field_col3(ta, fv, fv)
+      call field_col2(E, ta)
+      call field_col3(ta, fw, fw)
+      call field_col2(E, ta)
+      call field_sqrt(E)
+    else
+      call field_col3(ta, u, u)
+      call field_copy(E, ta)
+      call field_col3(ta, v, v)
+      call field_col2(E, ta)
+      call field_col3(ta, w, w)
+      call field_col2(E, ta)
+      call field_sqrt(E)
+    end if
 
     call field_copy(ta, E)
     call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
@@ -354,7 +411,8 @@ contains
 
     do i = 1, this%n_scalars
        ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
-       associate(s => this%s(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
+       associate(s => this%s(i)%ptr, &
+                 fs => fs(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
                  D => this%D(i+1), gs => this%coef%gs_h, &
@@ -364,7 +422,20 @@ contains
 
        n = s%dof%size()
 
-       call field_copy(E, s)
+       if (this%if_filter) then
+         call this%filter%apply(fs, s)
+         call field_sub2(fs, s)
+         call gs%op(fs, GS_OP_ADD)
+         if (NEKO_BCKND_DEVICE .eq. 1) then
+            call device_col2(fs%x_d, coef%mult_d, n)
+         else
+            call col2(fs%x, coef%mult, n)
+         end if
+         call field_copy(E, fs)
+       else
+         call field_copy(E, s)
+       end if
+
        call field_absval(E)
        call field_copy(ta, E)
        call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
@@ -397,6 +468,7 @@ contains
     end do
 
     call neko_scratch_registry%relinquish_field(temp_indices)
+    call neko_scratch_registry%relinquish_field(filt_field_indices)
 
   end subroutine entropy_viscosity_compute
 
