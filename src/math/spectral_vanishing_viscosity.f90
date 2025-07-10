@@ -94,10 +94,10 @@ contains
 
     ! set up the filter
     this%filter%filter_type = "nonBoyd"
-    call this%filter%init_from_components(coef%Xh%lx, this%filter%filter_type)
+    call this%filter%init_from_components(coef%Xh%lx)
     ! assign the SVV Kernel
     do i = 1, this%coef%Xh%lx
-       this%filter%trnsfr(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
+       this%filter%transfer(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
                               ** ((this%coef%Xh%lx - 1.0_rp) / 10.0_rp)
     end do
     ! build the 1d elementwise filter

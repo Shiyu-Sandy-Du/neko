@@ -177,7 +177,7 @@ contains
        this%if_filter = .true.
        call json_extract_object(json, "filter", json_subdict)
        call this%filter%init(json_subdict, this%coef)
-       this%filter%trnsfr(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
+       this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
        call this%filter%build_1d()
     end if
 
