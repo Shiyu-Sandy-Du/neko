@@ -36,6 +36,7 @@
 
 module entropy_viscosity
   use neko_config, only : NEKO_BCKND_DEVICE
+  use device, only : device_memcpy
   use num_types, only : rp
   use json_module, only : json_file
   use simulation_component, only : simulation_component_t
@@ -61,7 +62,8 @@ module entropy_viscosity
                          field_cmult, field_sub2, field_col2, field_cadd2, &
                          field_invcol2, field_sqrt
   use math, only : invcol2, col2, glsum, glsc2, glmax
-  use device_math, only : device_invcol2
+  use device_math, only : device_invcol2, device_col2, device_glsum, &
+                          device_glsc2
   use gather_scatter, only : GS_OP_ADD
   use device
   implicit none
@@ -75,13 +77,11 @@ module entropy_viscosity
      logical :: if_filter = .false.
      !> X velocity component.
      type(field_t), pointer :: u
-     type(field_t) :: u_var
+     type(field_t) :: E_vel_var
      !> Y velocity component.
      type(field_t), pointer :: v
-     type(field_t) :: v_var
      !> Z velocity component.
      type(field_t), pointer :: w
-     type(field_t) :: w_var
      !> Velocity magnitude.
      type(field_t) :: vel_mag
      !> work array for the temporal derivative
@@ -89,14 +89,14 @@ module entropy_viscosity
      !> Scalar field
      integer :: n_scalars = 0
      type(field_ptr_t), allocatable :: s(:)
-     type(field_t), allocatable :: s_var(:)
+     type(field_t), allocatable :: E_s_var(:)
      type(field_t), allocatable :: E(:)
      type(field_series_t), allocatable :: Elag(:)
      !> coef
      type(coef_t), pointer :: coef
      !> Some field to be used
      type(field_t), allocatable :: abx1(:), abx2(:)
-     type(field_t) :: h_np2
+     type(field_t) :: h2
      real(kind=rp) :: volume_domain
 
      !> X entropy_viscosity component.
@@ -197,16 +197,14 @@ contains
     this%v => neko_field_registry%get_field("v")
     this%w => neko_field_registry%get_field("w")
 
-    call this%u_var%init(this%u%dof)
-    call this%v_var%init(this%v%dof)
-    call this%w_var%init(this%w%dof)
+    call this%E_vel_var%init(this%u%dof)
     call this%vel_mag%init(this%u%dof)
 
-    call this%h_np2%init(this%u%dof)
+    call this%h2%init(this%u%dof)
 
     if (this%n_scalars .ne. 0) then
        allocate(this%s(this%n_scalars))
-       allocate(this%s_var(this%n_scalars))
+       allocate(this%E_s_var(this%n_scalars))
     end if
     
     allocate(this%E(1+this%n_scalars))
@@ -233,7 +231,7 @@ contains
        
        if (k .le. this%n_scalars) then
           this%s(k)%ptr => this%scalars%scalar_fields(k)%s
-          call this%s_var(k)%init(this%u%dof)
+          call this%E_s_var(k)%init(this%u%dof)
        end if
     end do
 
@@ -242,12 +240,22 @@ contains
        do k = 1, this%coef%Xh%lx * this%coef%Xh%ly * this%coef%Xh%lz
           volume_element = volume_element + this%coef%B(k, 1, 1, e)
        end do
-       this%h_np2%x(:,:,:,e) = (volume_element**(1.0_rp/3.0_rp) &
-                          / (this%coef%Xh%lx-1.0_rp)) &
-                          **(this%ext_bdf%diffusion_time_order + 2)
+       this%h2%x(:,:,:,e) = volume_element**(1.0_rp/3.0_rp) * &
+                            volume_element**(1.0_rp/3.0_rp) / &
+                            (this%coef%Xh%lx-1.0_rp) / &
+                            (this%coef%Xh%lx-1.0_rp)
     end do
 
-    this%volume_domain = glsum(this%coef%B, this%u%dof%size())
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
+                          HOST_TO_DEVICE, sync = .false.)
+       this%volume_domain = glsum(this%coef%B, this%u%dof%size())
+    else
+       this%volume_domain = device_glsum(this%coef%B_d, this%u%dof%size())
+    end if
+
+    
+    
 
   end subroutine entropy_viscosity_init_common
 
@@ -310,12 +318,12 @@ contains
     type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
     type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu, fv, fw
-    real(kind=rp) :: u_avg, v_avg, w_avg
-    real(kind=rp) :: s_avg(this%n_scalars)
+    real(kind=rp) :: E_vel_avg
+    real(kind=rp) :: E_s_avg(this%n_scalars)
     integer :: temp_indices(1+this%n_scalars)
     integer :: filt_field_indices(3+this%n_scalars)
     integer :: i, j, n
-    real(kind=rp) :: scaling_uvw(1), scaling_s(this%n_scalars)
+    real(kind=rp) :: scaling_vel, scaling_s(this%n_scalars)
 
     do i = 1, 1+this%n_scalars
        call neko_scratch_registry%request_field(ta(i)%ptr, temp_indices(i))
@@ -404,8 +412,23 @@ contains
     call field_copy(entropy_viscosity, D)
     call field_absval(entropy_viscosity)
 
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       E_vel_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
+    else
+       E_vel_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
+    end if
+    call field_cadd2(this%E_vel_var, E, E_vel_avg)
+    call field_absval(this%E_vel_var)
+   
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call neko_error("Device backend does not support glmax for now")
+    else
+       scaling_vel = this%c_E / glmax(this%E_vel_var%x, u%dof%size())
+    end if
+
     call field_cmult(entropy_viscosity, &
-         this%c_E)
+         scaling_vel)
+    call field_col2(entropy_viscosity, this%h2)
 
    end associate
 
@@ -418,6 +441,8 @@ contains
                  D => this%D(i+1), gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+                 E_s_avg => E_s_avg(i), E_s_var => this%E_s_var(i), &
+                 scaling_s => scaling_s(i), &
                  entropy_viscosity => this%entropy_viscosity(i+1)%ptr)
 
        n = s%dof%size()
@@ -460,9 +485,23 @@ contains
        call field_sub2(D, ta, n)
        call field_copy(entropy_viscosity, D)
        call field_absval(entropy_viscosity)
+       
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          E_s_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
+       else
+          E_s_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
+       end if
+       call field_cadd2(E_s_var, E, E_s_avg)
+       call field_absval(E_s_var)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call neko_error("Device backend does not support glmax for now")
+       else
+          scaling_s = this%c_E / glmax(E_s_var%x, u%dof%size())
+       end if
 
        call field_cmult(entropy_viscosity, &
-           this%c_E)
+            scaling_s)
+       call field_col2(entropy_viscosity, this%h2)
 
        end associate
     end do
