@@ -72,7 +72,7 @@ contains
             coef%h1, coef%drdx, coef%drdy, coef%drdz, coef%dsdx, coef%dsdy, &
             coef%dsdz, coef%dtdx, coef%dtdy, coef%dtdz, &
             coef%jacinv, Xh%w3, this%svv%h1, this%svv%filter%fh, &
-            this%svv%filter%fht, msh%nelv, Xh%lx)
+            this%svv%filter%fht, this%svv%direction, msh%nelv, Xh%lx)
 
     if (coef%ifh2) call addcol4 (w,coef%h2,coef%B,u,coef%dof%size())
 
@@ -93,7 +93,7 @@ contains
   !! @param lx Polynomial order.
   subroutine ax_helm_svv_lx(w, u, Dx, Dy, Dz, Dxt, Dyt, Dzt, &
        h1, drdx, drdy, drdz, dsdx, dsdy, dsdz, dtdx, dtdy, dtdz, &
-       jacinv, weights3, svv_h1, svv_Q, svv_Qt, n, lx)
+       jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, n, lx)
     integer, intent(in) :: n, lx
     real(kind=rp), intent(inout) :: w(lx, lx, lx, n)
     real(kind=rp), intent(in) :: u(lx, lx, lx, n)
@@ -117,6 +117,7 @@ contains
     real(kind=rp), intent(in) :: Dzt(lx,lx)
     real(kind=rp), intent(in) :: svv_h1(lx, lx, lx, n)
     real(kind=rp), intent(in) :: svv_Q(lx, lx), svv_Qt(lx, lx)
+    character(len=*) :: svv_direction
     real(kind=rp) :: ur_h(lx, lx, lx)
     real(kind=rp) :: us_h(lx, lx, lx)
     real(kind=rp) :: ut_h(lx, lx, lx)
@@ -189,12 +190,43 @@ contains
                      + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
-      !  ! spatial convolution for spectral vanishing
-       call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, ident)
-       call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, ident)
-       call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, ident)
+       ! spatial convolution for spectral vanishing (low pass filter (LPF))
+       if (svv_direction .eq. "rst") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, svv_Qt)
+          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, svv_Qt)
+          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, svv_Qt)
+       else if (svv_direction .eq. "rs") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, ident)
+          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, ident)
+          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, ident)
+       else if (svv_direction .eq. "rt") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, ident, svv_Qt)
+          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, ident, svv_Qt)
+          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, ident, svv_Qt)
+       else if (svv_direction .eq. "st") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, ident, svv_Qt, svv_Qt)
+          call tnsr3d_el(us_svv, lx, us, lx, ident, svv_Qt, svv_Qt)
+          call tnsr3d_el(ut_svv, lx, ut, lx, ident, svv_Qt, svv_Qt)
+       else if (svv_direction .eq. "r") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, ident, ident)
+          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, ident, ident)
+          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, ident, ident)
+       else if (svv_direction .eq. "s") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, ident, svv_Qt, ident)
+          call tnsr3d_el(us_svv, lx, us, lx, ident, svv_Qt, ident)
+          call tnsr3d_el(ut_svv, lx, ut, lx, ident, svv_Qt, ident)
+       else if (svv_direction .eq. "t") then
+          call tnsr3d_el(ur_svv, lx, ur, lx, ident, ident, svv_Qt)
+          call tnsr3d_el(us_svv, lx, us, lx, ident, ident, svv_Qt)
+          call tnsr3d_el(ut_svv, lx, ut, lx, ident, ident, svv_Qt)
+       end if
 
        do i = 1, lx*lx*lx
+          ! high pass filter from the LPF result
+          ur_svv(i,1,1) =  ur(i,1,1) - ur_svv(i,1,1)
+          us_svv(i,1,1) =  us(i,1,1) - us_svv(i,1,1)
+          ut_svv(i,1,1) =  ut(i,1,1) - ut_svv(i,1,1)
+
           ! multiply the viscosity
           ur_h(i,1,1) = (svv_h1(i,1,1,e) * ur_svv(i,1,1) + &
                         h1(i,1,1,e) * ur(i,1,1)) * weights3(i,1,1)

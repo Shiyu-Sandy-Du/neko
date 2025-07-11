@@ -38,7 +38,7 @@ module elementwise_filter
   use math, only : rzero, rone, copy
   use field, only : field_t
   use coefs, only : coef_t
-  use utils, only : neko_error
+  use utils, only : neko_error, neko_type_error
   use neko_config, only : NEKO_BCKND_DEVICE
   use json_module, only : json_file
   use json_utils, only : json_get_or_default, json_get
@@ -51,6 +51,12 @@ module elementwise_filter
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR, c_associated
   implicit none
   private
+  
+  ! List of all possible directions for filtering
+  character(len=20) :: KNOWN_DIRECTIONS(7) = [character(len=3) :: &
+       "rst", &
+       "rs", "rt", "st", &
+       "r", "s", "t"]
 
   !> Implements the elementwise filter for SEM.
   type, public, extends(filter_t) :: elementwise_filter_t
@@ -61,10 +67,13 @@ module elementwise_filter
      integer :: nx
      !> filtered wavenumber
      integer :: nt
+     !> filtering direction
+     character(len=:), allocatable :: direction
      !> matrix for 1d elementwise filtering
-     real(kind=rp), allocatable :: fh(:,:), fht(:,:)
+     real(kind=rp), allocatable :: fh(:,:), fht(:,:), ident(:,:)
      type(c_ptr) :: fh_d = C_NULL_PTR
      type(c_ptr) :: fht_d = C_NULL_PTR
+     type(c_ptr) :: ident_d = C_NULL_PTR
      !> transfer function
      real(kind=rp), allocatable :: transfer(:)
    contains
@@ -89,6 +98,7 @@ contains
     type(coef_t), intent(in) :: coef
     real(kind=rp), allocatable :: transfer(:)
     character(len=:), allocatable :: filter_type
+    character(len=:), allocatable :: direction
 
     ! Filter assumes lx = ly = lz
     call this%init_base(json, coef)
@@ -96,7 +106,23 @@ contains
     call this%init_from_components(coef%dof%xh%lx)
 
     call json_get_or_default(json, "filter.elementwise_filter_type", &
-         this%filter_type, "nonBoyd")
+         filter_type, "nonBoyd")
+    this%filter_type = trim(filter_type)
+
+    call json_get_or_default(json, "filter.direction", &
+         direction, "rst")
+    this%direction = trim(direction)
+    if (this%direction .ne. "rst" .and. &
+        this%direction .ne. "rs" .and. &
+        this%direction .ne. "rt" .and. &
+        this%direction .ne. "st" .and. &
+        this%direction .ne. "r" .and. &
+        this%direction .ne. "s" .and. &
+        this%direction .ne. "t") then
+       call neko_type_error("The direction of the elementwise " // &
+            "filter", this%direction, KNOWN_DIRECTIONS)
+    end if
+
 
     if (json%valid_path('filter.transfer_function')) then
        call json_get(json, 'filter.transfer_function', transfer)
@@ -115,24 +141,34 @@ contains
   !! @param nx number of points in an elements in one direction.
   subroutine elementwise_filter_init_from_components(this, nx)
     class(elementwise_filter_t), intent(inout) :: this
-    integer :: nx
+    integer, intent(in) :: nx
+    integer :: i
 
     this%nx = nx
     this%nt = nx ! initialize as if nothing is filtered yet
 
     allocate(this%fh(nx, nx))
     allocate(this%fht(nx, nx))
+    allocate(this%ident(nx, nx))
     allocate(this%transfer(nx))
 
     call rzero(this%fh, nx*nx)
     call rzero(this%fht, nx*nx)
+    call rzero(this%ident, nx*nx)
     call rone(this%transfer, nx) ! initialize as if nothing is filtered yet
+
+    do i = 1, nx
+       this%ident(i, i) = 1.0_rp
+    end do
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_map(this%fh, this%fh_d, this%nx * this%nx)
        call device_map(this%fht, this%fht_d, this%nx * this%nx)
+       call device_map(this%ident, this%ident_d, this%nx * this%nx)
        call device_cfill(this%fh_d, 0.0_rp, this%nx * this%nx)
        call device_cfill(this%fht_d, 0.0_rp, this%nx * this%nx)
+       call device_memcpy(this%ident, this%ident_d, &
+            this%nx * this%nx, HOST_TO_DEVICE, sync = .false.)
     end if
 
   end subroutine elementwise_filter_init_from_components
@@ -191,8 +227,28 @@ contains
     type(field_t), intent(in) :: F_in
 
     ! F_out = fh x fh x fh x F_in
-    call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%fht, this%fht, &
-         this%coef%msh%nelv)
+    if (this%direction .eq. "rst") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%fht, &
+            this%fht, this%coef%msh%nelv)
+    else if (this%direction .eq. "rs") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%fht, &
+            this%ident, this%coef%msh%nelv)
+    else if (this%direction .eq. "rt") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%ident, &
+            this%fht, this%coef%msh%nelv)
+    else if (this%direction .eq. "st") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%ident, this%fht, &
+            this%fht, this%coef%msh%nelv)
+    else if (this%direction .eq. "r") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%fh, this%ident, &
+            this%ident, this%coef%msh%nelv)
+    else if (this%direction .eq. "s") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%ident, this%fht, &
+            this%ident, this%coef%msh%nelv)
+    else if (this%direction .eq. "t") then
+       call tnsr3d(F_out%x, this%nx, F_in%x, this%nx, this%ident, this%ident, &
+            this%fht, this%coef%msh%nelv)
+    end if
 
   end subroutine elementwise_field_filter_3d
 

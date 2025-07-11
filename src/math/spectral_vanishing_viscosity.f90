@@ -37,7 +37,7 @@ module spectral_vanishing_viscosity
   use elementwise_filter, only: elementwise_filter_t
   use field_registry, only : neko_field_registry
   use field, only : field_t, field_ptr_t
-  use utils, only : neko_error
+  use utils, only : neko_error, neko_type_error
   use json_module, only : json_file
   use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
@@ -45,10 +45,20 @@ module spectral_vanishing_viscosity
   implicit none
   private
 
+  ! List of all possible directions for filtering
+  character(len=20) :: KNOWN_DIRECTIONS(7) = [character(len=3) :: &
+       "rst", &
+       "rs", "rt", "st", &
+       "r", "s", "t"]
+
   !> Implements the spectral vanishing viscosity.
   type, public :: svv_t
     !> filter
     type(elementwise_filter_t) :: filter
+    !> filtering direction
+    character(len=:), allocatable:: direction
+    !> Power coefficient for the SVV kernel
+    real(kind=rp) :: power_coef
     !> coef
     type(coef_t), pointer :: coef
     !> the viscosity field
@@ -72,7 +82,7 @@ contains
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in), target :: coef
     real(kind=rp) :: nu_val
-    character(len=:), allocatable :: nu_type, nue_field_name_tmp
+    character(len=:), allocatable :: nu_type, nue_field_name_tmp, direction
     integer :: i
 
     this%coef => coef
@@ -80,6 +90,23 @@ contains
     ! set up the viscosity coefficient field
     allocate(this%h1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
     call rzero(this%h1, this%coef%dof%size())
+    
+    call json_get_or_default(json, "svv.direction", &
+         direction, "rst")
+    this%direction = trim(direction)
+    if (this%direction .ne. "rst" .and. &
+        this%direction .ne. "rs" .and. &
+        this%direction .ne. "rt" .and. &
+        this%direction .ne. "st" .and. &
+        this%direction .ne. "r" .and. &
+        this%direction .ne. "s" .and. &
+        this%direction .ne. "t") then
+       call neko_type_error("The direction of the SVV ", &
+            this%direction, KNOWN_DIRECTIONS)
+    end if
+
+    call json_get(json, "svv.power_coefficient", this%power_coef)
+
     call json_get(json, "svv.nu.type", nu_type)
     select case (trim(nu_type))
     case ("value")
@@ -98,7 +125,8 @@ contains
     ! assign the SVV Kernel
     do i = 1, this%coef%Xh%lx
        this%filter%transfer(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
-                              ** ((this%coef%Xh%lx - 1.0_rp) / 10.0_rp)
+                              ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+       this%filter%transfer(i) = 1.0_rp - this%filter%transfer(i)
     end do
     ! build the 1d elementwise filter
     call this%filter%build_1d()
