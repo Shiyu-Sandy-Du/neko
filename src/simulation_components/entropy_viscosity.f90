@@ -149,7 +149,6 @@ contains
     class(entropy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
-    type(json_file) :: json_subdict
     character(len=20), allocatable :: fields(:)
     integer :: e, k
     real(kind=rp) :: volume_element
@@ -175,8 +174,7 @@ contains
     ! Set up the filter
     if (json%valid_path("filter")) then
        this%if_filter = .true.
-       call json_extract_object(json, "filter", json_subdict)
-       call this%filter%init(json_subdict, this%coef)
+       call this%filter%init(json, this%coef)
        this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
        call this%filter%build_1d()
     end if
@@ -249,13 +247,10 @@ contains
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
                           HOST_TO_DEVICE, sync = .false.)
-       this%volume_domain = glsum(this%coef%B, this%u%dof%size())
-    else
        this%volume_domain = device_glsum(this%coef%B_d, this%u%dof%size())
+    else
+       this%volume_domain = glsum(this%coef%B, this%u%dof%size())
     end if
-
-    
-    
 
   end subroutine entropy_viscosity_init_common
 
