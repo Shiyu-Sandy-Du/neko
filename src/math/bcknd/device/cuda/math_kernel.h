@@ -1,7 +1,7 @@
 #ifndef __MATH_MATH_KERNEL_H__
 #define __MATH_MATH_KERNEL_H__
 /*
- Copyright (c) 2021-2025, The Neko Authors
+ Copyright (c) 2021-2023, The Neko Authors
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -68,7 +68,6 @@ __global__ void masked_gather_copy_kernel(T * __restrict__ a,
   }
 }
 
-
 /**
  * Device kernel for masked scatter copy
  */
@@ -87,7 +86,6 @@ __global__ void masked_scatter_copy_kernel(T * __restrict__ a,
   }
 }
 
-
 /**
  * Device kernel for masked atomic update
  */
@@ -96,15 +94,14 @@ __global__ void masked_atomic_reduction_kernel(T * __restrict__ a,
                                                T * __restrict__ b,
                                                int * __restrict__ mask,
                                                const int n,
-                                               const int m) {
+                                               const int n_mask) {
 
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
   const int str = blockDim.x * gridDim.x;
 
-  for (int i = idx; i < m; i += str) {
-#if __CUDA_ARCH__ >= 600
-    atomicAdd( &(a[mask[i+1]-1]), b[i]);
-#endif
+  for (int i = idx; i < n_mask; i += str) {
+    unsafeAtomicAdd( &(a[mask[i+1]-1]), b[i]);//a[mask[i]-1] = a[mask[i]-1] + b[i];
+    //atomicAdd( &(a[mask[i+1]-1]), b[i]);//a[mask[i]-1] = a[mask[i]-1] + b[i];
   }
 }
 
@@ -129,17 +126,17 @@ __global__ void masked_copy_kernel(T * __restrict__ a,
 /**
  * Device kernel for cfill_mask
  */
-template <typename T>
+template< typename T >
 __global__ void cfill_mask_kernel(T* __restrict__ a,
                                   const T c,
-                                  const int size,
+                                  const int n,
                                   int* __restrict__ mask,
-                                  const int mask_size) {
+                                  const int n_mask) {
 
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int str = blockDim.x * gridDim.x;
 
-    for (int i = idx; i < mask_size; i += str) { a[mask[i]-1] = c; }
+    for (int i = idx; i < n_mask; i += str) { a[mask[i]-1] = c; }
 }
 
 /**
@@ -226,7 +223,7 @@ __global__ void cadd2_kernel(T * __restrict__ a,
 }
 
 /**
- * Device kernel for cfill
+ * Device kernel for cmult
  */
 template< typename T >
 __global__ void cfill_kernel(T * __restrict__ a,
@@ -310,14 +307,14 @@ __global__ void add2s1_kernel(T * __restrict__ a,
 }
 
 /**
- * Device kernel for add2s2 many
+ * Device kernel for add2s2
  */
 template< typename T >
 __global__ void add2s2_many_kernel(T  * __restrict__  x,
-                                   const T ** p,
-                                   const T * alpha,
-                                   const int p_cur,
-                                   const int n) {
+                             const T ** p,
+                             const T * alpha,
+                 const int p_cur,
+                             const int n) {
 
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
   const int str = blockDim.x * gridDim.x;
@@ -599,28 +596,41 @@ __global__ void vcross_kernel(T * __restrict__ u1,
     u2[i] = v3[i]*w1[i] - v1[i]*w3[i];
     u3[i] = v1[i]*w2[i] - v2[i]*w1[i];
   }
-
 }
 
-
 /**
- * Warp shuffle reduction
+ * Warp shuffle reduction for summation
  */
 template< typename T>
-__inline__ __device__ T reduce_warp(T val) {
-  val += __shfl_down_sync(0xffffffff, val, 16);
-  val += __shfl_down_sync(0xffffffff, val, 8);
-  val += __shfl_down_sync(0xffffffff, val, 4);
-  val += __shfl_down_sync(0xffffffff, val, 2);
-  val += __shfl_down_sync(0xffffffff, val, 1);
+__inline__ __device__ T reduce_warp_sum(T val) {
+  val += __shfl_down(val, 32);
+  val += __shfl_down(val, 16);
+  val += __shfl_down(val, 8);
+  val += __shfl_down(val, 4);
+  val += __shfl_down(val, 2);
+  val += __shfl_down(val, 1);
   return val;
 }
 
 /**
- * Vector reduction kernel
+ * Warp shuffle reduction for maximisation
+ */
+template< typename T>
+__inline__ __device__ T reduce_warp_max(T val) {
+  val = fmax(val, __shfl_down(val, 32));
+  val = fmax(val, __shfl_down(val, 16));
+  val = fmax(val, __shfl_down(val, 8));
+  val = fmax(val, __shfl_down(val, 4));
+  val = fmax(val, __shfl_down(val, 2));
+  val = fmax(val, __shfl_down(val, 1));
+  return val;
+}
+
+/**
+ * Vector reduction kernel for summation
  */
 template< typename T >
-__global__ void reduce_kernel(T * bufred, const int n) {
+__global__ void reduce_kernel_sum(T * bufred, const int n) {
 
   T sum = 0;
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -630,7 +640,7 @@ __global__ void reduce_kernel(T * bufred, const int n) {
     sum += bufred[i];
   }
 
-  __shared__ T shared[32];
+  __shared__ T shared[64];
   unsigned int lane = threadIdx.x % warpSize;
   unsigned int wid = threadIdx.x / warpSize;
 
@@ -647,6 +657,36 @@ __global__ void reduce_kernel(T * bufred, const int n) {
     bufred[blockIdx.x] = sum;
 }
 
+/**
+ * Vector reduction kernel for maximisation
+ */
+template< typename T >
+__global__ void reduce_kernel_max(T * bufred, const int n) {
+
+  T max = 0;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, bufred[i]);
+  }
+
+  __shared__ T shared[64];
+  unsigned int lane = threadIdx.x % warpSize;
+  unsigned int wid = threadIdx.x / warpSize;
+
+  max = reduce_warp_max<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
+  if (wid == 0)
+    max = reduce_warp_max<T>(max);
+
+  if (threadIdx.x == 0)
+    bufred[blockIdx.x] = max;
+}
 
 /**
  * Reduction kernel for glsc3
@@ -683,7 +723,6 @@ __global__ void glsc3_reduce_kernel( T * bufred,
    bufred[y] = buf[0];
 }
 
-
 /**
  * Device kernel for glsc3
  */
@@ -700,7 +739,7 @@ __global__ void glsc3_kernel(const T * a,
   const unsigned int lane = threadIdx.x % warpSize;
   const unsigned int wid = threadIdx.x / warpSize;
 
-  __shared__ T shared[32];
+  __shared__ T shared[64];
   T sum = 0.0;
   for (int i = idx; i < n; i+= str) {
     sum += a[i] * b[i] * c[i];
@@ -775,7 +814,7 @@ __global__ void glsc2_kernel(const T * a,
   const unsigned int lane = threadIdx.x % warpSize;
   const unsigned int wid = threadIdx.x / warpSize;
 
-  __shared__ T shared[32];
+  __shared__ T shared[64];
   T sum = 0.0;
   for (int i = idx; i < n; i+= str) {
     sum += a[i] * b[i];
@@ -796,7 +835,7 @@ __global__ void glsc2_kernel(const T * a,
 }
 
 /**
- * Device kernel for glsubnorm2
+ * Device kernel for glsubnorm
  */
 template< typename T >
 __global__ void glsubnorm2_kernel(const T * a,
@@ -810,7 +849,7 @@ __global__ void glsubnorm2_kernel(const T * a,
   const unsigned int lane = threadIdx.x % warpSize;
   const unsigned int wid = threadIdx.x / warpSize;
 
-  __shared__ T shared[32];
+  __shared__ T shared[64];
   T sum = 0.0;
   for (int i = idx; i < n; i+= str) {
     sum += pow(a[i] - b[i], 2.0);
@@ -844,7 +883,7 @@ __global__ void glsum_kernel(const T * a,
   const unsigned int lane = threadIdx.x % warpSize;
   const unsigned int wid = threadIdx.x / warpSize;
 
-  __shared__ T shared[32];
+  __shared__ T shared[64];
   T sum = 0;
   for (int i = idx; i<n ; i += str)
   {
@@ -862,6 +901,41 @@ __global__ void glsum_kernel(const T * a,
 
   if (threadIdx.x == 0)
     buf_h[blockIdx.x] = sum;
+
+}
+
+/**
+ * Device kernel for glmax
+ */
+template< typename T >
+__global__ void glmax_kernel(const T * a,
+                             T * buf_h,
+                             const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int wid = threadIdx.x / warpSize;
+
+  __shared__ T shared[64];
+  T max = 0;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, a[i]);
+  }
+
+  max = reduce_warp_max<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
+  if (wid == 0)
+    max = reduce_warp_max<T>(max);
+
+  if (threadIdx.x == 0)
+    buf_h[blockIdx.x] = max;
 
 }
 

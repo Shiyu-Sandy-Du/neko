@@ -68,7 +68,7 @@ module device_math
        device_vcross, device_absval, device_masked_atomic_reduction, &
        device_pwmax, device_pwmin, device_masked_gather_copy, &
        device_masked_scatter_copy, device_invcol3, device_cdiv, device_cdiv2, &
-       device_glsubnorm
+       device_glsubnorm, device_glmax
 
 contains
 
@@ -1192,6 +1192,39 @@ contains
     end if
 #endif
   end function device_glsum
+
+  !>Max of a vector of length n
+  function device_glmax(a_d, n, strm) result(res)
+    type(c_ptr) :: a_d
+    integer :: n, ierr
+    real(kind=rp) :: res
+    type(c_ptr), optional :: strm
+    type(c_ptr) :: strm_
+
+    if (present(strm)) then
+       strm_ = strm
+    else
+       strm_ = glb_cmd_queue
+    end if
+
+    res = -huge(0.0_rp)
+#if HAVE_HIP
+    res = hip_glmax(a_d, n, strm_)
+#elif HAVE_CUDA
+    res = cuda_glmax(a_d, n, strm_)
+#elif HAVE_OPENCL
+    call neko_error('glmax is not supported by OpenCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+
+#ifndef HAVE_DEVICE_MPI
+    if (pe_size .gt. 1) then
+       call MPI_Allreduce(MPI_IN_PLACE, res, 1, &
+            MPI_REAL_PRECISION, MPI_MAX, NEKO_COMM, ierr)
+    end if
+#endif
+  end function device_glmax
 
   subroutine device_absval(a_d, n, strm)
     integer, intent(in) :: n

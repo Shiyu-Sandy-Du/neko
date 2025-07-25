@@ -599,10 +599,10 @@ __global__ void vcross_kernel(T * __restrict__ u1,
 }
 
 /**
- * Warp shuffle reduction
+ * Warp shuffle reduction for summation
  */
 template< typename T>
-__inline__ __device__ T reduce_warp(T val) {
+__inline__ __device__ T reduce_warp_sum(T val) {
   val += __shfl_down(val, 32);
   val += __shfl_down(val, 16);
   val += __shfl_down(val, 8);
@@ -613,10 +613,24 @@ __inline__ __device__ T reduce_warp(T val) {
 }
 
 /**
- * Vector reduction kernel
+ * Warp shuffle reduction for maximisation
+ */
+template< typename T>
+__inline__ __device__ T reduce_warp_max(T val) {
+  val = fmax(val, __shfl_down(val, 32));
+  val = fmax(val, __shfl_down(val, 16));
+  val = fmax(val, __shfl_down(val, 8));
+  val = fmax(val, __shfl_down(val, 4));
+  val = fmax(val, __shfl_down(val, 2));
+  val = fmax(val, __shfl_down(val, 1));
+  return val;
+}
+
+/**
+ * Vector reduction kernel for summation
  */
 template< typename T >
-__global__ void reduce_kernel(T * bufred, const int n) {
+__global__ void reduce_kernel_sum(T * bufred, const int n) {
 
   T sum = 0;
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -641,6 +655,37 @@ __global__ void reduce_kernel(T * bufred, const int n) {
 
   if (threadIdx.x == 0)
     bufred[blockIdx.x] = sum;
+}
+
+/**
+ * Vector reduction kernel for maximisation
+ */
+template< typename T >
+__global__ void reduce_kernel_max(T * bufred, const int n) {
+
+  T max = 0;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, bufred[i]);
+  }
+
+  __shared__ T shared[64];
+  unsigned int lane = threadIdx.x % warpSize;
+  unsigned int wid = threadIdx.x / warpSize;
+
+  max = reduce_warp_max<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
+  if (wid == 0)
+    max = reduce_warp_max<T>(max);
+
+  if (threadIdx.x == 0)
+    bufred[blockIdx.x] = max;
 }
 
 /**
@@ -856,6 +901,41 @@ __global__ void glsum_kernel(const T * a,
 
   if (threadIdx.x == 0)
     buf_h[blockIdx.x] = sum;
+
+}
+
+/**
+ * Device kernel for glmax
+ */
+template< typename T >
+__global__ void glmax_kernel(const T * a,
+                             T * buf_h,
+                             const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int wid = threadIdx.x / warpSize;
+
+  __shared__ T shared[64];
+  T max = 0;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, a[i]);
+  }
+
+  max = reduce_warp_max<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
+  if (wid == 0)
+    max = reduce_warp_max<T>(max);
+
+  if (threadIdx.x == 0)
+    buf_h[blockIdx.x] = max;
 
 }
 

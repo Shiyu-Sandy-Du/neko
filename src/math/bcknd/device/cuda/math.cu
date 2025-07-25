@@ -609,7 +609,41 @@ extern "C" {
 #endif
   }
 
+  /**
+   * Global maximisation reduction
+   */
+  void cuda_global_reduce_max(real * bufred, void * bufred_d, int n,
+                             const cudaStream_t stream) {
+#ifdef HAVE_RCCL
+    device_nccl_allreduce(bufred_d, bufred_d, n, sizeof(real),
+                          DEVICE_NCCL_MAX, stream);
+    CUDA_CHECK(cudaMemcpyAsync(bufred, bufred_d, n*sizeof(real),
+                              cudaMemcpyDeviceToHost, stream));
+    cudaStreamSynchronize(stream);
+#elif HAVE_NVSHMEM
+    if (sizeof(real) == sizeof(float)) {
+      nvshmemx_float_max_reduce_on_stream(NVSHMEM_TEAM_WORLD,
+                                          (float *) bufred_d,
+                                          (float *) bufred_d, n, stream);
+    }
+    else if (sizeof(real) == sizeof(double)) {
+      nvshmemx_double_max_reduce_on_stream(NVSHMEM_TEAM_WORLD,
+                                          (double *) bufred_d,
+                                          (double *) bufred_d, n, stream);
 
+    }
+    CUDA_CHECK(cudaMemcpyAsync(bufred, bufred_d,
+                              sizeof(real)*n, cudaMemcpyDeviceToHost, stream));
+    cudaStreamSynchronize(stream);    
+#elif HAVE_DEVICE_MPI
+    cudaStreamSynchronize(stream);
+    device_mpi_allreduce(bufred_d, bufred, n, sizeof(real), DEVICE_MPI_MAX);
+#else
+    CUDA_CHECK(cudaMemcpyAsync(bufred, bufred_d, n*sizeof(real),
+                              cudaMemcpyDeviceToHost, stream));
+    cudaStreamSynchronize(stream);
+#endif
+  }
 
   /**
    * Fortran wrapper vlsc3
@@ -626,7 +660,7 @@ extern "C" {
     glsc3_kernel<real><<<nblcks, nthrds, 0, stream>>>
       ((real *) u, (real *) v, (real *) w, (real *) bufred_d, *n);
     CUDA_CHECK(cudaGetLastError());
-    reduce_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+    reduce_kernel_sum<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
     CUDA_CHECK(cudaGetLastError());
 
     CUDA_CHECK(cudaMemcpyAsync(bufred, bufred_d, sizeof(real),
@@ -655,7 +689,7 @@ extern "C" {
       glsc3_kernel<real><<<nblcks, nthrds, 0, stream>>>
         ((real *) a, (real *) b, (real *) c, (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
-      reduce_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+      reduce_kernel_sum<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
       CUDA_CHECK(cudaGetLastError());
     }
     else {
@@ -716,7 +750,7 @@ extern "C" {
                                         (real *) b,
                                         (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
-      reduce_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+      reduce_kernel_sum<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
       CUDA_CHECK(cudaGetLastError());
     }
     else {
@@ -745,7 +779,7 @@ extern "C" {
                                         (real *) b,
                                         (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
-      reduce_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+      reduce_kernel_sum<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
       CUDA_CHECK(cudaGetLastError());
     }
     else {
@@ -771,7 +805,7 @@ extern "C" {
         <<<nblcks, nthrds, 0, stream>>>((real *) a,
                                         (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
-      reduce_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+      reduce_kernel_sum<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
       CUDA_CHECK(cudaGetLastError());
     }
     else {
@@ -779,6 +813,34 @@ extern "C" {
     }
 
     cuda_global_reduce_add(bufred, bufred_d, 1, stream);
+
+    return bufred[0];
+  }
+
+  /**
+   * Fortran wrapper glmax
+   * Max a vector of length n
+   */
+  real cuda_glmax(void *a, int *n, cudaStream_t stream) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
+    const int nb = ((*n) + 1024 - 1)/ 1024;
+
+    cuda_redbuf_check_alloc(nb);
+    if( *n > 0) {
+      glmax_kernel<real>
+          <<<nblcks, nthrds, 0, stream>>>((real *) a,
+                                          (real *) bufred_d, *n);
+      CUDA_CHECK(cudaGetLastError());
+      reduce_kernel_max<real>
+          <<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+    CUDAP_CHECK(cudaGetLastError());
+    }
+    else {
+      cuda_rzero(bufred_d, &red_s, stream);
+    }
+
+    cuda_global_reduce_max(bufred, bufred_d, 1, stream);
 
     return bufred[0];
   }
