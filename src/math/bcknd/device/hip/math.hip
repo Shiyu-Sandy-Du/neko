@@ -809,7 +809,7 @@ extern "C" {
    * Fortran wrapper glmax
    * Max a vector of length n
    */
-  real hip_glmax(void *a, int *n, hipStream_t stream) {
+  real hip_glmax(void *a, real *ninf, int *n, hipStream_t stream) {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -818,10 +818,10 @@ extern "C" {
     if( *n > 0) {
       hipLaunchKernelGGL(HIP_KERNEL_NAME(glmax_kernel<real>),
                          nblcks, nthrds, 0, stream,
-                         (real *) a, bufred_d, *n);
+                         (real *) a, *ninf, bufred_d, *n);
       HIP_CHECK(hipGetLastError());
       hipLaunchKernelGGL(HIP_KERNEL_NAME(reduce_kernel_max<real>),
-                         1, 1024, 0, stream, bufred_d, nb);
+                         1, 1024, 0, stream, *ninf, bufred_d, nb);
       HIP_CHECK(hipGetLastError());
     }
     else {

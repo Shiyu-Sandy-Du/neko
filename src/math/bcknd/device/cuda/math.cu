@@ -821,7 +821,7 @@ extern "C" {
    * Fortran wrapper glmax
    * Max a vector of length n
    */
-  real cuda_glmax(void *a, int *n, cudaStream_t stream) {
+  real cuda_glmax(void *a, real *ninf, int *n, cudaStream_t stream) {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -829,11 +829,11 @@ extern "C" {
     cuda_redbuf_check_alloc(nb);
     if( *n > 0) {
       glmax_kernel<real>
-          <<<nblcks, nthrds, 0, stream>>>((real *) a,
+          <<<nblcks, nthrds, 0, stream>>>((real *) a, *ninf,
                                           (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
       reduce_kernel_max<real>
-          <<<1, 1024, 0, stream>>> ((real *) bufred_d, nb);
+          <<<1, 1024, 0, stream>>> (*ninf, (real *) bufred_d, nb);
     CUDAP_CHECK(cudaGetLastError());
     }
     else {

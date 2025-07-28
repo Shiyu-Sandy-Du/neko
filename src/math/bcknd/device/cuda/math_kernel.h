@@ -661,9 +661,9 @@ __global__ void reduce_kernel_sum(T * bufred, const int n) {
  * Vector reduction kernel for maximisation
  */
 template< typename T >
-__global__ void reduce_kernel_max(T * bufred, const int n) {
+__global__ void reduce_kernel_max(const T ninf, T * bufred, const int n) {
 
-  T max = 0;
+  T max = ninf;
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
   const int str = blockDim.x * gridDim.x;
   for (int i = idx; i<n ; i += str)
@@ -909,6 +909,7 @@ __global__ void glsum_kernel(const T * a,
  */
 template< typename T >
 __global__ void glmax_kernel(const T * a,
+                             const T ninf,
                              T * buf_h,
                              const int n) {
 
@@ -919,7 +920,7 @@ __global__ void glmax_kernel(const T * a,
   const unsigned int wid = threadIdx.x / warpSize;
 
   __shared__ T shared[64];
-  T max = 0;
+  T max = ninf;
   for (int i = idx; i<n ; i += str)
   {
     max = fmax(max, a[i]);

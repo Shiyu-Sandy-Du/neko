@@ -1197,7 +1197,7 @@ contains
   function device_glmax(a_d, n, strm) result(res)
     type(c_ptr) :: a_d
     integer :: n, ierr
-    real(kind=rp) :: res
+    real(kind=rp) :: res, ninf
     type(c_ptr), optional :: strm
     type(c_ptr) :: strm_
 
@@ -1207,11 +1207,11 @@ contains
        strm_ = glb_cmd_queue
     end if
 
-    res = -huge(0.0_rp)
+    ninf = -huge(0.0_rp)
 #if HAVE_HIP
-    res = hip_glmax(a_d, n, strm_)
+    res = hip_glmax(a_d, ninf, n, strm_)
 #elif HAVE_CUDA
-    res = cuda_glmax(a_d, n, strm_)
+    res = cuda_glmax(a_d, ninf, n, strm_)
 #elif HAVE_OPENCL
     call neko_error('glmax is not supported by OpenCL')
 #else
