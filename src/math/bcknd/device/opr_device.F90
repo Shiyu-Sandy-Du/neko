@@ -41,14 +41,12 @@ module opr_device
   use utils, only : neko_error
   use device_math, only : device_sub3, device_rzero, device_copy
   use device_mathops, only : device_opcolv
-  use comm
   use, intrinsic :: iso_c_binding
   implicit none
   private
 
   public :: opr_device_dudxyz, opr_device_opgrad, opr_device_cdtp, &
-       opr_device_conv1, opr_device_curl, opr_device_cfl, opr_device_lambda2, &
-       opr_device_compute_max_wave_speed
+       opr_device_conv1, opr_device_curl, opr_device_cfl, opr_device_lambda2
 
 #ifdef HAVE_HIP
   interface
@@ -140,17 +138,7 @@ module opr_device
      end function hip_cfl
   end interface
 
-  interface
-     subroutine hip_compute_max_wave_speed(max_wave_speed_d, u_d, v_d, w_d, &
-          gamma, p_d, rho_d, n) &
-          bind(c, name = 'hip_compute_max_wave_speed')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       type(c_ptr), value :: max_wave_speed_d, u_d, v_d, w_d, p_d, rho_d
-       real(c_rp) :: gamma
-       integer(c_int) :: n
-     end subroutine hip_compute_max_wave_speed
-  end interface
+
 
 
 #elif HAVE_CUDA
@@ -243,17 +231,7 @@ module opr_device
      end function cuda_cfl
   end interface
 
-  interface
-     subroutine cuda_compute_max_wave_speed(max_wave_speed_d, u_d, v_d, w_d, &
-          gamma, p_d, rho_d, n) &
-          bind(c, name = 'cuda_compute_max_wave_speed')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       type(c_ptr), value :: max_wave_speed_d, u_d, v_d, w_d, p_d, rho_d
-       real(c_rp) :: gamma
-       integer(c_int) :: n
-     end subroutine cuda_compute_max_wave_speed
-  end interface
+
 
 
 #elif HAVE_OPENCL
@@ -346,17 +324,7 @@ module opr_device
      end subroutine opencl_lambda2
   end interface
 
-  interface
-     subroutine opencl_compute_max_wave_speed(max_wave_speed_d, u_d, v_d, w_d, &
-          gamma, p_d, rho_d, n) &
-          bind(c, name = 'opencl_compute_max_wave_speed')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       type(c_ptr), value :: max_wave_speed_d, u_d, v_d, w_d, p_d, rho_d
-       real(c_rp), value :: gamma
-       integer(c_int), value :: n
-     end subroutine opencl_compute_max_wave_speed
-  end interface
+
 #endif
 
 contains
@@ -753,22 +721,6 @@ contains
 #endif
   end function opr_device_cfl
 
-  !> Compute maximum wave speed for compressible flows on device
-  subroutine opr_device_compute_max_wave_speed(max_wave_speed, u, v, w, gamma, p, rho, n)
-    integer, intent(in) :: n
-    real(kind=rp), intent(in) :: gamma
-    type(field_t), intent(inout) :: max_wave_speed
-    type(field_t), intent(in) :: u, v, w, p, rho
 
-#ifdef HAVE_HIP
-    call hip_compute_max_wave_speed(max_wave_speed%x_d, u%x_d, v%x_d, w%x_d, gamma, p%x_d, rho%x_d, n)
-#elif HAVE_CUDA
-    call cuda_compute_max_wave_speed(max_wave_speed%x_d, u%x_d, v%x_d, w%x_d, gamma, p%x_d, rho%x_d, n)
-#elif HAVE_OPENCL
-    call opencl_compute_max_wave_speed(max_wave_speed%x_d, u%x_d, v%x_d, w%x_d, gamma, p%x_d, rho%x_d, n)
-#else
-    call neko_error('No device backend configured')
-#endif
-  end subroutine opr_device_compute_max_wave_speed
 
 end module opr_device

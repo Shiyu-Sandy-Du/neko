@@ -54,6 +54,7 @@ module fld_file
   use math, only: vlmin, vlmax
   use neko_mpi_types, only: MPI_CHARACTER_SIZE, MPI_DOUBLE_PRECISION_SIZE, &
        MPI_REAL_SIZE, MPI_INTEGER_SIZE
+  use mpi_f08
   implicit none
   private
 
@@ -125,27 +126,27 @@ contains
        glb_nelv = data%glb_nelv
        offset_el = data%offset_el
 
-       if (data%x%n .gt. 0) x%ptr => data%x%x
-       if (data%y%n .gt. 0) y%ptr => data%y%x
-       if (data%z%n .gt. 0) z%ptr => data%z%x
+       if (data%x%size() .gt. 0) x%ptr => data%x%x
+       if (data%y%size() .gt. 0) y%ptr => data%y%x
+       if (data%z%size() .gt. 0) z%ptr => data%z%x
        if (gdim .eq. 2) z%ptr => data%y%x
-       if (data%u%n .gt. 0) then
+       if (data%u%size() .gt. 0) then
           u%ptr => data%u%x
           write_velocity = .true.
        end if
-       if (data%v%n .gt. 0) v%ptr => data%v%x
-       if (data%w%n .gt. 0) w%ptr => data%w%x
-       if (data%p%n .gt. 0) then
+       if (data%v%size() .gt. 0) v%ptr => data%v%x
+       if (data%w%size() .gt. 0) w%ptr => data%w%x
+       if (data%p%size() .gt. 0) then
           p%ptr => data%p%x
           write_pressure = .true.
        end if
-       if (data%t%n .gt. 0) then
+       if (data%t%size() .gt. 0) then
           write_temperature = .true.
           tem%ptr => data%t%x
        end if
        ! If gdim = 2 and Z-velocity component exists,
        ! it is stored in last scalar field
-       if (gdim .eq. 2 .and. data%w%n .gt. 0) then
+       if (gdim .eq. 2 .and. data%w%size() .gt. 0) then
           n_scalar_fields = data%n_scalars + 1
           allocate(scalar_fields(n_scalar_fields))
           do i = 1, n_scalar_fields -1
@@ -212,15 +213,27 @@ contains
           u%ptr => data%items(2)%ptr%x(:,1,1,1)
           v%ptr => data%items(3)%ptr%x(:,1,1,1)
           w%ptr => data%items(4)%ptr%x(:,1,1,1)
-          tem%ptr => data%items(5)%ptr%x(:,1,1,1)
-          n_scalar_fields = data%size() - 5
-          allocate(scalar_fields(n_scalar_fields))
-          do i = 1, n_scalar_fields
-             scalar_fields(i)%ptr => data%items(i+5)%ptr%x(:,1,1,1)
-          end do
+          ! Check if position 5 is a temperature field by name
+          if (trim(data%name(5)) .eq. 'temperature') then
+             ! Position 5 is temperature, remaining fields are scalars
+             tem%ptr => data%items(5)%ptr%x(:,1,1,1)
+             n_scalar_fields = data%size() - 5
+             allocate(scalar_fields(n_scalar_fields))
+             do i = 1, n_scalar_fields
+                scalar_fields(i)%ptr => data%items(i+5)%ptr%x(:,1,1,1)
+             end do
+             write_temperature = .true.
+          else
+             ! All remaining fields are scalars (no temperature field)
+             n_scalar_fields = data%size() - 4
+             allocate(scalar_fields(n_scalar_fields))
+             do i = 1, n_scalar_fields
+                scalar_fields(i)%ptr => data%items(i+4)%ptr%x(:,1,1,1)
+             end do
+             write_temperature = .false.
+          end if
           write_pressure = .true.
           write_velocity = .true.
-          write_temperature = .true.
        case default
           call neko_error('This many fields not supported yet, fld_file')
        end select
@@ -802,26 +815,26 @@ contains
        read_temp = .false.
        if (rdcode(i) .eq. 'X') then
           read_mesh = .true.
-          if (data%x%n .ne. n) call data%x%init(n)
-          if (data%y%n .ne. n) call data%y%init(n)
-          if (data%z%n .ne. n) call data%z%init(n)
+          call data%x%init(n)
+          call data%y%init(n)
+          call data%z%init(n)
           i = i + 1
        end if
        if (rdcode(i) .eq. 'U') then
           read_velocity = .true.
-          if (data%u%n .ne. n) call data%u%init(n)
-          if (data%v%n .ne. n) call data%v%init(n)
-          if (data%w%n .ne. n) call data%w%init(n)
+          call data%u%init(n)
+          call data%v%init(n)
+          call data%w%init(n)
           i = i + 1
        end if
        if (rdcode(i) .eq. 'P') then
           read_pressure = .true.
-          if (data%p%n .ne. n) call data%p%init(n)
+          call data%p%init(n)
           i = i + 1
        end if
        if (rdcode(i) .eq. 'T') then
           read_temp = .true.
-          if (data%t%n .ne. n) call data%t%init(n)
+          call data%t%init(n)
           i = i + 1
        end if
        n_scalars = 0
@@ -955,7 +968,7 @@ contains
     type(MPI_Status) :: status
     integer :: n, ierr, lxyz, i
 
-    n = x%n
+    n = x%size()
     lxyz = fld_data%lx*fld_data%ly*fld_data%lz
 
     if (this%dp_precision) then
@@ -990,7 +1003,7 @@ contains
     type(MPI_Status) :: status
     integer :: n, ierr, lxyz, i, j, e, nd
 
-    n = x%n
+    n = x%size()
     nd = n*fld_data%gdim
     lxyz = fld_data%lx*fld_data%ly*fld_data%lz
 
