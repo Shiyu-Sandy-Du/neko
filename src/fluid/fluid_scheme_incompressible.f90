@@ -70,6 +70,7 @@ module fluid_scheme_incompressible
   use device, only : device_event_sync, glb_cmd_event, DEVICE_TO_HOST, &
        device_memcpy
   use time_state, only : time_state_t
+  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
