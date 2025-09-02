@@ -60,7 +60,7 @@ module entropy_viscosity
   use elementwise_filter, only : elementwise_filter_t
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
-                         field_invcol2, field_sqrt
+                         field_invcol2, field_sqrt, field_add2
   use math, only : invcol2, col2, glsum, glsc2, glmax
   use device_math, only : device_invcol2, device_col2, device_glsum, &
                           device_glsc2
@@ -369,17 +369,18 @@ contains
       call field_col3(ta, fu, fu)
       call field_copy(E, ta)
       call field_col3(ta, fv, fv)
-      call field_col2(E, ta)
+      call field_add2(E, ta)
       call field_col3(ta, fw, fw)
-      call field_col2(E, ta)
+      call field_add2(E, ta)
       call field_sqrt(E)
+      
     else
       call field_col3(ta, u, u)
       call field_copy(E, ta)
       call field_col3(ta, v, v)
-      call field_col2(E, ta)
+      call field_add2(E, ta)
       call field_col3(ta, w, w)
-      call field_col2(E, ta)
+      call field_add2(E, ta)
       call field_sqrt(E)
     end if
 
