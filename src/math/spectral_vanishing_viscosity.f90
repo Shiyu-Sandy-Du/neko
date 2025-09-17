@@ -42,6 +42,8 @@ module spectral_vanishing_viscosity
   use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
   use math, only : cfill, copy, rzero
+  use device_math, only : device_rzero, device_cfill
+  use device, only : device_map
   implicit none
   private
 
@@ -63,6 +65,7 @@ module spectral_vanishing_viscosity
     type(coef_t), pointer :: coef
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
+    type(c_ptr) :: h1_d = C_NULL_PTR
     !> a pointer pointing to a potentially variable viscosity field
     character(len=:), allocatable :: nue_field_name
     type(field_t), pointer :: nue
@@ -89,7 +92,13 @@ contains
 
     ! set up the viscosity coefficient field
     allocate(this%h1(coef%Xh%lx, coef%Xh%lx, coef%Xh%lx, coef%msh%nelv))
-    call rzero(this%h1, this%coef%dof%size())
+    
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_map(this%h1, this%h1_d, this%coef%dof%size())
+       call device_rzero(this%h1_d, this%coef%dof%size())
+    else
+       call rzero(this%h1, this%coef%dof%size())
+    end if
     
     call json_get_or_default(json, "svv.direction", &
          direction, "rst")
@@ -111,7 +120,11 @@ contains
     select case (trim(nu_type))
     case ("value")
        call json_get(json, "svv.nu.value", nu_val)
-       call cfill(this%h1, nu_val, coef%dof%size())
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_cfill(this%h1_d, nu_val, coef%dof%size())
+       else
+          call cfill(this%h1, nu_val, coef%dof%size())
+       end if 
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
        call json_get(json, "svv.nu.field_name", this%nue_field_name)
@@ -144,7 +157,11 @@ contains
        this%nue => neko_field_registry%get_field(this%nue_field_name)
     end if
 
-    call copy(this%h1, this%nue%x, this%coef%dof%size())
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_copy(this%h1_d, this%nue%x_d, this%coef%dof%size())
+    else
+       call copy(this%h1, this%nue%x, this%coef%dof%size())
+    end if
 
   end subroutine update_h1
 
