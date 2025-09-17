@@ -680,6 +680,19 @@ __inline__ __device__ T reduce_warp(T val) {
 }
 
 /**
+ * Warp shuffle reduction of maximisation
+ */
+template< typename T>
+__inline__ __device__ T reduce_max_warp(T val) {
+  val = fmax(val, __shfl_down_sync(0xffffffff, val, 16));
+  val = fmax(val, __shfl_down_sync(0xffffffff, val, 8));
+  val = fmax(val, __shfl_down_sync(0xffffffff, val, 4));
+  val = fmax(val, __shfl_down_sync(0xffffffff, val, 2));
+  val = fmax(val, __shfl_down_sync(0xffffffff, val, 1));
+  return val;
+}
+
+/**
  * Vector reduction kernel
  */
 template< typename T >
@@ -708,6 +721,37 @@ __global__ void reduce_kernel(T * bufred, const int n) {
 
   if (threadIdx.x == 0)
     bufred[blockIdx.x] = sum;
+}
+
+/**
+ * Vector reduction maximisation kernel
+ */
+template< typename T >
+__global__ void reduce_max_kernel(T * bufred, const T ninf, const int n) {
+
+  T max = ninf;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, bufred[i]);
+  }
+
+  __shared__ T shared[32];
+  unsigned int lane = threadIdx.x % warpSize;
+  unsigned int wid = threadIdx.x / warpSize;
+
+  max = reduce_max_warp<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  if (wid == 0)
+    max = reduce_max_warp<T>(max);
+
+  if (threadIdx.x == 0)
+    bufred[blockIdx.x] = max;
 }
 
 
@@ -929,6 +973,42 @@ __global__ void glsum_kernel(const T * a,
 }
 
 /**
+ * Device kernel for glmax
+ */
+template< typename T >
+__global__ void glmax_kernel(const T * a,
+                             const T ninf,
+                             T * buf_h,
+                             const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int wid = threadIdx.x / warpSize;
+
+  __shared__ T shared[32];
+  T max = ninf;
+  for (int i = idx; i<n ; i += str)
+  {
+    max = fmax(max, a[i]);
+  }
+
+  max = reduce_max_warp<T>(max);
+  if (lane == 0)
+    shared[wid] = max;
+  __syncthreads();
+
+  max = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  if (wid == 0)
+    max = reduce_max_warp<T>(max);
+
+  if (threadIdx.x == 0)
+    buf_h[blockIdx.x] = max;
+
+}
+
+/**
  * Device kernel for abs_value
  */
 template< typename T >
@@ -940,6 +1020,21 @@ __global__ void absval_kernel(T * __restrict__ a,
 
   for (int i = idx; i < n; i += str) {
     a[i] = fabs(a[i]);
+  }
+}
+
+/**
+ * Device kernel for sqaure_root
+ */
+template< typename T >
+__global__ void sqaure_root_kernel(T * __restrict__ a,
+                             const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  for (int i = idx; i < n; i += str) {
+    a[i] = sqrt(a[i]);
   }
 }
 

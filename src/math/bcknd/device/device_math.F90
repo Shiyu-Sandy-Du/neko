@@ -73,7 +73,7 @@ module device_math
        device_vcross, device_absval, device_masked_atomic_reduction_0, &
        device_pwmax, device_pwmin, device_masked_gather_copy_0, &
        device_masked_scatter_copy_0, device_invcol3, device_cdiv, device_cdiv2, &
-       device_glsubnorm, device_glmax
+       device_glsubnorm, device_glmax, device_square_root
 
 contains
 
@@ -1337,6 +1337,32 @@ contains
 #endif
 
   end subroutine device_absval
+
+  subroutine device_square_root(a_d, n, strm)
+    integer, intent(in) :: n
+    type(c_ptr) :: a_d
+    type(c_ptr), optional :: strm
+    type(c_ptr) :: strm_
+
+    if (n .lt. 1) return
+
+    if (present(strm)) then
+       strm_ = strm
+    else
+       strm_ = glb_cmd_queue
+    end if
+
+#ifdef HAVE_HIP
+    call neko_error('OPENCL is not implemented for device_square_root')
+#elif HAVE_CUDA
+    call cuda_square_root(a_d, n, strm_)
+#elif HAVE_OPENCL
+    call neko_error('OPENCL is not implemented for device_square_root')
+#else
+    call neko_error('No device backend configured')
+#endif
+
+  end subroutine device_square_root
 
   ! ========================================================================== !
   ! Device point-wise max

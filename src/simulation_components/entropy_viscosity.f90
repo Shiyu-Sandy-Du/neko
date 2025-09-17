@@ -63,7 +63,7 @@ module entropy_viscosity
                          field_invcol2, field_sqrt, field_add2
   use math, only : invcol2, col2, glsum, glsc2, glmax
   use device_math, only : device_invcol2, device_col2, device_glsum, &
-                          device_glsc2
+                          device_glsc2, device_glmax
   use gather_scatter, only : GS_OP_ADD
   use device
   implicit none
@@ -417,7 +417,7 @@ contains
     call field_absval(this%E_vel_var)
    
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call neko_error("Device backend does not support glmax for now")
+       scaling_vel = this%c_E / device_glmax(this%E_vel_var%x_d, u%dof%size())
     else
        scaling_vel = this%c_E / glmax(this%E_vel_var%x, u%dof%size())
     end if
@@ -490,7 +490,7 @@ contains
        call field_cadd2(E_s_var, E, E_s_avg)
        call field_absval(E_s_var)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call neko_error("Device backend does not support glmax for now")
+          scaling_s = this%c_E / device_glmax(E_s_var%x_d, u%dof%size())
        else
           scaling_s = this%c_E / glmax(E_s_var%x, u%dof%size())
        end if

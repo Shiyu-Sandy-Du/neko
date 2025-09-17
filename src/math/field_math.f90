@@ -75,7 +75,7 @@ module field_math
        device_addcol3, device_addcol4, device_glsum, device_glsc2, &
        device_glsc3, device_masked_gather_copy_0, device_masked_scatter_copy_0,&
        device_glsubnorm, device_invcol3, device_absval, &
-       device_cadd2
+       device_cadd2, device_square_root
   use, intrinsic :: iso_c_binding, only: c_ptr
   implicit none
   private
@@ -816,7 +816,7 @@ contains
     end if
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       write(*,*)  "field_sqrt: device sqrt not implemented"
+       call device_square_root(a%x_d, size)
     else
        call square_root(a%x, size)
     end if
