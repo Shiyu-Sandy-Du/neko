@@ -72,7 +72,8 @@ contains
             coef%h1, coef%drdx, coef%drdy, coef%drdz, coef%dsdx, coef%dsdy, &
             coef%dsdz, coef%dtdx, coef%dtdy, coef%dtdz, &
             coef%jacinv, Xh%w3, this%svv%h1, this%svv%filter%fh, &
-            this%svv%filter%fht, this%svv%direction, msh%nelv, Xh%lx)
+            this%svv%filter%fht, this%svv%direction, this%svv%filter%ident, &
+            msh%nelv, Xh%lx)
 
     if (coef%ifh2) call addcol4 (w,coef%h2,coef%B,u,coef%dof%size())
 
@@ -93,7 +94,7 @@ contains
   !! @param lx Polynomial order.
   subroutine ax_helm_svv_lx(w, u, Dx, Dy, Dz, Dxt, Dyt, Dzt, &
        h1, drdx, drdy, drdz, dsdx, dsdy, dsdz, dtdx, dtdy, dtdz, &
-       jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, n, lx)
+       jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, ident, n, lx)
     integer, intent(in) :: n, lx
     real(kind=rp), intent(inout) :: w(lx, lx, lx, n)
     real(kind=rp), intent(in) :: u(lx, lx, lx, n)
@@ -118,6 +119,7 @@ contains
     real(kind=rp), intent(in) :: svv_h1(lx, lx, lx, n)
     real(kind=rp), intent(in) :: svv_Q(lx, lx), svv_Qt(lx, lx)
     character(len=*) :: svv_direction
+    real(kind=rp), intent(in) :: ident(lx, lx)
     real(kind=rp) :: ur_h(lx, lx, lx)
     real(kind=rp) :: us_h(lx, lx, lx)
     real(kind=rp) :: ut_h(lx, lx, lx)
@@ -131,19 +133,8 @@ contains
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
-    real(kind=rp) :: ident(lx, lx)
     real(kind=rp) :: tmp
     integer :: e, i, j, k, l
-
-    do i = 1, lx
-       do j = 1, lx
-          if (i .eq. j) then
-             ident(i,j) = 1.0_rp
-          else
-             ident(i,j) = 0.0_rp
-          end if
-       end do
-    end do
 
     do e = 1, n
        do j = 1, lx * lx

@@ -197,6 +197,10 @@ contains
        call device_free(this%fht_d)
     end if
 
+    if (c_associated(this%ident_d)) then
+       call device_free(this%ident_d)
+    end if
+
     this%filter_type = ""
     this%nx = 0
     this%nt = 0

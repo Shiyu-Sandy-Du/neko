@@ -84,10 +84,13 @@ contains
     else if (svv_enabled) then
        if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
           call neko_error("svv is only available &
-                        &on the CPU")
+                        &on the CPU and device")
        else if (NEKO_BCKND_DEVICE .eq. 1) then
-          call neko_error("svv is only available &
-                        &on the CPU")
+          allocate(ax_helm_svv_device_t::object)
+          select type (f => object)
+          type is (ax_helm_svv_device_t)
+             f%svv => svv
+          end select
        else
           allocate(ax_helm_svv_cpu_t::object)
           select type (f => object)

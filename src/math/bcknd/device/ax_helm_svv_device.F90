@@ -38,40 +38,68 @@ module ax_helm_svv_device
   use mesh, only : mesh_t
   use device_math, only : device_addcol4
   use device, only : device_get_ptr
+  use tensor_device, only : tnsr3d_device
   use num_types, only : rp
-  use, intrinsic :: iso_c_binding, only : c_ptr, c_int, c_char
+  use, intrinsic :: iso_c_binding, only : c_ptr, c_int, c_char, &
+                                          c_size_t, C_NULL_PTR
   implicit none
   private
 
   type, public, extends(ax_helm_svv_t) :: ax_helm_svv_device_t
+     type(c_ptr) :: ur_d = C_NULL_PTR
+     type(c_ptr) :: us_d = C_NULL_PTR
+     type(c_ptr) :: ut_d = C_NULL_PTR
+     type(c_ptr) :: ur_svv_d = C_NULL_PTR
+     type(c_ptr) :: us_svv_d = C_NULL_PTR
+     type(c_ptr) :: ut_svv_d = C_NULL_PTR
    contains
      procedure, pass(this) :: compute => ax_helm_svv_device_compute
   end type ax_helm_svv_device_t
 
 #ifdef HAVE_CUDA
   interface
-     subroutine cuda_ax_helm_svv(au_d, u_d, &
-          dx_d, dy_d, dz_d, dxt_d, dyt_d, dzt_d,&
-          h1_d, drdx_d, drdy_d, drdz_d, &
+     subroutine cuda_ax_helm_svv_part1(ur_d, us_d, ut_d,&
+          u_d, &
+          dx_d, dy_d, dz_d, &
+          drdx_d, drdy_d, drdz_d, &
           dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, jacinv_d, weight3_d, &
-          svv_h1_d, svv_Q_d, svv_Qt_d, svv_direction, &
-          nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv')
+          dtdx_d, dtdy_d, dtdz_d, &
+          jacinv_d, nelv, lx) &
+          bind(c, name='cuda_ax_helm_svv_part1')
        use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: au_d
+       type(c_ptr), value :: ur_d, us_d, ut_d
        type(c_ptr), value :: u_d
        type(c_ptr), value :: dx_d, dy_d, dz_d
-       type(c_ptr), value :: dxt_d, dyt_d, dzt_d
+       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
+       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
+       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
+       type(c_ptr), value :: jacinv_d
+       integer(c_int) :: nelv, lx
+     end subroutine cuda_ax_helm_svv_part1
+  end interface
+  interface
+     subroutine cuda_ax_helm_svv_part2(au_d, &
+          ur_d, us_d, ut_d,&
+          ur_svv_d, us_svv_d, ut_svv_d, &
+          dx_d, dy_d, dz_d, &
+          h1_d, drdx_d, drdy_d, drdz_d, &
+          dsdx_d, dsdy_d, dsdz_d, &
+          dtdx_d, dtdy_d, dtdz_d, &
+          w3_d, svv_h1_d, nelv, lx) &
+          bind(c, name='cuda_ax_helm_svv_part2')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: au_d
+       type(c_ptr), value :: ur_d, us_d, ut_d
+       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
+       type(c_ptr), value :: dx_d, dy_d, dz_d
        type(c_ptr), value :: h1_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d, weight3_d
-       type(c_ptr), value :: svv_h1_d, svv_Q_d, svv_Qt_d
-       character(kind=c_char), dimension(*), value :: svv_direction
+       type(c_ptr), value :: w3_d
+       type(c_ptr), value :: svv_h1_d
        integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv
+     end subroutine cuda_ax_helm_svv_part2
   end interface
 #endif
 
@@ -85,22 +113,90 @@ contains
     real(kind=rp), intent(inout) :: au(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     type(c_ptr) :: u_d, au_d
+    integer :: n
+    integer(c_size_t) :: s
+
+    associate(lx => Xh%lx, ly => Xh%ly, lz => Xh%lz, &
+          nelv => msh%nelv, &
+          ur_d => this%ur_d, us_d => this%us_d, ut_d => this%ut_d, &
+          ur_svv_d => this%ur_svv_d, us_svv_d => this%us_svv_d, &
+          ut_svv_d => this%ut_svv_d, &
+          svv_Q => this%svv%filter%fh_d, svv_Qt => this%svv%filter%fht_d, &
+          svv_direction => this%svv%direction, &
+          ident => this%svv%filter%ident)
 
     u_d = device_get_ptr(u)
     au_d = device_get_ptr(au)
+    
+    ! If the work arrays are not allocated, allocate them
+    if (ur_d .eq. C_NULL_PTR) then
+       n = lx * ly * lz * nelv
+       s = n * int(4, c_size_t)
+       call device_alloc(ur_d, s)
+       call device_alloc(ur_d, s)
+       call device_alloc(ut_d, s)
+       call device_alloc(ur_svv_d, s)
+       call device_alloc(us_svv_d, s)
+       call device_alloc(ut_svv_d, s)
+    end if
 
 #ifdef HAVE_HIP
     call neko_error('HIP is not implemented for SVV')
 #elif HAVE_CUDA
-    call cuda_ax_helm_svv(au_d, u_d, &
-          Xh%dx_d, Xh%dy_d, Xh%dz_d, Xh%dxt_d, Xh%dyt_d, Xh%dzt_d,&
+    call cuda_ax_helm_svv_part1(ur_d, us_d, ut_d, &
+          u_d, &
+          Xh%dx_d, Xh%dy_d, Xh%dz_d, &
+          coef%drdx_d, coef%drdy_d, coef%drdz_d, &
+          coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
+          coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
+          coef%jacinv_d, &
+          nelv, lx)
+#elif HAVE_OPENCL
+    call neko_error('OPENCL is not implemented for SVV')
+#endif
+
+    ! Filtering operation
+    if (svv_direction .eq. "rst") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
+    else if (svv_direction .eq. "rs") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, svv_Qt, ident, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, svv_Qt, ident, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, svv_Qt, ident, nelv)
+    else if (svv_direction .eq. "rt") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, ident, svv_Qt, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, ident, svv_Qt, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, ident, svv_Qt, nelv)
+    else if (svv_direction .eq. "st") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, svv_Qt, svv_Qt, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, svv_Qt, svv_Qt, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, svv_Qt, svv_Qt, nelv)
+    else if (svv_direction .eq. "r") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, ident, ident, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, ident, ident, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, ident, ident, nelv)
+    else if (svv_direction .eq. "s") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, svv_Qt, ident, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, svv_Qt, ident, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, svv_Qt, ident, nelv)
+    else if (svv_direction .eq. "t") then
+       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, ident, svv_Qt, nelv)
+       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, ident, svv_Qt, nelv)
+       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, ident, svv_Qt, nelv)
+    end if
+
+#ifdef HAVE_HIP
+    call neko_error('HIP is not implemented for SVV')
+#elif HAVE_CUDA
+    call cuda_ax_helm_svv_part2(au_d, &
+          ur_d, us_d, ut_d, &
+          ur_svv_d, us_svv_d, ut_svv_d, &
+          Xh%dx_d, Xh%dy_d, Xh%dz_d, &
           coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
           coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
           coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-          coef%jacinv_d, Xh%w3_d, &
-          this%svv%h1_d, this%svv%filter%fh_d, &
-          this%svv%filter%fh_d, this%svv%direction, &
-          msh%nelv, Xh%lx) &
+          Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
 #elif HAVE_OPENCL
     call neko_error('OPENCL is not implemented for SVV')
 #endif
@@ -108,6 +204,8 @@ contains
     if (coef%ifh2) then
        call device_addcol4(au_d ,coef%h2_d, coef%B_d, u_d, coef%dof%size())
     end if
+
+    end associate
 
   end subroutine ax_helm_svv_device_compute
 end module ax_helm_svv_device
