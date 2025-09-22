@@ -58,7 +58,7 @@ contains
   !! @note Since this is a performance-crtical routine, it is implemented in
   !! several kernels corresponding to different polynmial orders.
   subroutine ax_helm_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_cpu_t), intent(in) :: this
+    class(ax_helm_cpu_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

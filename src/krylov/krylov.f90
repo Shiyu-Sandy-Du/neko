@@ -145,7 +145,7 @@ module krylov
        import rp
        implicit none
        class(ksp_t), intent(inout) :: this
-       class(ax_t), intent(in) :: Ax
+       class(ax_t), intent(inout) :: Ax
        type(field_t), intent(inout) :: x
        integer, intent(in) :: n
        real(kind=rp), dimension(n), intent(in) :: f
@@ -183,7 +183,7 @@ module krylov
        import rp
        implicit none
        class(ksp_t), intent(inout) :: this
-       class(ax_t), intent(in) :: Ax
+       class(ax_t), intent(inout) :: Ax
        type(field_t), intent(inout) :: x
        type(field_t), intent(inout) :: y
        type(field_t), intent(inout) :: z

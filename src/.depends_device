@@ -52,6 +52,7 @@ math/bcknd/device/cuda/opr_lambda2.lo : math/bcknd/device/cuda/opr_lambda2.cu ma
 math/bcknd/device/cuda/opr_cfl.lo : math/bcknd/device/cuda/opr_cfl.cu math/bcknd/device/cuda/cfl_kernel.h
 math/bcknd/device/cuda/ax_helm.lo : math/bcknd/device/cuda/ax_helm.cu math/bcknd/device/cuda/ax_helm_kernel.h
 math/bcknd/device/cuda/ax_helm_full.lo : math/bcknd/device/cuda/ax_helm_full.cu math/bcknd/device/cuda/ax_helm_full_kernel.h
+math/bcknd/device/cuda/ax_helm_svv.lo : math/bcknd/device/cuda/ax_helm_svv.cu math/bcknd/device/cuda/ax_helm_svv_kernel.h
 math/bcknd/device/cuda/schwarz.lo : math/bcknd/device/cuda/schwarz.cu math/bcknd/device/cuda/schwarz_kernel.h
 math/bcknd/device/cuda/tensor.lo : math/bcknd/device/cuda/tensor.cu math/bcknd/device/cuda/tensor_kernel.h
 math/bcknd/device/cuda/fdm.lo : math/bcknd/device/cuda/fdm.cu math/bcknd/device/cuda/fdm_kernel.h

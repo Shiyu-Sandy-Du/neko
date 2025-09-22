@@ -79,7 +79,7 @@ module ax_helm_xsmm
 contains
 
   subroutine ax_helm_xsmm_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_xsmm_t), intent(in) :: this
+    class(ax_helm_xsmm_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

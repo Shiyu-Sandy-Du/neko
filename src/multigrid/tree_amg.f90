@@ -130,7 +130,7 @@ contains
   !! @param blst Finest level BC list
   subroutine tamg_init(this, ax, Xh, coef, msh, gs_h, nlvls, blst)
     class(tamg_hierarchy_t), target, intent(inout) :: this
-    class(ax_t), target, intent(in) :: ax
+    class(ax_t), target, intent(inout) :: Ax
     type(space_t),target, intent(in) :: Xh
     type(coef_t), target, intent(in) :: coef
     type(mesh_t), target, intent(in) :: msh

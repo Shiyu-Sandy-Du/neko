@@ -48,7 +48,7 @@ module ax_helm_sx
 contains
 
   subroutine ax_helm_sx_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_sx_t), intent(in) :: this
+    class(ax_helm_sx_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

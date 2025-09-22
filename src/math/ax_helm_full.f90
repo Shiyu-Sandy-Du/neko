@@ -58,7 +58,7 @@ contains
   !! @param msh Mesh.
   !! @param Xh Function space \f$ X_h \f$.
   subroutine ax_helm_full_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_full_t), intent(in) :: this
+    class(ax_helm_full_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

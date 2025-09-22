@@ -95,7 +95,7 @@ module pnpn_residual
        import coef_t
        import mesh_t
        import rp
-       class(ax_t), intent(in) :: Ax
+       class(ax_t), intent(inout) :: Ax
        type(mesh_t), intent(inout) :: msh
        type(space_t), intent(inout) :: Xh
        type(field_t), intent(inout) :: p, u, v, w

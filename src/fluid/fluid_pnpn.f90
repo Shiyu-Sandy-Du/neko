@@ -846,11 +846,6 @@ contains
          call this%svv%update(tstep)
       end if
 
-      ! Update SVV if needed
-      if (this%svv_enabled) then
-         call this%svv%update(tstep)
-      end if
-
       call fluid_step_info(time, ksp_results, &
            this%full_stress_formulation, this%strict_convergence)
 

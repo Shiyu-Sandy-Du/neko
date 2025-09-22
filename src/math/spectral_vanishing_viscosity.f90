@@ -42,8 +42,10 @@ module spectral_vanishing_viscosity
   use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
   use math, only : cfill, copy, rzero
-  use device_math, only : device_rzero, device_cfill
+  use device_math, only : device_rzero, device_cfill, device_copy
   use device, only : device_map
+  use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR
+  use neko_config, only : NEKO_BCKND_DEVICE
   implicit none
   private
 

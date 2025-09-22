@@ -31,6 +31,8 @@
 ! POSSIBILITY OF SUCH DAMAGE.
 !
 submodule (ax_product) ax_helm_fctry
+  use num_types, only : rp
+  use, intrinsic :: iso_fortran_env
   use neko_config, only : NEKO_BCKND_SX, NEKO_BCKND_XSMM, &
        NEKO_BCKND_DEVICE
   use ax_helm_device, only : ax_helm_device_t
@@ -41,8 +43,11 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_full_cpu, only : ax_helm_full_cpu_t
   use ax_helm_full_device, only : ax_helm_full_device_t
   use ax_helm_svv_cpu, only : ax_helm_svv_cpu_t
+  use ax_helm_svv_device, only : ax_helm_svv_device_t
   use spectral_vanishing_viscosity, only : svv_t
   use utils, only : neko_error
+  use, intrinsic :: iso_c_binding, only : c_size_t
+  use device, only : device_alloc
   implicit none
 
 contains
@@ -57,6 +62,8 @@ contains
     logical, intent(in) :: full_formulation
     type(svv_t), intent(in), target, optional :: svv
     logical :: svv_enabled = .false.
+    integer :: n
+    integer(c_size_t) :: s
 
     if (allocated(object)) then
        deallocate(object)
@@ -90,6 +97,20 @@ contains
           select type (f => object)
           type is (ax_helm_svv_device_t)
              f%svv => svv
+             n = svv%coef%Xh%lx * svv%coef%Xh%ly &
+               * svv%coef%Xh%lz * svv%coef%msh%nelv
+             if (rp .eq. REAL32) then
+                s = n * int(4, c_size_t)
+             else if (rp .eq. REAL64) then
+                s = n * int(8, c_size_t)
+             end if
+
+             call device_alloc(f%ur_d, s)
+             call device_alloc(f%us_d, s)
+             call device_alloc(f%ut_d, s)
+             call device_alloc(f%ur_svv_d, s)
+             call device_alloc(f%us_svv_d, s)
+             call device_alloc(f%ut_svv_d, s)
           end select
        else
           allocate(ax_helm_svv_cpu_t::object)

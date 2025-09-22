@@ -347,7 +347,7 @@ contains
 
   subroutine pnpn_vel_res_stress_device_compute(Ax, u, v, w, u_res, v_res, &
        w_res, p, f_x, f_y, f_z, c_Xh, msh, Xh, mu, rho, bd, dt, n)
-    class(ax_t), intent(in) :: Ax
+    class(ax_t), intent(inout) :: Ax
     type(mesh_t), intent(inout) :: msh
     type(space_t), intent(inout) :: Xh
     type(field_t), intent(inout) :: p, u, v, w

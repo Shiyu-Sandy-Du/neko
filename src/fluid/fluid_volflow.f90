@@ -161,8 +161,8 @@ contains
     type(time_scheme_controller_t), intent(in) :: ext_bdf
     type(bc_list_t), intent(inout) :: bclst_dp, bclst_du, bclst_dv, bclst_dw
     type(bc_list_t), intent(inout) :: bclst_vel_res
-    class(ax_t), intent(in) :: Ax_vel
-    class(ax_t), intent(in) :: Ax_prs
+    class(ax_t), intent(inout) :: Ax_vel
+    class(ax_t), intent(inout) :: Ax_prs
     class(ksp_t), intent(inout) :: ksp_prs, ksp_vel
     class(pc_t), intent(inout) :: pc_prs, pc_vel
     real(kind=rp), intent(in) :: bd
@@ -350,8 +350,8 @@ contains
     type(field_t) :: mu
     type(bc_list_t), intent(inout) :: bclst_dp, bclst_du, bclst_dv, bclst_dw
     type(bc_list_t), intent(inout) :: bclst_vel_res
-    class(ax_t), intent(in) :: Ax_vel
-    class(ax_t), intent(in) :: Ax_prs
+    class(ax_t), intent(inout) :: Ax_vel
+    class(ax_t), intent(inout) :: Ax_prs
     class(ksp_t), intent(inout) :: ksp_prs, ksp_vel
     class(pc_t), intent(inout) :: pc_prs, pc_vel
     integer, intent(in) :: prs_max_iter, vel_max_iter

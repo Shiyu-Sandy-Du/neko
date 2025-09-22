@@ -78,7 +78,7 @@ module ax_product
        import ax_t
        import rp
        implicit none
-       class(ax_t), intent(in) :: this
+       class(ax_t), intent(inout) :: this
        type(space_t), intent(in) :: Xh
        type(mesh_t), intent(in) :: msh
        type(coef_t), intent(in) :: coef
@@ -106,7 +106,7 @@ module ax_product
        import ax_t
        import rp
        implicit none
-       class(ax_t), intent(in) :: this
+       class(ax_t), intent(inout) :: this
        type(space_t), intent(in) :: Xh
        type(mesh_t), intent(in) :: msh
        type(coef_t), intent(in) :: coef

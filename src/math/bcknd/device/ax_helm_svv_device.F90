@@ -13,7 +13,7 @@
 !     disclaimer in the documentation and/or other materials provided
 !     with the distribution.
 !
-!   * Neither the name of the authors nor the names of its
+!   * Neither the name of the wthors nor the names of its
 !     contributors may be used to endorse or promote products derived
 !     from this software without specific prior written permission.
 !
@@ -36,12 +36,13 @@ module ax_helm_svv_device
   use coefs, only : coef_t
   use space, only : space_t
   use mesh, only : mesh_t
-  use device_math, only : device_addcol4
-  use device, only : device_get_ptr
+  use device_math, only : device_addcol4, device_rzero
+  use device, only : device_get_ptr, device_alloc
   use tensor_device, only : tnsr3d_device
   use num_types, only : rp
   use, intrinsic :: iso_c_binding, only : c_ptr, c_int, c_char, &
-                                          c_size_t, C_NULL_PTR
+                                          c_size_t, C_NULL_PTR, &
+                                          c_associated
   implicit none
   private
 
@@ -78,7 +79,7 @@ module ax_helm_svv_device
      end subroutine cuda_ax_helm_svv_part1
   end interface
   interface
-     subroutine cuda_ax_helm_svv_part2(au_d, &
+     subroutine cuda_ax_helm_svv_part2(w_d, &
           ur_d, us_d, ut_d,&
           ur_svv_d, us_svv_d, ut_svv_d, &
           dx_d, dy_d, dz_d, &
@@ -88,7 +89,7 @@ module ax_helm_svv_device
           w3_d, svv_h1_d, nelv, lx) &
           bind(c, name='cuda_ax_helm_svv_part2')
        use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: au_d
+       type(c_ptr), value :: w_d
        type(c_ptr), value :: ur_d, us_d, ut_d
        type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
        type(c_ptr), value :: dx_d, dy_d, dz_d
@@ -105,16 +106,15 @@ module ax_helm_svv_device
 
 contains
 
-  subroutine ax_helm_svv_device_compute(this, au, u, coef, msh, Xh)
-    class(ax_helm_svv_device_t), intent(in) :: this
+  subroutine ax_helm_svv_device_compute(this, w, u, coef, msh, Xh)
+    class(ax_helm_svv_device_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef
-    real(kind=rp), intent(inout) :: au(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
+    real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    type(c_ptr) :: u_d, au_d
+    type(c_ptr) :: u_d, w_d
     integer :: n
-    integer(c_size_t) :: s
 
     associate(lx => Xh%lx, ly => Xh%ly, lz => Xh%lz, &
           nelv => msh%nelv, &
@@ -123,23 +123,11 @@ contains
           ut_svv_d => this%ut_svv_d, &
           svv_Q => this%svv%filter%fh_d, svv_Qt => this%svv%filter%fht_d, &
           svv_direction => this%svv%direction, &
-          ident => this%svv%filter%ident)
+          ident => this%svv%filter%ident_d)
 
     u_d = device_get_ptr(u)
-    au_d = device_get_ptr(au)
+    w_d = device_get_ptr(w)
     
-    ! If the work arrays are not allocated, allocate them
-    if (ur_d .eq. C_NULL_PTR) then
-       n = lx * ly * lz * nelv
-       s = n * int(4, c_size_t)
-       call device_alloc(ur_d, s)
-       call device_alloc(ur_d, s)
-       call device_alloc(ut_d, s)
-       call device_alloc(ur_svv_d, s)
-       call device_alloc(us_svv_d, s)
-       call device_alloc(ut_svv_d, s)
-    end if
-
 #ifdef HAVE_HIP
     call neko_error('HIP is not implemented for SVV')
 #elif HAVE_CUDA
@@ -189,7 +177,7 @@ contains
 #ifdef HAVE_HIP
     call neko_error('HIP is not implemented for SVV')
 #elif HAVE_CUDA
-    call cuda_ax_helm_svv_part2(au_d, &
+    call cuda_ax_helm_svv_part2(w_d, &
           ur_d, us_d, ut_d, &
           ur_svv_d, us_svv_d, ut_svv_d, &
           Xh%dx_d, Xh%dy_d, Xh%dz_d, &
@@ -202,7 +190,7 @@ contains
 #endif
 
     if (coef%ifh2) then
-       call device_addcol4(au_d ,coef%h2_d, coef%B_d, u_d, coef%dof%size())
+       call device_addcol4(w_d ,coef%h2_d, coef%B_d, u_d, coef%dof%size())
     end if
 
     end associate

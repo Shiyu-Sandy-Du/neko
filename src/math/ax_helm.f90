@@ -60,7 +60,7 @@ contains
   !! @param msh Mesh.
   !! @param Xh Function space \f$ X_h \f$.
   subroutine ax_helm_compute_vector(this, au, av, aw, u, v, w, coef, msh, Xh)
-    class(ax_helm_t), intent(in) :: this
+    class(ax_helm_t), intent(inout) :: this
     type(space_t), intent(in) :: Xh
     type(mesh_t), intent(in) :: msh
     type(coef_t), intent(in) :: coef

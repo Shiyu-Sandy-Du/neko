@@ -263,6 +263,7 @@ neko_fortran_SOURCES = \
 	math/bcknd/xsmm/ax_helm_xsmm.F90\
 	math/bcknd/device/ax_helm_device.F90\
 	math/bcknd/device/ax_helm_full_device.F90\
+	math/bcknd/device/ax_helm_svv_device.F90\
 	common/projection.f90\
 	common/projection_vel.f90\
 	common/bcknd/device/device_projection.F90\
@@ -465,6 +466,7 @@ libneko_la_SOURCES += \
 	math/bcknd/device/cuda/opr_cfl.cu\
 	math/bcknd/device/cuda/ax_helm.cu\
 	math/bcknd/device/cuda/ax_helm_full.cu\
+	math/bcknd/device/cuda/ax_helm_svv.cu\
 	krylov/bcknd/device/cuda/pc_jacobi.cu\
 	krylov/bcknd/device/cuda/pipecg_aux.cu\
 	krylov/bcknd/device/cuda/fusedcg_aux.cu\
@@ -653,6 +655,7 @@ EXTRA_DIST = \
 	math/bcknd/device/cuda/cfl_kernel.h\
 	math/bcknd/device/cuda/ax_helm_kernel.h\
 	math/bcknd/device/cuda/ax_helm_full_kernel.h\
+	math/bcknd/device/cuda/ax_helm_svv_kernel.h\
 	common/bcknd/device/cuda/sumab_kernel.h\
 	common/bcknd/device/cuda/makeext_kernel.h\
 	common/bcknd/device/cuda/makebdf_kernel.h\

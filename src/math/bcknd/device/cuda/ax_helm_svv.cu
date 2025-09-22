@@ -60,7 +60,7 @@ extern "C" {
     const dim3 nblcks((*nelv), 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
 
-#define CASE_KSTEP(LX)                                                            \
+#define CASE_part1_KSTEP(LX)                                                            \
     ax_helm_svv_part1_kernel_kstep<real, LX>                                            \
     <<<nblcks, nthrds, 0, stream>>> ((real *) ur, (real *) us, (real *) ut,              \
                                      (real *) u,                                         \
@@ -71,7 +71,7 @@ extern "C" {
                                      (real *) jacinv);                                   \
     CUDA_CHECK(cudaGetLastError());
 
-#define CASE_KSTEP_PADDED(LX)                                                     \
+#define CASE_part1_KSTEP_PADDED(LX)                                                     \
     ax_helm_svv_part1_kernel_kstep_padded<real, LX>                                     \
     <<<nblcks, nthrds, 0, stream>>> ((real *) ur, (real *) us, (real *) ut,              \
                                      (real *) u,                                         \
@@ -82,32 +82,32 @@ extern "C" {
                                      (real *) jacinv);                                   \
     CUDA_CHECK(cudaGetLastError());
 
-#define CASE(LX)                                                                \
+#define CASE_part1(LX)                                                                \
     case LX:                                                                    \
-      CASE_KSTEP(LX);                                                           \
+      CASE_part1_KSTEP(LX);                                                           \
        break
 
-#define CASE_PADDED(LX)                                                         \
+#define CASE_part1_PADDED(LX)                                                         \
     case LX:                                                                    \
-      CASE_KSTEP_PADDED(LX);                                                    \
+      CASE_part1_KSTEP_PADDED(LX);                                                    \
        break
 
     switch(*lx) {
-      CASE(2);
-      CASE(3);
-      CASE_PADDED(4);
-      CASE(5);
-      CASE(6);
-      CASE(7);
-      CASE_PADDED(8);
-      CASE(9);
-      CASE(10);
-      CASE(11);
-      CASE(12);
-      CASE(13);
-      CASE(14);
-      CASE(15);
-      CASE_PADDED(16);
+      CASE_part1(2);
+      CASE_part1(3);
+      CASE_part1_PADDED(4);
+      CASE_part1(5);
+      CASE_part1(6);
+      CASE_part1(7);
+      CASE_part1_PADDED(8);
+      CASE_part1(9);
+      CASE_part1(10);
+      CASE_part1(11);
+      CASE_part1(12);
+      CASE_part1(13);
+      CASE_part1(14);
+      CASE_part1(15);
+      CASE_part1_PADDED(16);
       default:
         {
           fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
@@ -119,7 +119,7 @@ extern "C" {
   /**
    * Fortran wrapper for device CUDA Ax_svv version, part 2
    */
-  void cuda_ax_helm_svv_part2(void *au
+  void cuda_ax_helm_svv_part2(void *au,
                         void *ur, void *us, void *ut,
                         void *ur_svv, void *us_svv, void *ut_svv,
                         void *dx, void *dy, void *dz,
@@ -133,7 +133,7 @@ extern "C" {
     const dim3 nblcks((*nelv), 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
 
-#define CASE_KSTEP(LX)                                                            \
+#define CASE_part2_KSTEP(LX)                                                            \
     ax_helm_svv_part2_kernel_kstep<real, LX>                                            \
     <<<nblcks, nthrds, 0, stream>>> ((real *) au,                                        \
                                      (real *) ur, (real *) us, (real *) ut,              \
@@ -147,7 +147,7 @@ extern "C" {
                                      (real *) w3, (real *) h1_svv);                      \
     CUDA_CHECK(cudaGetLastError());
 
-#define CASE_KSTEP_PADDED(LX)                                                     \
+#define CASE_part2_KSTEP_PADDED(LX)                                                     \
     ax_helm_svv_part2_kernel_kstep_padded<real, LX>                                     \
     <<<nblcks, nthrds, 0, stream>>> ((real *) au,                                        \
                                      (real *) ur, (real *) us, (real *) ut,              \
@@ -161,32 +161,32 @@ extern "C" {
                                      (real *) w3, (real *) h1_svv);                      \
     CUDA_CHECK(cudaGetLastError());
 
-#define CASE(LX)                                                                \
+#define CASE_part2(LX)                                                                \
     case LX:                                                                    \
-      CASE_KSTEP(LX);                                                           \
+      CASE_part2_KSTEP(LX);                                                           \
        break
 
-#define CASE_PADDED(LX)                                                         \
+#define CASE_part2_PADDED(LX)                                                         \
     case LX:                                                                    \
-      CASE_KSTEP_PADDED(LX);                                                    \
+      CASE_part2_KSTEP_PADDED(LX);                                                    \
        break
 
     switch(*lx) {
-      CASE(2);
-      CASE(3);
-      CASE_PADDED(4);
-      CASE(5);
-      CASE(6);
-      CASE(7);
-      CASE_PADDED(8);
-      CASE(9);
-      CASE(10);
-      CASE(11);
-      CASE(12);
-      CASE(13);
-      CASE(14);
-      CASE(15);
-      CASE_PADDED(16);
+      CASE_part2(2);
+      CASE_part2(3);
+      CASE_part2_PADDED(4);
+      CASE_part2(5);
+      CASE_part2(6);
+      CASE_part2(7);
+      CASE_part2_PADDED(8);
+      CASE_part2(9);
+      CASE_part2(10);
+      CASE_part2(11);
+      CASE_part2(12);
+      CASE_part2(13);
+      CASE_part2(14);
+      CASE_part2(15);
+      CASE_part2_PADDED(16);
       default:
         {
           fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

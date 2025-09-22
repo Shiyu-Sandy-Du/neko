@@ -102,7 +102,7 @@ contains
   subroutine tamg_mg_init(this, ax, Xh, coef, msh, gs_h, nlvls, blst, &
        max_iter, cheby_degree)
     class(tamg_solver_t), intent(inout), target :: this
-    class(ax_t), target, intent(in) :: ax
+    class(ax_t), target, intent(inout) :: Ax
     type(space_t), target, intent(in) :: Xh
     type(coef_t), target, intent(in) :: coef
     type(mesh_t), target, intent(in) :: msh

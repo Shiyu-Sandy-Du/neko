@@ -25,7 +25,7 @@ contains
 
   subroutine scalar_residual_sx_compute(Ax, s, s_res, f_Xh, c_Xh, msh, Xh, &
       lambda, rhocp, bd, dt, n)
-    class(ax_t), intent(in) :: Ax
+    class(ax_t), intent(inout) :: Ax
     type(mesh_t), intent(inout) :: msh
     type(space_t), intent(inout) :: Xh
     type(field_t), intent(inout) :: s

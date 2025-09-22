@@ -30,7 +30,7 @@ sem/local_interpolation.lo : sem/local_interpolation.f90 config/neko_config.lo m
 math/math.lo : math/math.f90 comm/comm.lo config/num_types.lo 
 math/mathops.lo : math/mathops.f90 config/num_types.lo 
 math/fast3d.lo : math/fast3d.f90 math/math.lo sem/speclib.lo config/num_types.lo 
-math/spectral_vanishing_viscosity.lo : math/spectral_vanishing_viscosity.f90 math/math.lo sem/coef.lo common/json_utils.lo common/utils.lo field/field.lo field/field_registry.lo filter/elementwise_filter.lo config/num_types.lo 
+math/spectral_vanishing_viscosity.lo : math/spectral_vanishing_viscosity.f90 device/device.lo math/bcknd/device/device_math.lo math/math.lo sem/coef.lo common/json_utils.lo common/utils.lo field/field.lo field/field_registry.lo filter/elementwise_filter.lo config/num_types.lo 
 sem/space.lo : sem/space.f90 math/math.lo math/mxm_wrapper.lo math/tensor.lo math/fast3d.lo common/utils.lo device/device.lo sem/speclib.lo config/num_types.lo config/neko_config.lo 
 sem/map_1d.lo : sem/map_1d.f90 math/math.lo common/utils.lo math/vector.lo math/matrix.lo field/field_list.lo sem/coef.lo comm/comm.lo device/device.lo mesh/mesh.lo gs/gather_scatter.lo sem/dofmap.lo sem/space.lo config/num_types.lo config/neko_config.lo 
 sem/map_2d.lo : sem/map_2d.f90 io/fld_file_data.lo comm/comm.lo device/device.lo field/field.lo math/math.lo common/utils.lo math/vector.lo sem/coef.lo field/field_list.lo mesh/mesh.lo gs/gather_scatter.lo sem/map_1d.lo sem/dofmap.lo config/num_types.lo config/neko_config.lo 
@@ -260,6 +260,7 @@ math/bcknd/sx/ax_helm_sx.lo : math/bcknd/sx/ax_helm_sx.f90 math/math.lo mesh/mes
 math/bcknd/xsmm/ax_helm_xsmm.lo : math/bcknd/xsmm/ax_helm_xsmm.F90 math/mxm_wrapper.lo mesh/mesh.lo sem/space.lo sem/coef.lo config/num_types.lo math/ax_helm.lo 
 math/bcknd/device/ax_helm_device.lo : math/bcknd/device/ax_helm_device.F90 device/device.lo math/bcknd/device/device_math.lo mesh/mesh.lo sem/space.lo sem/coef.lo config/num_types.lo math/ax_helm.lo 
 math/bcknd/device/ax_helm_full_device.lo : math/bcknd/device/ax_helm_full_device.F90 common/utils.lo device/device.lo math/bcknd/device/device_math.lo mesh/mesh.lo sem/space.lo sem/coef.lo config/num_types.lo math/ax_helm_full.lo 
+math/bcknd/device/ax_helm_svv_device.lo : math/bcknd/device/ax_helm_svv_device.F90 math/bcknd/device/tensor_device.lo device/device.lo math/bcknd/device/device_math.lo mesh/mesh.lo sem/space.lo sem/coef.lo config/num_types.lo math/ax_helm_svv.lo 
 common/projection.lo : common/projection.f90 comm/comm.lo common/time_step_controller.lo common/utils.lo common/log.lo common/profiler.lo common/bcknd/device/device_projection.lo math/bcknd/device/device_math.lo device/device.lo config/neko_config.lo gs/gather_scatter.lo bc/bc_list.lo math/ax.lo sem/coef.lo math/math.lo config/num_types.lo 
 common/projection_vel.lo : common/projection_vel.f90 common/projection.lo common/time_step_controller.lo common/profiler.lo math/bcknd/device/device_math.lo device/device.lo config/neko_config.lo gs/gather_scatter.lo bc/bc_list.lo math/ax.lo sem/coef.lo math/math.lo config/num_types.lo 
 common/bcknd/device/device_projection.lo : common/bcknd/device/device_projection.F90 common/utils.lo config/num_types.lo 

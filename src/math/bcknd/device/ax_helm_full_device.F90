@@ -120,7 +120,7 @@ contains
 
   subroutine ax_helm_full_device_compute_vector(this, au, av, aw, &
        u, v, w, coef, msh, Xh)
-    class(ax_helm_full_device_t), intent(in) :: this
+    class(ax_helm_full_device_t), intent(inout) :: this
     type(space_t), intent(in) :: Xh
     type(mesh_t), intent(in) :: msh
     type(coef_t), intent(in) :: coef
