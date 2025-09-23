@@ -97,8 +97,7 @@ contains
           select type (f => object)
           type is (ax_helm_svv_device_t)
              f%svv => svv
-             n = svv%coef%Xh%lx * svv%coef%Xh%ly &
-               * svv%coef%Xh%lz * svv%coef%msh%nelv
+             n = svv%coef%dof%size()
              if (rp .eq. REAL32) then
                 s = n * int(4, c_size_t)
              else if (rp .eq. REAL64) then

@@ -274,6 +274,7 @@ __global__ void __launch_bounds__(LX*LX,3)
     rur_svv[k] = ur[ij + k*LX*LX + ele] - ur_svv[ij + k*LX*LX + ele];
     rus_svv[k] = us[ij + k*LX*LX + ele] - us_svv[ij + k*LX*LX + ele];
     rut_svv[k] = ut[ij + k*LX*LX + ele] - ut_svv[ij + k*LX*LX + ele];
+    ruw[k] = 0.0;
   }
 
   __syncthreads();
@@ -289,8 +290,8 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dtdx_local = dtdx[ijk+ele];
     const T dtdy_local = dtdy[ijk+ele];
     const T dtdz_local = dtdz[ijk+ele];
-    const T dj = w3[ijk+ele]*h1[ijk+ele];
-    const T dj_svv = w3[ijk+ele]*h1_svv[ijk+ele];
+    const T dj = w3[ijk]*h1[ijk+ele];
+    const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
 
     T ur_h = dj * rur[k] + dj_svv * rur_svv[k];
     T us_h = dj * rus[k] + dj_svv * rus_svv[k];
@@ -319,7 +320,7 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-   au[ij + k*LX*LX + ele] = ruw[k];
+    au[ij + k*LX*LX + ele] = ruw[k];
   }
 }
 
@@ -384,6 +385,7 @@ __global__ void __launch_bounds__(LX*LX,3)
     rur_svv[k] = ur[ij + k*LX*LX + ele] - ur_svv[ij + k*LX*LX + ele];
     rus_svv[k] = us[ij + k*LX*LX + ele] - us_svv[ij + k*LX*LX + ele];
     rut_svv[k] = ut[ij + k*LX*LX + ele] - ut_svv[ij + k*LX*LX + ele];
+    ruw[k] = 0.0;
   }
 
   __syncthreads();
@@ -399,8 +401,8 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dtdx_local = dtdx[ijk+ele];
     const T dtdy_local = dtdy[ijk+ele];
     const T dtdz_local = dtdz[ijk+ele];
-    const T dj = w3[ijk+ele]*h1[ijk+ele];
-    const T dj_svv = w3[ijk+ele]*h1_svv[ijk+ele];
+    const T dj = w3[ijk]*h1[ijk+ele];
+    const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
 
     T ur_h = dj * rur[k] + dj_svv * rur_svv[k];
     T us_h = dj * rus[k] + dj_svv * rus_svv[k];
@@ -429,7 +431,7 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-   au[ij + k*LX*LX + ele] = ruw[k];
+    au[ij + k*LX*LX + ele] = ruw[k];
   }
 }
 

@@ -36,7 +36,7 @@ module ax_helm_svv_device
   use coefs, only : coef_t
   use space, only : space_t
   use mesh, only : mesh_t
-  use device_math, only : device_addcol4, device_rzero
+  use device_math, only : device_addcol4
   use device, only : device_get_ptr, device_alloc
   use tensor_device, only : tnsr3d_device
   use num_types, only : rp
