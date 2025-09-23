@@ -216,7 +216,7 @@ contains
   subroutine cpu_matrix_inverse(m)
     ! Gauss-Jordan matrix inversion with full pivoting
     ! Num. Rec. p. 30, 2nd Ed., Fortran
-    ! m%x     is an sqaure matrix
+    ! m%x     is an square matrix
     ! rmult is m  work array of length nrows = ncols
     class(matrix_t), intent(inout) :: m
     integer :: indr(m%nrows), indc(m%ncols), ipiv(m%ncols)

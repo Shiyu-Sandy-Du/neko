@@ -387,6 +387,15 @@ module hip_math
        integer(c_int) :: n
      end function hip_glsum
 
+     real(c_rp) function hip_glmax(a_d, ninf, n, strm) &
+          bind(c, name = 'hip_glmax')
+       use, intrinsic :: iso_c_binding, only: c_int, c_ptr
+       import c_rp
+       type(c_ptr), value :: a_d, strm
+       real(c_rp) :: ninf
+       integer(c_int) :: n
+     end function hip_glmax
+
      subroutine hip_absval(a_d, n, strm) &
           bind(c, name = 'hip_absval')
        use, intrinsic :: iso_c_binding, only: c_ptr, c_int
@@ -394,6 +403,14 @@ module hip_math
        type(c_ptr), value :: a_d, strm
        integer(c_int) :: n
      end subroutine hip_absval
+
+     subroutine hip_square_root(a_d, n, strm) &
+          bind(c, name = 'hip_square_root')
+       use, intrinsic :: iso_c_binding, only: c_int, c_ptr
+       import c_rp
+       type(c_ptr), value :: a_d, strm
+       integer(c_int) :: n
+     end subroutine hip_square_root
   end interface
 
   ! ========================================================================== !

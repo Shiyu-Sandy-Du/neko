@@ -914,7 +914,7 @@ extern "C" {
   }
 
   /**
-   * Fortran wrapper sqaure_root
+   * Fortran wrapper square_root
    * Take the abs value of a vector of length n
    */
   void cuda_square_root(void *a, int *n, cudaStream_t stream) {
@@ -922,7 +922,7 @@ extern "C" {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
 
-    sqaure_root_kernel<real>
+    square_root_kernel<real>
       <<<nblcks, nthrds,0, stream>>>((real *) a, * n);
     CUDA_CHECK(cudaGetLastError());
 

@@ -1024,10 +1024,10 @@ __global__ void absval_kernel(T * __restrict__ a,
 }
 
 /**
- * Device kernel for sqaure_root
+ * Device kernel for square_root
  */
 template< typename T >
-__global__ void sqaure_root_kernel(T * __restrict__ a,
+__global__ void square_root_kernel(T * __restrict__ a,
                              const int n) {
 
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;

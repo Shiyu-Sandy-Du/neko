@@ -803,7 +803,7 @@ contains
 
   end subroutine field_absval
 
-  !> Take the sqaure root of a field \f$ a = sqrt(a) \f$
+  !> Take the square root of a field \f$ a = sqrt(a) \f$
   subroutine field_sqrt(a, n)
     integer, intent(in), optional :: n
     type(field_t), intent(inout) :: a
