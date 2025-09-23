@@ -40,6 +40,7 @@ module ax_helm_svv_device
   use device, only : device_get_ptr, device_alloc
   use tensor_device, only : tnsr3d_device
   use num_types, only : rp
+  use utils, only : neko_error
   use, intrinsic :: iso_c_binding, only : c_ptr, c_int, c_char, &
                                           c_size_t, C_NULL_PTR, &
                                           c_associated
