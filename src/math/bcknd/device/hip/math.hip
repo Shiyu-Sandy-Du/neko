@@ -903,7 +903,7 @@ extern "C" {
    * Fortran wrapper square_root
    * Take the abs value of a vector of length n
    */
-  void hip_sqaure_root(void *a, int *n, hipStream_t stream) {
+  void hip_square_root(void *a, int *n, hipStream_t stream) {
 
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
