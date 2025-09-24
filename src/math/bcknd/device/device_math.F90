@@ -1353,7 +1353,7 @@ contains
     end if
 
 #ifdef HAVE_HIP
-    call neko_error('OPENCL is not implemented for device_square_root')
+    call hip_square_root(a_d, n, strm_)
 #elif HAVE_CUDA
     call cuda_square_root(a_d, n, strm_)
 #elif HAVE_OPENCL

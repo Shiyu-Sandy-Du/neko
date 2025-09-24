@@ -58,7 +58,52 @@ module ax_helm_svv_device
      procedure, pass(this) :: compute => ax_helm_svv_device_compute
   end type ax_helm_svv_device_t
 
-#ifdef HAVE_CUDA
+#ifdef HAVE_HIP
+  interface
+     subroutine hip_ax_helm_svv_part1(ur_d, us_d, ut_d,&
+          u_d, &
+          dx_d, dy_d, dz_d, &
+          drdx_d, drdy_d, drdz_d, &
+          dsdx_d, dsdy_d, dsdz_d, &
+          dtdx_d, dtdy_d, dtdz_d, &
+          jacinv_d, nelv, lx) &
+          bind(c, name='hip_ax_helm_svv_part1')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: ur_d, us_d, ut_d
+       type(c_ptr), value :: u_d
+       type(c_ptr), value :: dx_d, dy_d, dz_d
+       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
+       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
+       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
+       type(c_ptr), value :: jacinv_d
+       integer(c_int) :: nelv, lx
+     end subroutine hip_ax_helm_svv_part1
+  end interface
+  interface
+     subroutine hip_ax_helm_svv_part2(w_d, &
+          ur_d, us_d, ut_d,&
+          ur_svv_d, us_svv_d, ut_svv_d, &
+          dx_d, dy_d, dz_d, &
+          h1_d, drdx_d, drdy_d, drdz_d, &
+          dsdx_d, dsdy_d, dsdz_d, &
+          dtdx_d, dtdy_d, dtdz_d, &
+          w3_d, svv_h1_d, nelv, lx) &
+          bind(c, name='hip_ax_helm_svv_part2')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: w_d
+       type(c_ptr), value :: ur_d, us_d, ut_d
+       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
+       type(c_ptr), value :: dx_d, dy_d, dz_d
+       type(c_ptr), value :: h1_d
+       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
+       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
+       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
+       type(c_ptr), value :: w3_d
+       type(c_ptr), value :: svv_h1_d
+       integer(c_int) :: nelv, lx
+     end subroutine hip_ax_helm_svv_part2
+  end interface
+#elif HAVE_CUDA
   interface
      subroutine cuda_ax_helm_svv_part1(ur_d, us_d, ut_d,&
           u_d, &
@@ -130,7 +175,14 @@ contains
     w_d = device_get_ptr(w)
     
 #ifdef HAVE_HIP
-    call neko_error('HIP is not implemented for SVV')
+    call hip_ax_helm_svv_part1(ur_d, us_d, ut_d, &
+          u_d, &
+          Xh%dx_d, Xh%dy_d, Xh%dz_d, &
+          coef%drdx_d, coef%drdy_d, coef%drdz_d, &
+          coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
+          coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
+          coef%jacinv_d, &
+          nelv, lx)
 #elif HAVE_CUDA
     call cuda_ax_helm_svv_part1(ur_d, us_d, ut_d, &
           u_d, &
@@ -176,7 +228,14 @@ contains
     end if
 
 #ifdef HAVE_HIP
-    call neko_error('HIP is not implemented for SVV')
+    call hip_ax_helm_svv_part2(w_d, &
+          ur_d, us_d, ut_d, &
+          ur_svv_d, us_svv_d, ut_svv_d, &
+          Xh%dx_d, Xh%dy_d, Xh%dz_d, &
+          coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
+          coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
+          coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
+          Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
 #elif HAVE_CUDA
     call cuda_ax_helm_svv_part2(w_d, &
           ur_d, us_d, ut_d, &

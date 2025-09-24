@@ -414,6 +414,7 @@ libneko_la_SOURCES += \
 	math/bcknd/device/hip/opr_cfl.hip\
 	math/bcknd/device/hip/ax_helm.hip\
 	math/bcknd/device/hip/ax_helm_full.hip\
+  math/bcknd/device/hip/ax_helm_svv.hip\
 	krylov/bcknd/device/hip/pc_jacobi.hip\
 	krylov/bcknd/device/hip/pipecg_aux.hip\
 	krylov/bcknd/device/hip/fusedcg_aux.hip\
@@ -700,6 +701,7 @@ EXTRA_DIST = \
 	math/bcknd/device/hip/cfl_kernel.h\
 	math/bcknd/device/hip/ax_helm_kernel.h\
 	math/bcknd/device/hip/ax_helm_full_kernel.h\
+  math/bcknd/device/hip/ax_helm_svv_kernel.h\
 	common/bcknd/device/hip/sumab_kernel.h\
 	common/bcknd/device/hip/makeext_kernel.h\
 	common/bcknd/device/hip/makebdf_kernel.h\

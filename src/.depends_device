@@ -11,6 +11,7 @@ math/bcknd/device/hip/opr_lambda2.lo : math/bcknd/device/hip/opr_lambda2.hip mat
 math/bcknd/device/hip/opr_cfl.lo : math/bcknd/device/hip/opr_cfl.hip math/bcknd/device/hip/cfl_kernel.h
 math/bcknd/device/hip/ax_helm.lo : math/bcknd/device/hip/ax_helm.hip math/bcknd/device/hip/ax_helm_kernel.h
 math/bcknd/device/hip/ax_helm_full.lo : math/bcknd/device/hip/ax_helm_full.hip math/bcknd/device/hip/ax_helm_full_kernel.h
+math/bcknd/device/cuda/ax_helm_svv.lo : math/bcknd/device/hip/ax_helm_svv.hip math/bcknd/device/hip/ax_helm_svv_kernel.h
 math/bcknd/device/hip/schwarz.lo : math/bcknd/device/hip/schwarz.hip math/bcknd/device/hip/schwarz_kernel.h
 math/bcknd/device/hip/tensor.lo : math/bcknd/device/hip/tensor.hip math/bcknd/device/hip/tensor_kernel.h
 math/bcknd/device/hip/fdm.lo : math/bcknd/device/hip/fdm.hip math/bcknd/device/hip/fdm_kernel.h
