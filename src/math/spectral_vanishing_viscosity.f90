@@ -130,6 +130,14 @@ contains
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
        call json_get(json, "svv.nu.field_name", this%nue_field_name)
+       if (neko_field_registry%field_exists(this%nue_field_name)) then
+          this%nue => neko_field_registry%get_field(this%nue_field_name)
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             call device_copy(this%h1_d, this%nue%x_d, this%coef%dof%size())
+          else
+             call copy(this%h1, this%nue%x, this%coef%dof%size())
+          end if
+       end if
     case default
        call neko_error("Invalid nu.type for svv")
     end select
