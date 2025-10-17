@@ -146,11 +146,18 @@ contains
     this%filter%filter_type = "nonBoyd"
     call this%filter%init_from_components(coef%Xh%lx)
     ! assign the SVV Kernel
-    do i = 1, this%coef%Xh%lx
-       this%filter%transfer(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
-                              ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
-       this%filter%transfer(i) = 1.0_rp - this%filter%transfer(i)
-    end do
+    if (this%power_coef .eq. 0.0_rp) then
+       do i = 1, this%coef%Xh%lx
+          this%filter%transfer(i) = 0.0_rp
+       end do
+    else
+       do i = 1, this%coef%Xh%lx
+          this%filter%transfer(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
+                                 ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+          this%filter%transfer(i) = 1.0_rp - this%filter%transfer(i)
+       end do
+    end if
+
     ! build the 1d elementwise filter
     call this%filter%build_1d()
 
