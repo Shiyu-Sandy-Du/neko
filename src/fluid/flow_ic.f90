@@ -554,6 +554,7 @@ contains
          HOST_TO_DEVICE, sync = .false.)
 
     call fld_data%free
+    call prev_Xh%free()
 
   end subroutine set_flow_ic_fld
 

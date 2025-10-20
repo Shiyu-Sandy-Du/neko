@@ -307,6 +307,7 @@ contains
     !Deallocate scalar field
     call this%scheme_free()
 
+    call this%bc_res%free()
     call this%bclst_ds%free()
     call this%proj_s%free()
 
@@ -318,6 +319,11 @@ contains
     call this%abx2%free()
 
     call this%advs%free()
+
+    if (allocated(this%adv)) then
+       call this%adv%free()
+       deallocate(this%adv)
+    end if
 
     if (allocated(this%Ax)) then
        deallocate(this%Ax)
