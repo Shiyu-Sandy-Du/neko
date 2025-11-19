@@ -353,18 +353,18 @@ contains
       call field_sub2(fv, v)
       call field_sub2(fw, w)
 
-      ! call gs%op(fu, GS_OP_ADD)
-      ! call gs%op(fv, GS_OP_ADD)
-      ! call gs%op(fw, GS_OP_ADD)
-      ! if (NEKO_BCKND_DEVICE .eq. 1) then
-      !    call device_col2(fu%x_d, coef%mult_d, n)
-      !    call device_col2(fv%x_d, coef%mult_d, n)
-      !    call device_col2(fw%x_d, coef%mult_d, n)
-      ! else
-      !    call col2(fu%x, coef%mult, n)
-      !    call col2(fv%x, coef%mult, n)
-      !    call col2(fw%x, coef%mult, n)
-      ! end if
+      call gs%op(fu, GS_OP_ADD)
+      call gs%op(fv, GS_OP_ADD)
+      call gs%op(fw, GS_OP_ADD)
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_col2(fu%x_d, coef%mult_d, n)
+         call device_col2(fv%x_d, coef%mult_d, n)
+         call device_col2(fw%x_d, coef%mult_d, n)
+      else
+         call col2(fu%x, coef%mult, n)
+         call col2(fv%x, coef%mult, n)
+         call col2(fw%x, coef%mult, n)
+      end if
 
       call field_col3(ta, fu, fu)
       call field_copy(E, ta)
@@ -446,12 +446,12 @@ contains
        if (this%if_filter) then
          call this%filter%apply(fs, s)
          call field_sub2(fs, s)
-         ! call gs%op(fs, GS_OP_ADD)
-         ! if (NEKO_BCKND_DEVICE .eq. 1) then
-         !    call device_col2(fs%x_d, coef%mult_d, n)
-         ! else
-         !    call col2(fs%x, coef%mult, n)
-         ! end if
+         call gs%op(fs, GS_OP_ADD)
+         if (NEKO_BCKND_DEVICE .eq. 1) then
+            call device_col2(fs%x_d, coef%mult_d, n)
+         else
+            call col2(fs%x, coef%mult, n)
+         end if
          call field_copy(E, fs)
        else
          call field_copy(E, s)
