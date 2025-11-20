@@ -120,16 +120,16 @@ contains
     real(kind=rp), intent(in) :: svv_Q(lx, lx), svv_Qt(lx, lx)
     character(len=*) :: svv_direction
     real(kind=rp), intent(in) :: ident(lx, lx)
-    real(kind=rp) :: ur_h(lx, lx, lx)
-    real(kind=rp) :: us_h(lx, lx, lx)
-    real(kind=rp) :: ut_h(lx, lx, lx)
-    real(kind=rp) :: ur(lx, lx, lx)
-    real(kind=rp) :: us(lx, lx, lx)
-    real(kind=rp) :: ut(lx, lx, lx)
+    real(kind=rp) :: ur_h
+    real(kind=rp) :: us_h
+    real(kind=rp) :: ut_h
+    real(kind=rp) :: u1(lx, lx, lx)
+    real(kind=rp) :: u2(lx, lx, lx)
+    real(kind=rp) :: u3(lx, lx, lx)
    !  real(kind=rp) :: u_svv(lx, lx, lx, n)
-    real(kind=rp) :: ur_svv(lx, lx, lx)
-    real(kind=rp) :: us_svv(lx, lx, lx)
-    real(kind=rp) :: ut_svv(lx, lx, lx)
+    real(kind=rp) :: u1_svv(lx, lx, lx)
+    real(kind=rp) :: u2_svv(lx, lx, lx)
+    real(kind=rp) :: u3_svv(lx, lx, lx)
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
@@ -170,71 +170,71 @@ contains
        end do
 
        do i = 1, lx*lx*lx
-          ur(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
+          u1(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
                      + dsdx(i,1,1,e) * wus(i,1,1) &
                      + dtdx(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
-          us(i,1,1) = (drdy(i,1,1,e) * wur(i,1,1) &
+          u2(i,1,1) = (drdy(i,1,1,e) * wur(i,1,1) &
                      + dsdy(i,1,1,e) * wus(i,1,1) &
                      + dtdy(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
-          ut(i,1,1) = (drdz(i,1,1,e) * wur(i,1,1) &
+          u3(i,1,1) = (drdz(i,1,1,e) * wur(i,1,1) &
                      + dsdz(i,1,1,e) * wus(i,1,1) &
                      + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
        ! spatial convolution for spectral vanishing (low pass filter (LPF))
        if (svv_direction .eq. "rst") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, svv_Qt)
+          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, svv_Qt)
+          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, svv_Qt)
+          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, svv_Qt)
        else if (svv_direction .eq. "rs") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, svv_Qt, ident)
+          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, ident)
+          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, ident)
+          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, ident)
        else if (svv_direction .eq. "rt") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, ident, svv_Qt)
+          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, svv_Qt)
+          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, svv_Qt)
+          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, svv_Qt)
        else if (svv_direction .eq. "st") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(us_svv, lx, us, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(ut_svv, lx, ut, lx, ident, svv_Qt, svv_Qt)
+          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, svv_Qt)
+          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, svv_Qt)
+          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, svv_Qt)
        else if (svv_direction .eq. "r") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, svv_Q, ident, ident)
-          call tnsr3d_el(us_svv, lx, us, lx, svv_Q, ident, ident)
-          call tnsr3d_el(ut_svv, lx, ut, lx, svv_Q, ident, ident)
+          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, ident)
+          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, ident)
+          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, ident)
        else if (svv_direction .eq. "s") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(us_svv, lx, us, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(ut_svv, lx, ut, lx, ident, svv_Qt, ident)
+          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, ident)
+          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, ident)
+          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, ident)
        else if (svv_direction .eq. "t") then
-          call tnsr3d_el(ur_svv, lx, ur, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(us_svv, lx, us, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(ut_svv, lx, ut, lx, ident, ident, svv_Qt)
+          call tnsr3d_el(u1_svv, lx, u1, lx, ident, ident, svv_Qt)
+          call tnsr3d_el(u2_svv, lx, u2, lx, ident, ident, svv_Qt)
+          call tnsr3d_el(u3_svv, lx, u3, lx, ident, ident, svv_Qt)
        end if
 
        do i = 1, lx*lx*lx
           ! high pass filter from the LPF result
-          ur_svv(i,1,1) =  ur(i,1,1) - ur_svv(i,1,1)
-          us_svv(i,1,1) =  us(i,1,1) - us_svv(i,1,1)
-          ut_svv(i,1,1) =  ut(i,1,1) - ut_svv(i,1,1)
+          u1_svv(i,1,1) =  u1(i,1,1) - u1_svv(i,1,1)
+          u2_svv(i,1,1) =  u2(i,1,1) - u2_svv(i,1,1)
+          u3_svv(i,1,1) =  u3(i,1,1) - u3_svv(i,1,1)
 
           ! multiply the viscosity
-          ur_h(i,1,1) = (svv_h1(i,1,1,e) * ur_svv(i,1,1) + &
-                        h1(i,1,1,e) * ur(i,1,1)) * weights3(i,1,1)
-          us_h(i,1,1) = (svv_h1(i,1,1,e) * us_svv(i,1,1) + &
-                        h1(i,1,1,e) * us(i,1,1)) * weights3(i,1,1)
-          ut_h(i,1,1) = (svv_h1(i,1,1,e) * ut_svv(i,1,1) + &
-                        h1(i,1,1,e) * ut(i,1,1)) * weights3(i,1,1)
+          ur_h = (svv_h1(i,1,1,e) * u1_svv(i,1,1) + &
+                        h1(i,1,1,e) * u1(i,1,1)) * weights3(i,1,1)
+          us_h = (svv_h1(i,1,1,e) * u2_svv(i,1,1) + &
+                        h1(i,1,1,e) * u2(i,1,1)) * weights3(i,1,1)
+          ut_h = (svv_h1(i,1,1,e) * u3_svv(i,1,1) + &
+                        h1(i,1,1,e) * u3(i,1,1)) * weights3(i,1,1)
           ! utilize wur, wus, wut as work arrays again
-          wur(i,1,1) = drdx(i,1,1,e) * ur_h(i,1,1) &
-                     + drdy(i,1,1,e) * us_h(i,1,1) &
-                     + drdz(i,1,1,e) * ut_h(i,1,1)
-          wus(i,1,1) = dsdx(i,1,1,e) * ur_h(i,1,1) &
-                     + dsdy(i,1,1,e) * us_h(i,1,1) &
-                     + dsdz(i,1,1,e) * ut_h(i,1,1)
-          wut(i,1,1) = dtdx(i,1,1,e) * ur_h(i,1,1) &
-                     + dtdy(i,1,1,e) * us_h(i,1,1) &
-                     + dtdz(i,1,1,e) * ut_h(i,1,1)
+          wur(i,1,1) = drdx(i,1,1,e) * ur_h &
+                     + drdy(i,1,1,e) * us_h &
+                     + drdz(i,1,1,e) * ut_h
+          wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
+                     + dsdy(i,1,1,e) * us_h &
+                     + dsdz(i,1,1,e) * ut_h
+          wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
+                     + dtdy(i,1,1,e) * us_h &
+                     + dtdz(i,1,1,e) * ut_h
        end do
 
        do j = 1, lx*lx

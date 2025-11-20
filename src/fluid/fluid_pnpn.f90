@@ -297,7 +297,12 @@ contains
 
     if (this%full_stress_formulation .eqv. .true.) then
        ! Setup backend dependent Ax routines
-       call ax_helm_factory(this%Ax_vel, full_formulation = .true.)
+       if (this%svv_enabled) then
+          call ax_helm_factory(this%Ax_vel, full_formulation = .true., &
+                               svv = this%svv)
+       else
+          call ax_helm_factory(this%Ax_vel, full_formulation = .true.)
+       end if
 
        ! Setup backend dependent prs residual routines
        call pnpn_prs_res_stress_factory(this%prs_res)
