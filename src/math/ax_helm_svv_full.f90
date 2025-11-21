@@ -45,7 +45,7 @@ module ax_helm_svv_full
   !> Matrix-vector product for a Helmholtz problem.
   type, public, abstract, extends(ax_t) :: ax_helm_svv_full_t
      !> A pointer to the svv object
-     type(svv_t), pointer :: svv 
+     type(svv_t), pointer :: svv => null()
    contains
      procedure, pass(this) :: compute => ax_helm_svv_full_compute
   end type ax_helm_svv_full_t

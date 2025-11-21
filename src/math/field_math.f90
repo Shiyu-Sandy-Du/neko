@@ -368,7 +368,7 @@ contains
   subroutine field_sub2(a, b, n)
     integer, intent(in), optional :: n
     type(field_t), intent(inout) :: a
-    type(field_t), intent(inout) :: b
+    type(field_t), intent(in) :: b
     integer :: size
 
     if (present(n)) then

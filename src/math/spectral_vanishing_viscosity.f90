@@ -43,6 +43,7 @@ module spectral_vanishing_viscosity
   use coefs, only : coef_t
   use math, only : cfill, copy, rzero
   use device_math, only : device_rzero, device_cfill, device_copy
+  use field_math, only : field_sub3
   use device, only : device_map
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR
   use neko_config, only : NEKO_BCKND_DEVICE
@@ -78,6 +79,7 @@ module spectral_vanishing_viscosity
     procedure, pass(this) :: init => svv_init_from_json
     ! procedure, pass(this) :: free => svv_free
     procedure, pass(this) :: update => update_h1
+    procedure, pass(this) :: hpf => svv_hpf
   end type svv_t
 
 contains
@@ -145,7 +147,7 @@ contains
     ! set up the filter
     this%filter%filter_type = "nonBoyd"
     call this%filter%init_from_components(coef%Xh%lx)
-    ! assign the SVV Kernel
+    ! assign the SVV Kernel (I - Sigma_svv)
     if (this%power_coef .eq. 0.0_rp) then
        do i = 1, this%coef%Xh%lx
           this%filter%transfer(i) = 0.0_rp
@@ -181,5 +183,17 @@ contains
     end if
 
   end subroutine update_h1
+  
+  !> Apply the high pass filter on a field
+  subroutine svv_hpf(this, F_out, F_in)
+    class(svv_t), intent(inout) :: this
+    type(field_t), intent(inout) :: F_out
+    type(field_t), intent(in) :: F_in
+    
+    ! low pass filter LPF)
+    call this%filter%apply(F_out, F_in)
+    ! I - LPF
+    call field_sub3(F_out, F_in, F_out)
+  end subroutine
 
 end module spectral_vanishing_viscosity

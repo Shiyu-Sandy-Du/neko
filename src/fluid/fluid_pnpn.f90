@@ -753,15 +753,26 @@ contains
 
       ! Compute pressure residual.
       call profiler_start_region('Pressure_residual', 18)
-
-      call prs_res%compute(p, p_res,&
-           u, v, w, &
-           u_e, v_e, w_e, &
-           f_x, f_y, f_z, &
-           c_Xh, gs_Xh, &
-           this%bc_prs_surface, this%bc_sym_surface,&
-           Ax_prs, ext_bdf%diffusion_coeffs(1), dt, &
-           mu_tot, rho, event)
+      
+      if (this%svv_enabled) then
+         call prs_res%compute(p, p_res,&
+              u, v, w, &
+              u_e, v_e, w_e, &
+              f_x, f_y, f_z, &
+              c_Xh, gs_Xh, &
+              this%bc_prs_surface, this%bc_sym_surface,&
+              Ax_prs, ext_bdf%diffusion_coeffs(1), dt, &
+              mu_tot, rho, event, this%svv)
+      else
+         call prs_res%compute(p, p_res,&
+              u, v, w, &
+              u_e, v_e, w_e, &
+              f_x, f_y, f_z, &
+              c_Xh, gs_Xh, &
+              this%bc_prs_surface, this%bc_sym_surface,&
+              Ax_prs, ext_bdf%diffusion_coeffs(1), dt, &
+              mu_tot, rho, event)
+      end if
 
       ! De-mean the pressure residual when no strong pressure boundaries present
       if (.not. this%prs_dirichlet) call ortho(p_res%x, this%glb_n_points, n)

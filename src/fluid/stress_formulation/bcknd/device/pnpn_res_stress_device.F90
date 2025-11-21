@@ -16,6 +16,7 @@ module pnpn_res_stress_device
   use device_mathops, only : device_opcolv
   use device_math, only : device_rzero, device_cmult, &
        device_col2, device_copy, device_invcol1
+  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
@@ -203,7 +204,7 @@ contains
 
   subroutine pnpn_prs_res_stress_device_compute(p, p_res, u, v, w, u_e, v_e,&
        w_e, f_x, f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd,&
-       dt, mu, rho, event)
+       dt, mu, rho, event, svv)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -218,6 +219,7 @@ contains
     type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
+    type(svv_t), intent(inout), optional :: svv
     real(kind=rp) :: dtbd
     integer :: n, nelv, lxyz, gdim
     integer :: i, e
