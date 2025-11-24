@@ -60,7 +60,7 @@ module entropy_viscosity
   use elementwise_filter, only : elementwise_filter_t
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
-                         field_invcol2, field_sqrt, field_add2
+                         field_invcol2, field_sqrt, field_add2, field_addcol3
   use math, only : invcol2, col2, glsum, glsc2, glmax
   use device_math, only : device_invcol2, device_col2, device_glsum, &
                           device_glsc2, device_glmax
@@ -345,34 +345,52 @@ contains
 
     if (this%if_filter) then
 
-      call this%filter%apply(fu, u)
-      call this%filter%apply(fv, v)
-      call this%filter%apply(fw, w)
+      ! ! filter the velocity components separately
+      ! call this%filter%apply(fu, u)
+      ! call this%filter%apply(fv, v)
+      ! call this%filter%apply(fw, w)
       
-      call field_sub2(fu, u)
-      call field_sub2(fv, v)
-      call field_sub2(fw, w)
+      ! call field_sub2(fu, u)
+      ! call field_sub2(fv, v)
+      ! call field_sub2(fw, w)
 
+      ! call gs%op(fu, GS_OP_ADD)
+      ! call gs%op(fv, GS_OP_ADD)
+      ! call gs%op(fw, GS_OP_ADD)
+      ! if (NEKO_BCKND_DEVICE .eq. 1) then
+      !    call device_col2(fu%x_d, coef%mult_d, n)
+      !    call device_col2(fv%x_d, coef%mult_d, n)
+      !    call device_col2(fw%x_d, coef%mult_d, n)
+      ! else
+      !    call col2(fu%x, coef%mult, n)
+      !    call col2(fv%x, coef%mult, n)
+      !    call col2(fw%x, coef%mult, n)
+      ! end if
+
+      ! call field_col3(ta, fu, fu)
+      ! call field_copy(E, ta)
+      ! call field_col3(ta, fv, fv)
+      ! call field_add2(E, ta)
+      ! call field_col3(ta, fw, fw)
+      ! call field_add2(E, ta)
+      ! call field_sqrt(E)
+      
+      ! filter the velocity magnitude all together
+      call field_rzero(ta)
+      call field_addcol3(ta, u, u)
+      call field_addcol3(ta, v, v)
+      call field_addcol3(ta, w, w)
+      call field_sqrt(ta)
+      call this%filter%apply(fu, ta)
+      call field_sub2(fu, ta)
       call gs%op(fu, GS_OP_ADD)
-      call gs%op(fv, GS_OP_ADD)
-      call gs%op(fw, GS_OP_ADD)
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call device_col2(fu%x_d, coef%mult_d, n)
-         call device_col2(fv%x_d, coef%mult_d, n)
-         call device_col2(fw%x_d, coef%mult_d, n)
       else
          call col2(fu%x, coef%mult, n)
-         call col2(fv%x, coef%mult, n)
-         call col2(fw%x, coef%mult, n)
       end if
-
-      call field_col3(ta, fu, fu)
-      call field_copy(E, ta)
-      call field_col3(ta, fv, fv)
-      call field_add2(E, ta)
-      call field_col3(ta, fw, fw)
-      call field_add2(E, ta)
-      call field_sqrt(E)
+      call field_copy(E, fu)
+      call field_copy(E, E)
       
     else
       call field_col3(ta, u, u)
@@ -381,7 +399,6 @@ contains
       call field_add2(E, ta)
       call field_col3(ta, w, w)
       call field_add2(E, ta)
-      call field_sqrt(E)
     end if
 
     call field_copy(ta, E)
