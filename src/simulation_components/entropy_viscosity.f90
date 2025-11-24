@@ -398,12 +398,12 @@ contains
     else
        call invcol2(ta%x, coef%B, n)
     end if
-   !  call gs%op(ta, GS_OP_ADD)
-   !  if (NEKO_BCKND_DEVICE .eq. 1) then
-   !     call device_col2(ta%x_d, coef%mult_d, n)
-   !  else
-   !     call col2(ta%x, coef%mult, n)
-   !  end if
+    call gs%op(ta, GS_OP_ADD)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(ta%x_d, coef%mult_d, n)
+    else
+       call col2(ta%x, coef%mult, n)
+    end if
     call field_sub2(D, ta, n)
     call field_copy(entropy_viscosity, D)
     call field_absval(entropy_viscosity)
@@ -475,12 +475,12 @@ contains
        else
           call invcol2(ta%x, coef%B, n)
        end if
-      !  call gs%op(ta, GS_OP_ADD)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_col2(ta%x_d, coef%mult_d, n)
-      !  else
-      !     call col2(ta%x, coef%mult, n)
-      !  end if
+       call gs%op(ta, GS_OP_ADD)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_col2(ta%x_d, coef%mult_d, n)
+       else
+          call col2(ta%x, coef%mult, n)
+       end if
        call field_sub2(D, ta, n)
        call field_copy(entropy_viscosity, D)
        call field_absval(entropy_viscosity)
