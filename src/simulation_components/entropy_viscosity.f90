@@ -42,7 +42,7 @@ module entropy_viscosity
   use simulation_component, only : simulation_component_t
   use field_registry, only : neko_field_registry
   use scratch_registry, only : neko_scratch_registry
-  use json_utils, only : json_get, json_extract_object
+  use json_utils, only : json_get
   use field, only : field_t, field_ptr_t
   use field_series, only : field_series_t
   use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t

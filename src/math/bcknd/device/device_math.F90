@@ -61,8 +61,8 @@ module device_math
        device_glsc3, device_glsc3_many, device_add2s2_many, device_glsc2, &
        device_glsum, device_masked_copy_0, device_cfill_mask, &
        device_vcross, device_absval, device_masked_atomic_reduction_0, &
-       device_pwmax, device_pwmin, device_masked_gather_copy_0, &
-       device_masked_scatter_copy_0, device_invcol3, device_cdiv, &
+       device_masked_gather_copy_0, device_masked_scatter_copy_0, &
+       device_invcol3, device_cdiv, &
        device_glmax, device_square_root, &
        device_cdiv2, device_glsubnorm, &
        device_pwmax2, device_pwmax3, device_cpwmax2, device_cpwmax3, &
