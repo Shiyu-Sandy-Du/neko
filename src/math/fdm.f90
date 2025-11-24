@@ -630,6 +630,16 @@ contains
        call device_free(this%swplen_d)
     end if
 
+    if (c_associated(this%s_d)) then
+       call device_free(this%s_d)
+    end if
+    if (c_associated(this%d_d)) then
+       call device_free(this%d_d)
+    end if
+    if (c_associated(this%swplen_d)) then
+       call device_free(this%swplen_d)
+    end if
+
   end subroutine fdm_free
 
   subroutine fdm_compute(this, e, r, stream)

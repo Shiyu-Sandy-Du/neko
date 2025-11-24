@@ -190,7 +190,7 @@ contains
     !
     ! Create case
     !
-    call case_init(C, json_case)
+    call C%init(json_case)
 
     !
     ! Create simulation components
@@ -210,7 +210,7 @@ contains
     cp = transfer(case_iptr, c_null_ptr)
     if (c_associated(cp)) then
        call c_f_pointer(cp, C)
-       call case_free(c)
+       call C%free()
     else
        call neko_error('Invalid Neko case')
     end if
@@ -312,7 +312,7 @@ contains
 
        if (.not. allocated(dt_controller)) then
           allocate(dt_controller)
-          call json_extract_object(C%params, 'case.time', dt_params)
+          call json_get(C%params, 'case.time', dt_params)
           call dt_controller%init(dt_params)
        end if
 

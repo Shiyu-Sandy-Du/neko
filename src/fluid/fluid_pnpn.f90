@@ -56,8 +56,7 @@ module fluid_pnpn
   use advection, only : advection_t, advection_factory
   use profiler, only : profiler_start_region, profiler_end_region
   use json_module, only : json_file, json_core, json_value
-  use json_utils, only : json_get, json_get_or_default, json_extract_item, &
-       json_extract_object
+  use json_utils, only : json_get, json_get_or_default, json_extract_item
   use json_module, only : json_file
   use ax_product, only : ax_t, ax_helm_factory
   use field, only : field_t
@@ -79,7 +78,7 @@ module fluid_pnpn
   use field_math, only : field_add2, field_copy
   use bc, only : bc_t
   use file, only : file_t
-  use operators, only : ortho
+  use operators, only : ortho, rotate_cyc
   use time_state, only : time_state_t
   use comm, only : NEKO_COMM
   use mpi_f08, only : MPI_Allreduce, MPI_IN_PLACE, MPI_MAX, MPI_LOR, &
@@ -295,6 +294,8 @@ contains
             "with the full stress formulation.")
     end if
 
+    call json_get_or_default(params, "case.fluid.cyclic", this%c_Xh%cyclic, .false.)
+
     if (this%full_stress_formulation .eqv. .true.) then
        ! Setup backend dependent Ax routines
        if (this%svv_enabled) then
@@ -408,7 +409,7 @@ contains
     call json_get(params, 'case.fluid.pressure_solver.type', solver_type)
     call json_get(params, 'case.fluid.pressure_solver.preconditioner.type', &
          precon_type)
-    call json_extract_object(params, &
+    call json_get(params, &
          'case.fluid.pressure_solver.preconditioner', precon_params)
     call json_get(params, 'case.fluid.pressure_solver.absolute_tolerance', &
          abs_tol)
@@ -428,7 +429,7 @@ contains
 
     ! Initialize the advection factory
     call json_get_or_default(params, 'case.fluid.advection', advection, .true.)
-    call json_extract_object(params, 'case.numerics', numerics_params)
+    call json_get(params, 'case.numerics', numerics_params)
     call advection_factory(this%adv, numerics_params, this%c_Xh, &
          this%ulag, this%vlag, this%wlag, &
          chkp%dtlag, chkp%tlag, this%ext_bdf, &
@@ -540,15 +541,20 @@ contains
 
     if (allocated(chkp%previous_mesh%elements) &
          .or. chkp%previous_Xh%lx .ne. this%Xh%lx) then
+
+       call rotate_cyc(this%u%x, this%v%x, this%w%x, 1, this%c_Xh)
        call this%gs_Xh%op(this%u, GS_OP_ADD)
        call this%gs_Xh%op(this%v, GS_OP_ADD)
        call this%gs_Xh%op(this%w, GS_OP_ADD)
        call this%gs_Xh%op(this%p, GS_OP_ADD)
+       call rotate_cyc(this%u%x, this%v%x, this%w%x, 0, this%c_Xh)
 
        do i = 1, this%ulag%size()
+          call rotate_cyc(this%ulag%lf(i)%x, this%vlag%lf(i)%x, this%wlag%lf(i)%x, 1, this%c_Xh)
           call this%gs_Xh%op(this%ulag%lf(i), GS_OP_ADD)
           call this%gs_Xh%op(this%vlag%lf(i), GS_OP_ADD)
           call this%gs_Xh%op(this%wlag%lf(i), GS_OP_ADD)
+          call rotate_cyc(this%ulag%lf(i)%x, this%vlag%lf(i)%x, this%wlag%lf(i)%x, 0, this%c_Xh)
        end do
     end if
 
@@ -564,7 +570,6 @@ contains
        call this%ext_bdf%free()
        deallocate(this%ext_bdf)
     end if
-    
     call this%bc_vel_res%free()
     call this%bc_du%free()
     call this%bc_dv%free()
@@ -600,6 +605,11 @@ contains
     call this%advy%free()
     call this%advz%free()
     
+    if (allocated(this%adv)) then
+       call this%adv%free()
+       deallocate(this%adv)
+    end if
+
     if (allocated(this%adv)) then
        call this%adv%free()
        deallocate(this%adv)
@@ -820,12 +830,14 @@ contains
            mu_tot, rho, ext_bdf%diffusion_coeffs(1), &
            dt, dm_Xh%size())
 
+      call rotate_cyc(u_res%x, v_res%x, w_res%x, 1, c_Xh)
       call gs_Xh%op(u_res, GS_OP_ADD, event)
       call device_event_sync(event)
       call gs_Xh%op(v_res, GS_OP_ADD, event)
       call device_event_sync(event)
       call gs_Xh%op(w_res, GS_OP_ADD, event)
       call device_event_sync(event)
+      call rotate_cyc(u_res%x, v_res%x, w_res%x, 0, c_Xh)
 
       ! Set residual to zero at strong velocity boundaries.
       call this%bclst_vel_res%apply(u_res, v_res, w_res, time)
@@ -879,7 +891,8 @@ contains
       end if
 
       call fluid_step_info(time, ksp_results, &
-           this%full_stress_formulation, this%strict_convergence)
+           this%full_stress_formulation, this%strict_convergence, &
+           this%allow_stabilization)
 
     end associate
     call profiler_end_region('Fluid', 1)
