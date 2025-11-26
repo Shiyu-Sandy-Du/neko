@@ -1,0 +1,212 @@
+/*
+ Copyright (c) 2025, The Neko Authors
+ All rights reserved.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+
+   * Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+
+   * Redistributions in binary form must reproduce the above
+     copyright notice, this list of conditions and the following
+     disclaimer in the documentation and/or other materials provided
+     with the distribution.
+
+   * Neither the name of the authors nor the names of its
+     contributors may be used to endorse or promote products derived
+     from this software without specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <hip/hip_runtime.h>
+#include <device/device_config.h>
+#include <device/hip/check.h>
+#include "ax_helm_svv_full_kernel.h"
+
+extern "C" {
+  #include <common/neko_log.h>
+}
+
+extern "C" {
+
+  /**
+   * Fortran wrapper for device CUDA Ax_svv_full version, part 1
+   */
+  void hip_ax_helm_svv_full_vector_part1(void *s11, void *s22, void *s33,
+                              void *s12, void *s13, void *s23,
+                              void *u, void *v, void *w,
+                              void *dx, void *dy, void *dz,
+                              void *drdx, void *drdy, void *drdz,
+                              void *dsdx, void *dsdy, void *dsdz,
+                              void *dtdx, void *dtdy, void *dtdz,
+                              void *jacinv, int *nelv, int *lx) {
+
+    const dim3 nthrds((*lx), (*lx), 1);
+    const dim3 nblcks((*nelv), 1, 1);
+
+#define CASE_part1_KSTEP(LX)                                                             \
+    hipLaunchKernelGGL( HIP_KERNEL_NAME(ax_helm_svv_full_part1_kernel_vector_kstep<real, LX> ), \
+                        nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue, \
+                        (real *) s11, (real *) s22, (real *) s33,           \
+                        (real *) s12, (real *) s13, (real *) s23,           \
+                        (real *) u, (real *) v, (real *) w,                 \
+                        (real *) dx, (real *) dy, (real *) dz,              \
+                        (real *) drdx, (real *) drdy, (real *) drdz,        \
+                        (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
+                        (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
+                        (real *) jacinv);                                   \
+    HIP_CHECK(hipGetLastError());
+
+
+
+#define CASE_part1_KSTEP_PADDED(LX)                                                      \
+    hipLaunchKernelGGL( HIP_KERNEL_NAME(ax_helm_svv_full_part1_kernel_vector_kstep_padded<real, LX> ), \
+                        nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue, \
+                        (real *) s11, (real *) s22, (real *) s33,           \
+                        (real *) s12, (real *) s13, (real *) s23,           \
+                        (real *) u, (real *) v, (real *) w,                 \
+                        (real *) dx, (real *) dy, (real *) dz,              \
+                        (real *) drdx, (real *) drdy, (real *) drdz,        \
+                        (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
+                        (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
+                        (real *) jacinv);                                   \
+    HIP_CHECK(hipGetLastError());
+
+#define CASE_part1(LX)                                                                   \
+    case LX:                                                                             \
+      CASE_part1_KSTEP(LX);                                                              \
+       break
+
+#define CASE_part1_PADDED(LX)                                                            \
+    case LX:                                                                             \
+      CASE_part1_KSTEP_PADDED(LX);                                                       \
+       break
+
+    switch(*lx) {
+      CASE_part1(2);
+      CASE_part1(3);
+      CASE_part1_PADDED(4);
+      CASE_part1(5);
+      CASE_part1(6);
+      CASE_part1(7);
+      CASE_part1_PADDED(8);
+      CASE_part1(9);
+      CASE_part1(10);
+      CASE_part1(11);
+      CASE_part1(12);
+      CASE_part1(13);
+      CASE_part1(14);
+      CASE_part1(15);
+      CASE_part1_PADDED(16);
+      default:
+        {
+          fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
+          exit(1);
+        }
+      }
+  }
+
+  /**
+   * Fortran wrapper for device CUDA Ax_svv_full version, part 2
+   */
+  void hip_ax_helm_svv_full_vector_part2(void *au, void *av, void *aw,
+                                   void *s11, void *s22, void *s33,
+                                   void *s12, void *s13, void *s23,
+                                   void *s11_svv, void *s22_svv, void *s33_svv,
+                                   void *s12_svv, void *s13_svv, void *s23_svv,
+                                   void *dx, void *dy, void *dz,
+                                   void *h1,
+                                   void *drdx, void *drdy, void *drdz,
+                                   void *dsdx, void *dsdy, void *dsdz,
+                                   void *dtdx, void *dtdy, void *dtdz,
+                                   void *w3, void *h1_svv, int *nelv, int *lx) {
+
+    const dim3 nthrds((*lx), (*lx), 1);
+    const dim3 nblcks((*nelv), 1, 1);
+
+#define CASE_part2_KSTEP(LX)                                                             \
+    hipLaunchKernelGGL( HIP_KERNEL_NAME( ax_helm_svv_full_part2_kernel_vector_kstep<real, LX> ), \
+                        nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue, \
+                        (real *) au, (real *) av, (real *) aw,              \
+                        (real *) s11, (real *) s22, (real *) s33,           \
+                        (real *) s12, (real *) s13, (real *) s23,           \
+                        (real *) s11_svv, (real *) s22_svv,                 \
+                        (real *) s33_svv, (real *) s12_svv,                 \
+                        (real *) s13_svv, (real *) s23_svv,                 \
+                        (real *) dx, (real *) dy, (real *) dz,              \
+                        (real *) h1,                                        \
+                        (real *) drdx, (real *) drdy, (real *) drdz,        \
+                        (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
+                        (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
+                        (real *) w3, (real *) h1_svv);                      \
+    CUDA_CHECK(hipGetLastError());
+
+#define CASE_part2_KSTEP_PADDED(LX)                                                      \
+    hipLaunchKernelGGL( HIP_KERNEL_NAME( ax_helm_svv_full_part2_kernel_vector_kstep_padded<real, LX> ), \
+                        nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue, \
+                        (real *) au, (real *) av, (real *) aw,              \
+                        (real *) s11, (real *) s22, (real *) s33,           \
+                        (real *) s12, (real *) s13, (real *) s23,           \
+                        (real *) s11_svv, (real *) s22_svv,                 \
+                        (real *) s33_svv, (real *) s12_svv,                 \
+                        (real *) s13_svv, (real *) s23_svv,                 \
+                        (real *) dx, (real *) dy, (real *) dz,              \
+                        (real *) h1,                                        \
+                        (real *) drdx, (real *) drdy, (real *) drdz,        \
+                        (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
+                        (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
+                        (real *) w3, (real *) h1_svv);                      \
+    CUDA_CHECK(hipGetLastError());
+
+#define CASE_part2(LX)                                                                   \
+    case LX:                                                                             \
+      CASE_part2_KSTEP(LX);                                                              \
+       break
+
+#define CASE_part2_PADDED(LX)                                                            \
+    case LX:                                                                             \
+      CASE_part2_KSTEP_PADDED(LX);                                                       \
+       break
+
+    switch(*lx) {
+      CASE_part2(2);
+      CASE_part2(3);
+      CASE_part2_PADDED(4);
+      CASE_part2(5);
+      CASE_part2(6);
+      CASE_part2(7);
+      CASE_part2_PADDED(8);
+      CASE_part2(9);
+      CASE_part2(10);
+      CASE_part2(11);
+      CASE_part2(12);
+      CASE_part2(13);
+      CASE_part2(14);
+      CASE_part2(15);
+      CASE_part2_PADDED(16);
+      default:
+        {
+          fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
+          exit(1);
+        }
+      }
+  }
+
+}
