@@ -31,6 +31,8 @@ module pnpn_res_stress_cpu
      procedure, nopass :: compute => pnpn_vel_res_stress_cpu_compute
   end type pnpn_vel_res_stress_cpu_t
 
+  public :: svv_hpf
+
 contains
 
   subroutine pnpn_prs_res_stress_cpu_compute(p, p_res, u, v, w, u_e, v_e, w_e,&

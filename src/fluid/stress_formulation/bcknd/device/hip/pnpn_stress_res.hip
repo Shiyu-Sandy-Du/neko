@@ -40,6 +40,76 @@
 
 extern "C" {
 
+  void pnpn_prs_stress_res_svv_part1_1_hip(void *ta1, void *ta2, void *ta3,
+                                           void *wa1, void *wa2, void *wa3,
+                                           void *s11, void *s22, void *s33,
+                                           void *s12, void *s13, void *s23,
+                                           void *f_u, void *f_v, void *f_w,
+                                           int *n) {
+
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(prs_stress_res_svv_part1_1_kernel<real> ),
+                       nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue,
+                       (real *) ta1, (real *) ta2, (real *) ta3,
+                       (real *) wa1, (real *) wa2, (real *) wa3,
+                       (real *) s11, (real *) s22, (real *) s33,
+                       (real *) s12, (real *) s13, (real *) s23,
+                       (real *) f_u, (real *) f_v, (real *) f_w, *n);
+    HIP_CHECK(hipGetLastError());
+  }
+
+  void pnpn_prs_stress_res_svv_part1_2_hip(void *work1, void *work2, void *work3,
+                                           void *ta1, void *ta2, void *ta3,
+                                           void *svv_h1, int *n) {
+
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(prs_stress_res_svv_part1_2_kernel<real> ),
+                       nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue,
+                       (real *) work1, (real *) work2, (real *) work3,
+                       (real *) ta1, (real *) ta2, (real *) ta3, 
+                       (real *) svv_h1, *n);
+    HIP_CHECK(hipGetLastError());
+  }  
+
+  void pnpn_prs_stress_res_svv_part1_3_hip(void *wa1, void *wa2, void *wa3,
+                                           void *a11, void *a12, void *a13,
+                                           void *a21, void *a22, void *a23,
+                                           void *a31, void *a32, void *a33,
+                                           int *n) {
+
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(prs_stress_res_svv_part1_3_kernel<real> ),
+                       nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue,
+                       (real *) wa1, (real *) wa2, (real *) wa3, 
+                       (real *) a11, (real *) a12, (real *) a13, 
+                       (real *) a21, (real *) a22, (real *) a23, 
+                       (real *) a31, (real *) a32, (real *) a33, 
+                       *n);
+    HIP_CHECK(hipGetLastError());
+  }
+
+  void pnpn_prs_stress_res_svv_part1_4_hip(void *ta1, void *ta2, void *ta3,
+                                           void *wa1, void *wa2, void *wa3,
+                                           void *f_u, void *f_v, void *f_w,
+                                           void *B, void *rho, int *n) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(prs_stress_res_svv_part1_4_kernel<real> ),
+                       nblcks, nthrds, 0, (hipStream_t) glb_cmd_queue,
+                       (real *) ta1, (real *) ta2, (real *) ta3, 
+                       (real *) wa1, (real *) wa2, (real *) wa3, 
+                       (real *) f_u, (real *) f_v, (real *) f_w, 
+                       (real *) B, (real *) rho, *n);
+    HIP_CHECK(hipGetLastError());
+  }
+
   void pnpn_prs_stress_res_part1_hip(void *ta1, void *ta2, void *ta3,
                                       void *wa1, void *wa2, void *wa3,
                                       void *s11, void *s22, void *s33,
