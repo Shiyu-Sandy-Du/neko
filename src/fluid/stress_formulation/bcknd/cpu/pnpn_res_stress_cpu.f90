@@ -264,32 +264,38 @@ contains
     integer, intent(in) :: n
 
     ! HPF on Sij
+    ! work123 is filtered sij, i=j
+    ! ta123 is three off diagonal components
     call svv_hpf(svv, work1, work2, work3, ta1, ta2, ta3, &
                  s11, s22, s33, s12, s13, s23)
 
     ! Multiply by 2 and the svv coefficient
     ! and take the divergence to get svv stresses and using Sij as work array
+    call col2(work1%x, svv%h1, n)
+    call col2(work2%x, svv%h1, n)
+    call col2(work3%x, svv%h1, n)
+    call col2(ta1%x, svv%h1, n)
+    call col2(ta2%x, svv%h1, n)
+    call col2(ta3%x, svv%h1, n)
+
     call cdtp(s11%x, work1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
     call cdtp(s22%x, ta1%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
     call cdtp(s33%x, ta2%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call col2(s11%x, svv%h1, n)
     call cmult(s11%x, 2.0_rp, n)
     call sub2(wa1%x, s11%x, n)
 
-    call cdtp(s11%x, work1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(s22%x, ta1%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(s33%x, ta2%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
+    call cdtp(s11%x, ta1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
+    call cdtp(s22%x, work2%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
+    call cdtp(s33%x, ta3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call col2(s11%x, svv%h1, n)
     call cmult(s11%x, 2.0_rp, n)
     call sub2(wa2%x, s11%x, n)
 
-    call cdtp(s11%x, work1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(s22%x, ta1%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(s33%x, ta2%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
+    call cdtp(s11%x, ta2%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
+    call cdtp(s22%x, ta3%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
+    call cdtp(s33%x, work3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call col2(s11%x, svv%h1, n)
     call cmult(s11%x, 2.0_rp, n)
     call sub2(wa3%x, s11%x, n)
   end subroutine stress_svv_apply
