@@ -501,9 +501,11 @@ __global__ void __launch_bounds__(LX*LX,3)
       uwijke += shur2[l+j*LX] * shdx[l+i*LX];
       ruw[l] += rut2 * shdz[k+l*LX];
       uwijke += shus2[i+l*LX] * shdy[l + j*LX];
+
       vwijke += shvr2[l+j*LX] * shdx[l+i*LX];
       rvw[l] += rvt2 * shdz[k+l*LX];
       vwijke += shvs2[i+l*LX] * shdy[l + j*LX];
+
       wwijke += shwr2[l+j*LX] * shdx[l+i*LX];
       rww[l] += rwt2 * shdz[k+l*LX];
       wwijke += shws2[i+l*LX] * shdy[l + j*LX];

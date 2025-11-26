@@ -86,6 +86,25 @@ contains
              select type (f => object)
              type is (ax_helm_svv_full_device_t)
                 f%svv => svv
+                n = svv%coef%dof%size()
+                if (rp .eq. REAL32) then
+                   s = n * int(4, c_size_t)
+                else if (rp .eq. REAL64) then
+                   s = n * int(8, c_size_t)
+                end if
+
+                call device_alloc(f%s11_d, s)
+                call device_alloc(f%s22_d, s)
+                call device_alloc(f%s33_d, s)
+                call device_alloc(f%s12_d, s)
+                call device_alloc(f%s13_d, s)
+                call device_alloc(f%s23_d, s)
+                call device_alloc(f%s11_svv_d, s)
+                call device_alloc(f%s22_svv_d, s)
+                call device_alloc(f%s33_svv_d, s)
+                call device_alloc(f%s12_svv_d, s)
+                call device_alloc(f%s13_svv_d, s)
+                call device_alloc(f%s23_svv_d, s)
              end select
          else
             allocate(ax_helm_svv_full_cpu_t::object)
