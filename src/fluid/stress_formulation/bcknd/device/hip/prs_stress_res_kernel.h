@@ -36,9 +36,9 @@
 #define __FLUID_PRS_STRESS_RES_KERNEL__
 
 template< typename T >
-__global__ void prs_stress_res_svv_part1_1_kernel(T * __restrict__ ta1,
-                                                  T * __restrict__ ta2,
-                                                  T * __restrict__ ta3,
+__global__ void prs_stress_res_svv_part1_1_kernel(const T * __restrict__ ta1,
+                                                  const T * __restrict__ ta2,
+                                                  const T * __restrict__ ta3,
                                                   T * __restrict__ wa1,
                                                   T * __restrict__ wa2,
                                                   T * __restrict__ wa3,
@@ -84,12 +84,13 @@ __global__ void prs_stress_res_svv_part1_2_kernel(T * __restrict__ work1,
   const int str = blockDim.x * gridDim.x;
 
   for (int i = idx; i < n; i += str) {
-    work1[i] *= svv_h1[i];
-    work2[i] *= svv_h1[i];
-    work3[i] *= svv_h1[i];
-    ta1[i] *= svv_h1[i];
-    ta2[i] *= svv_h1[i];
-    ta3[i] *= svv_h1[i];
+    T svv_mu = svv_h1[i];
+    work1[i] *= svv_mu;
+    work2[i] *= svv_mu;
+    work3[i] *= svv_mu;
+    ta1[i] *= svv_mu;
+    ta2[i] *= svv_mu;
+    ta3[i] *= svv_mu;
   }
 
 }
@@ -114,8 +115,8 @@ __global__ void prs_stress_res_svv_part1_3_kernel(T * __restrict__ wa1,
 
   for (int i = idx; i < n; i += str) {
     wa1[i] -= 2.0 * (a11[i] + a12[i] + a13[i]);
-    wa1[i] -= 2.0 * (a21[i] + a22[i] + a23[i]);
-    wa1[i] -= 2.0 * (a31[i] + a32[i] + a33[i]);
+    wa2[i] -= 2.0 * (a21[i] + a22[i] + a23[i]);
+    wa3[i] -= 2.0 * (a31[i] + a32[i] + a33[i]);
   }
 
 }
@@ -124,9 +125,9 @@ template< typename T >
 __global__ void prs_stress_res_svv_part1_4_kernel(T * __restrict__ ta1,
                                               T * __restrict__ ta2,
                                               T * __restrict__ ta3,
-                                              T * __restrict__ wa1,
-                                              T * __restrict__ wa2,
-                                              T * __restrict__ wa3,
+                                              const T * __restrict__ wa1,
+                                              const T * __restrict__ wa2,
+                                              const T * __restrict__ wa3,
                                               const T * __restrict__ f_u,
                                               const T * __restrict__ f_v,
                                               const T * __restrict__ f_w,
