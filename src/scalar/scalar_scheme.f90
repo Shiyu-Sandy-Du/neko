@@ -321,7 +321,7 @@ contains
        call json_get(params, 'svv.enabled', &
             this%svv_enabled)
        if (this%svv_enabled .eqv. .true.) then
-          call this%svv%init(params, this%c_Xh)
+          call this%svv%init(params, this%c_Xh, this%rho)
        end if
     end if
 

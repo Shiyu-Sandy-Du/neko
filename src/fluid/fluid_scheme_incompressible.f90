@@ -348,7 +348,7 @@ contains
        call json_get_or_default(json_subdict, 'svv.enabled', &
             this%svv_enabled, .false.)
        if (this%svv_enabled .eqv. .true.) then
-          call this%svv%init(json_subdict, this%c_Xh)
+          call this%svv%init(json_subdict, this%c_Xh, this%rho)
        end if
     end if
 

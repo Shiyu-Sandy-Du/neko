@@ -449,7 +449,7 @@ contains
       
       ! Update SVV if needed
       if (this%svv_enabled) then
-         call this%svv%update(tstep)
+         call this%svv%update(rho, tstep)
       end if
 
     end associate

@@ -41,8 +41,8 @@ module spectral_vanishing_viscosity
   use json_module, only : json_file
   use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
-  use math, only : cfill, copy, rzero
-  use device_math, only : device_rzero, device_cfill, device_copy
+  use math, only : cfill, copy, rzero, col2
+  use device_math, only : device_rzero, device_cfill, device_copy, device_col2
   use field_math, only : field_sub3
   use device, only : device_map
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR
@@ -84,10 +84,11 @@ module spectral_vanishing_viscosity
 
 contains
   !> Constructor
-  subroutine svv_init_from_json(this, json, coef)
+  subroutine svv_init_from_json(this, json, coef, rho)
     class(svv_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in), target :: coef
+    type(field_t), intent(in) :: rho
     real(kind=rp) :: nu_val
     character(len=:), allocatable :: nu_type, nue_field_name_tmp, direction
     integer :: i
@@ -126,8 +127,10 @@ contains
        call json_get(json, "svv.nu.value", nu_val)
        if (NEKO_BCKND_DEVICE .eq. 1) then
           call device_cfill(this%h1_d, nu_val, coef%dof%size())
+          call device_col2(this%h1_d, rho%x_d, coef%dof%size())
        else
           call cfill(this%h1, nu_val, coef%dof%size())
+          call col2(this%h1, rho%x, coef%dof%size())
        end if 
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
@@ -166,8 +169,9 @@ contains
   end subroutine svv_init_from_json
 
   !> Update of h1 is it's time varying
-  subroutine update_h1(this, tstep)
+  subroutine update_h1(this, rho, tstep)
     class(svv_t), intent(inout) :: this
+    type(field_t), intent(in) :: rho
     integer, intent(in) :: tstep
 
     if (.not. this%tvar_h1) return
@@ -178,8 +182,10 @@ contains
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_copy(this%h1_d, this%nue%x_d, this%coef%dof%size())
+       call device_col2(this%h1_d, rho%x_d, this%coef%dof%size())
     else
        call copy(this%h1, this%nue%x, this%coef%dof%size())
+       call col2(this%h1, rho%x, this%coef%dof%size())
     end if
 
   end subroutine update_h1
