@@ -47,7 +47,7 @@ module elementwise_filter
   use mxm_wrapper, only : mxm
   use tensor, only : tnsr3d, trsp
   use device, only : device_map, device_free, device_memcpy, HOST_TO_DEVICE
-  use device_math, only : device_cfill
+  use device_math, only : device_cfill, device_rzero, device_glmax
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR, c_associated
   implicit none
   private
@@ -139,13 +139,20 @@ contains
 
   !> Actual Constructor.
   !! @param nx number of points in an elements in one direction.
-  subroutine elementwise_filter_init_from_components(this, nx)
+  subroutine elementwise_filter_init_from_components(this, nx, coef)
     class(elementwise_filter_t), intent(inout) :: this
     integer, intent(in) :: nx
+    type(coef_t), intent(in), target, optional :: coef
     integer :: i
 
     this%nx = nx
     this%nt = nx ! initialize as if nothing is filtered yet
+    
+    ! Force the pointing of coef 
+    ! since init_from_components is sometimes called alone
+    if (present(coef)) then
+       this%coef => coef
+    end if
 
     allocate(this%fh(nx, nx))
     allocate(this%fht(nx, nx))
@@ -233,6 +240,12 @@ contains
     class(elementwise_filter_t), intent(inout) :: this
     type(field_t), intent(inout) :: F_out
     type(field_t), intent(in) :: F_in
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_rzero(F_out%x_d, F_out%dof%size())
+    else
+       call rzero(F_out%x, F_out%dof%size())
+    end if
 
     ! F_out = fh x fh x fh x F_in
     if (this%direction .eq. "rst") then

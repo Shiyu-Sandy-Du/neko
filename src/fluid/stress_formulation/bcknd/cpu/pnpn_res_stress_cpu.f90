@@ -31,8 +31,6 @@ module pnpn_res_stress_cpu
      procedure, nopass :: compute => pnpn_vel_res_stress_cpu_compute
   end type pnpn_vel_res_stress_cpu_t
 
-  public :: svv_hpf
-
 contains
 
   subroutine pnpn_prs_res_stress_cpu_compute(p, p_res, u, v, w, u_e, v_e, w_e,&
@@ -268,8 +266,12 @@ contains
     ! HPF on Sij
     ! work123 is filtered sij, i=j
     ! ta123 is three off diagonal components
-    call svv_hpf(svv, work1, work2, work3, ta1, ta2, ta3, &
-                 s11, s22, s33, s12, s13, s23)
+    call svv%hpf(work1, s11)
+    call svv%hpf(work2, s22)
+    call svv%hpf(work3, s33)
+    call svv%hpf(ta1, s12)
+    call svv%hpf(ta2, s13)
+    call svv%hpf(ta3, s23)
 
     ! Multiply by 2 and the svv coefficient
     ! and take the divergence to get svv stresses and using Sij as work array
@@ -300,21 +302,6 @@ contains
     call add4(s11%x, s11%x, s22%x, s33%x, n)
     call cmult(s11%x, 2.0_rp, n)
     call sub2(wa3%x, s11%x, n)
-  end subroutine stress_svv_apply
-  
-  subroutine svv_hpf(svv, work1, work2, work3, ta1, ta2, ta3, &
-                 s11, s22, s33, s12, s13, s23)
-    type(svv_t), intent(inout) :: svv
-    type(field_t), pointer, intent(inout) :: work1, work2, work3, ta1, ta2, ta3
-    type(field_t), pointer, intent(in) :: s11, s22, s33, s12, s13, s23
-
-    call svv%hpf(work1, s11)
-    call svv%hpf(work2, s22)
-    call svv%hpf(work3, s33)
-    call svv%hpf(ta1, s12)
-    call svv%hpf(ta2, s13)
-    call svv%hpf(ta3, s23)
-
-  end subroutine svv_hpf
+  end subroutine stress_svv_apply 
 
 end module pnpn_res_stress_cpu

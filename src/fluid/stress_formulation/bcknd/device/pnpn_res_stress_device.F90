@@ -17,7 +17,6 @@ module pnpn_res_stress_device
   use device_math, only : device_rzero, device_cmult, &
        device_col2, device_copy, device_invcol1, device_add4, device_sub2
   use spectral_vanishing_viscosity, only : svv_t
-  use pnpn_res_stress_cpu, only : svv_hpf
   implicit none
   private
 
@@ -591,8 +590,12 @@ contains
     call neko_scratch_registry%request_field(a33, temp_indices_svv(9))
 
     ! HPF on Sij
-    call svv_hpf(svv, work1, work2, work3, ta1, ta2, ta3, &
-                 s11, s22, s33, s12, s13, s23)
+    call svv%hpf(work1, s11)
+    call svv%hpf(work2, s22)
+    call svv%hpf(work3, s33)
+    call svv%hpf(ta1, s12)
+    call svv%hpf(ta2, s13)
+    call svv%hpf(ta3, s23)
 
     ! Multiply by 2 and the svv coefficient
     ! and take the divergence to get svv stresses and using Sij as work array

@@ -42,7 +42,7 @@ module spectral_vanishing_viscosity
   use json_utils, only : json_get, json_get_or_default
   use coefs, only : coef_t
   use math, only : cfill, copy, rzero, col2
-  use device_math, only : device_rzero, device_cfill, device_copy, device_col2
+  use device_math, only : device_rzero, device_cfill, device_copy, device_col2, device_glmax
   use field_math, only : field_sub3
   use device, only : device_map
   use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR
@@ -149,7 +149,7 @@ contains
 
     ! set up the filter
     this%filter%filter_type = "nonBoyd"
-    call this%filter%init_from_components(coef%Xh%lx)
+    call this%filter%init_from_components(coef%Xh%lx, coef)
     ! assign the SVV Kernel (I - Sigma_svv)
     if (this%power_coef .eq. 0.0_rp) then
        do i = 1, this%coef%Xh%lx
