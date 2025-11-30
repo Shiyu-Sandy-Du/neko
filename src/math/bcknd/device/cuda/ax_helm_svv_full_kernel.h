@@ -392,20 +392,6 @@ __global__ void __launch_bounds__(LX*LX,3)
   __shared__ T shwr2[LX * LX];
   __shared__ T shws2[LX * LX];
   T rwt2;
-  
-  T rs11[LX];
-  T rs22[LX];
-  T rs33[LX];
-  T rs12[LX];
-  T rs13[LX];
-  T rs23[LX];  
-
-  T rs11_svv[LX];
-  T rs22_svv[LX];
-  T rs33_svv[LX];
-  T rs12_svv[LX];
-  T rs13_svv[LX];
-  T rs23_svv[LX];
 
   T ruw[LX];
   T rvw[LX];
@@ -423,18 +409,6 @@ __global__ void __launch_bounds__(LX*LX,3)
 
 #pragma unroll
   for(int k = 0; k < LX; ++k){
-    rs11[k] = s11[ij + k*LX*LX + ele];
-    rs22[k] = s22[ij + k*LX*LX + ele];
-    rs33[k] = s33[ij + k*LX*LX + ele];
-    rs12[k] = s12[ij + k*LX*LX + ele];
-    rs13[k] = s13[ij + k*LX*LX + ele];
-    rs23[k] = s23[ij + k*LX*LX + ele];
-    rs11_svv[k] = s11[ij + k*LX*LX + ele] - s11_svv[ij + k*LX*LX + ele];
-    rs22_svv[k] = s22[ij + k*LX*LX + ele] - s22_svv[ij + k*LX*LX + ele];
-    rs33_svv[k] = s33[ij + k*LX*LX + ele] - s33_svv[ij + k*LX*LX + ele];
-    rs12_svv[k] = s12[ij + k*LX*LX + ele] - s12_svv[ij + k*LX*LX + ele];
-    rs13_svv[k] = s13[ij + k*LX*LX + ele] - s13_svv[ij + k*LX*LX + ele];
-    rs23_svv[k] = s23[ij + k*LX*LX + ele] - s23_svv[ij + k*LX*LX + ele];
     ruw[k] = 0.0;
     rvw[k] = 0.0;
     rww[k] = 0.0;
@@ -455,13 +429,26 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dtdz_local = dtdz[ijk+ele];
     const T dj = w3[ijk]*h1[ijk+ele];
     const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
+    
+    T rs11 = s11[ijk + ele];
+    T rs22 = s22[ijk + ele];
+    T rs33 = s33[ijk + ele];
+    T rs12 = s12[ijk + ele];
+    T rs13 = s13[ijk + ele];
+    T rs23 = s23[ijk + ele];
+    T rs11_svv = rs11 - s11_svv[ijk + ele];
+    T rs22_svv = rs22 - s22_svv[ijk + ele];
+    T rs33_svv = rs33 - s33_svv[ijk + ele];
+    T rs12_svv = rs12 - s12_svv[ijk + ele];
+    T rs13_svv = rs13 - s13_svv[ijk + ele];
+    T rs23_svv = rs23 - s23_svv[ijk + ele];
 
-    T rs11_h = dj * rs11[k] + dj_svv * rs11_svv[k];
-    T rs22_h = dj * rs22[k] + dj_svv * rs22_svv[k];
-    T rs33_h = dj * rs33[k] + dj_svv * rs33_svv[k];
-    T rs12_h = dj * rs12[k] + dj_svv * rs12_svv[k];
-    T rs13_h = dj * rs13[k] + dj_svv * rs13_svv[k];
-    T rs23_h = dj * rs23[k] + dj_svv * rs23_svv[k];
+    T rs11_h = dj * rs11 + dj_svv * rs11_svv;
+    T rs22_h = dj * rs22 + dj_svv * rs22_svv;
+    T rs33_h = dj * rs33 + dj_svv * rs33_svv;
+    T rs12_h = dj * rs12 + dj_svv * rs12_svv;
+    T rs13_h = dj * rs13 + dj_svv * rs13_svv;
+    T rs23_h = dj * rs23 + dj_svv * rs23_svv;
 
     shur2[ij] = drdx_local * rs11_h +
                 drdy_local * rs12_h +
