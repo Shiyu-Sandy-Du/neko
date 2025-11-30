@@ -415,7 +415,7 @@ contains
        call neko_error("pnpn prs residual does not support svv on OpenCL")
 #endif    
        call stress_svv_apply_device(wa1, wa2, wa3, &
-                             work1, work2, work3, ta1, ta2, ta3, &
+                             work1, work2, ta1, ta2, ta3, &
                              s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
 #ifdef HAVE_HIP
        call pnpn_prs_stress_res_svv_part1_4_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
@@ -566,27 +566,29 @@ contains
   end subroutine pnpn_vel_res_stress_device_compute
 
     subroutine stress_svv_apply_device(wa1, wa2, wa3, &
-                              work1, work2, work3, ta1, ta2, ta3, &
+                              work1, work2, ta1, ta2, ta3, &
                               s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
     type(field_t), pointer, intent(inout) :: wa1, wa2, wa3
-    type(field_t), pointer, intent(inout) :: work1, work2, work3, ta1, ta2, ta3
+    type(field_t), pointer, intent(inout) :: work1, work2, ta1, ta2, ta3
     type(field_t), pointer, intent(inout) :: s11, s22, s33, s12, s13, s23
     type(svv_t), intent(inout) :: svv
     type(coef_t), intent(in) :: c_Xh
     integer, intent(in) :: n
-    integer :: temp_indices_svv(9)
-    type(field_t), pointer :: a11, a12, a13, a21, a22, a23, a31, a32, a33
+    integer :: temp_indices_svv(10)
+    type(field_t), pointer :: work3, a11, a12, a13, a21, a22, a23, a31, a32, a33
     
     ! Work arrays
-    call neko_scratch_registry%request_field(a11, temp_indices_svv(1))
-    call neko_scratch_registry%request_field(a12, temp_indices_svv(2))
-    call neko_scratch_registry%request_field(a13, temp_indices_svv(3))
-    call neko_scratch_registry%request_field(a21, temp_indices_svv(4))
-    call neko_scratch_registry%request_field(a22, temp_indices_svv(5))
-    call neko_scratch_registry%request_field(a23, temp_indices_svv(6))
-    call neko_scratch_registry%request_field(a31, temp_indices_svv(7))
-    call neko_scratch_registry%request_field(a32, temp_indices_svv(8))
-    call neko_scratch_registry%request_field(a33, temp_indices_svv(9))
+    call neko_scratch_registry%request_field(a11, temp_indices_svv(1), .false.)
+    call neko_scratch_registry%request_field(a12, temp_indices_svv(2), .false.)
+    call neko_scratch_registry%request_field(a13, temp_indices_svv(3), .false.)
+    call neko_scratch_registry%request_field(a21, temp_indices_svv(4), .false.)
+    call neko_scratch_registry%request_field(a22, temp_indices_svv(5), .false.)
+    call neko_scratch_registry%request_field(a23, temp_indices_svv(6), .false.)
+    call neko_scratch_registry%request_field(a31, temp_indices_svv(7), .false.)
+    call neko_scratch_registry%request_field(a32, temp_indices_svv(8), .false.)
+    call neko_scratch_registry%request_field(a33, temp_indices_svv(9), .false.)
+    call neko_scratch_registry%request_field(work3, &
+                                             temp_indices_svv(10), .false.)
 
     ! HPF on Sij
     call svv%hpf(work1, s11)

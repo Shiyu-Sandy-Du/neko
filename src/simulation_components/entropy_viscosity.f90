@@ -321,15 +321,16 @@ contains
     real(kind=rp) :: scaling_vel, scaling_s(this%n_scalars)
 
     do i = 1, 1+this%n_scalars
-       call neko_scratch_registry%request_field(ta(i)%ptr, temp_indices(i))
+       call neko_scratch_registry%request_field(ta(i)%ptr, &
+                                                temp_indices(i), .false.)
     end do
 
-    call neko_scratch_registry%request_field(fu, filt_field_indices(1))
-    call neko_scratch_registry%request_field(fv, filt_field_indices(2))
-    call neko_scratch_registry%request_field(fw, filt_field_indices(3))
+    call neko_scratch_registry%request_field(fu, filt_field_indices(1), .false.)
+    call neko_scratch_registry%request_field(fv, filt_field_indices(2), .false.)
+    call neko_scratch_registry%request_field(fw, filt_field_indices(3), .false.)
     do i = 1, this%n_scalars
        call neko_scratch_registry%request_field(fs(i)%ptr, &
-            filt_field_indices(3+i))
+            filt_field_indices(3+i), .false.)
     end do
 
     ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
