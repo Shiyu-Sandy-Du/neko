@@ -141,53 +141,44 @@ __global__ void __launch_bounds__(LX*LX,3)
       wrtmp += shdx[i+l*LX] * shw[l+j*LX];
       wstmp += shdy[j+l*LX] * shw[i+l*LX];
     }
-    
-    T u1 = 0.0;
-    T u2 = 0.0;
-    T u3 = 0.0;
-    T v1 = 0.0;
-    T v2 = 0.0;
-    T v3 = 0.0;
-    T w1 = 0.0;
-    T w2 = 0.0;
-    T w3 = 0.0;
+    __syncthreads();
 
-    u1 = urtmp * drdx_local + 
-         ustmp * dsdx_local + 
-         uttmp * dtdx_local;
-    u2 = urtmp * drdy_local + 
-         ustmp * dsdy_local + 
-         uttmp * dtdy_local;
-    u3 = urtmp * drdz_local + 
-         ustmp * dsdz_local + 
-         uttmp * dtdz_local;
+    T u1 = urtmp * drdx_local + 
+           ustmp * dsdx_local + 
+           uttmp * dtdx_local;
+    T u2 = urtmp * drdy_local + 
+           ustmp * dsdy_local + 
+           uttmp * dtdy_local;
+    T u3 = urtmp * drdz_local + 
+           ustmp * dsdz_local + 
+           uttmp * dtdz_local;
 
-    v1 = vrtmp * drdx_local + 
-         vstmp * dsdx_local + 
-         vttmp * dtdx_local;
-    v2 = vrtmp * drdy_local + 
-         vstmp * dsdy_local + 
-         vttmp * dtdy_local;
-    v3 = vrtmp * drdz_local + 
-         vstmp * dsdz_local + 
-         vttmp * dtdz_local;
+    T v1 = vrtmp * drdx_local + 
+           vstmp * dsdx_local + 
+           vttmp * dtdx_local;
+    T v2 = vrtmp * drdy_local + 
+           vstmp * dsdy_local + 
+           vttmp * dtdy_local;
+    T v3 = vrtmp * drdz_local + 
+           vstmp * dsdz_local + 
+           vttmp * dtdz_local;
 
-    w1 = wrtmp * drdx_local + 
-         wstmp * dsdx_local + 
-         wttmp * dtdx_local;
-    w2 = wrtmp * drdy_local + 
-         wstmp * dsdy_local + 
-         wttmp * dtdy_local;
-    w3 = wrtmp * drdz_local + 
-         wstmp * dsdz_local + 
-         wttmp * dtdz_local;
+    T w1 = wrtmp * drdx_local + 
+           wstmp * dsdx_local + 
+           wttmp * dtdx_local;
+    T w2 = wrtmp * drdy_local + 
+           wstmp * dsdy_local + 
+           wttmp * dtdy_local;
+    T w3 = wrtmp * drdz_local + 
+           wstmp * dsdz_local + 
+           wttmp * dtdz_local;
 
-    s11[ij + k*LX*LX + ele] = dj*(u1 + u1);
-    s22[ij + k*LX*LX + ele] = dj*(v2 + v2);
-    s33[ij + k*LX*LX + ele] = dj*(w3 + w3);
-    s12[ij + k*LX*LX + ele] = dj*(u2 + v1);
-    s13[ij + k*LX*LX + ele] = dj*(u3 + w1);
-    s23[ij + k*LX*LX + ele] = dj*(v3 + w2);   
+    s11[ijk + ele] = dj*(u1 + u1);
+    s22[ijk + ele] = dj*(v2 + v2);
+    s33[ijk + ele] = dj*(w3 + w3);
+    s12[ijk + ele] = dj*(u2 + v1);
+    s13[ijk + ele] = dj*(u3 + w1);
+    s23[ijk + ele] = dj*(v3 + w2);   
   }
 }
 
@@ -497,6 +488,7 @@ __global__ void __launch_bounds__(LX*LX,3)
       rww[l] += rwt2 * shdz[k+l*LX];
       wwijke += shws2[i+l*LX] * shdy[l + j*LX];
     }
+    __syncthreads();
     ruw[k] += uwijke;
     rvw[k] += vwijke;
     rww[k] += wwijke;
