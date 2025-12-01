@@ -141,53 +141,44 @@ __global__ void __launch_bounds__(LX*LX,3)
       wrtmp += shdx[i+l*LX] * shw[l+j*LX];
       wstmp += shdy[j+l*LX] * shw[i+l*LX];
     }
-    
-    T u1 = 0.0;
-    T u2 = 0.0;
-    T u3 = 0.0;
-    T v1 = 0.0;
-    T v2 = 0.0;
-    T v3 = 0.0;
-    T w1 = 0.0;
-    T w2 = 0.0;
-    T w3 = 0.0;
+    __syncthreads();
 
-    u1 = urtmp * drdx_local + 
-         ustmp * dsdx_local + 
-         uttmp * dtdx_local;
-    u2 = urtmp * drdy_local + 
-         ustmp * dsdy_local + 
-         uttmp * dtdy_local;
-    u3 = urtmp * drdz_local + 
-         ustmp * dsdz_local + 
-         uttmp * dtdz_local;
+    T u1 = urtmp * drdx_local + 
+           ustmp * dsdx_local + 
+           uttmp * dtdx_local;
+    T u2 = urtmp * drdy_local + 
+           ustmp * dsdy_local + 
+           uttmp * dtdy_local;
+    T u3 = urtmp * drdz_local + 
+           ustmp * dsdz_local + 
+           uttmp * dtdz_local;
 
-    v1 = vrtmp * drdx_local + 
-         vstmp * dsdx_local + 
-         vttmp * dtdx_local;
-    v2 = vrtmp * drdy_local + 
-         vstmp * dsdy_local + 
-         vttmp * dtdy_local;
-    v3 = vrtmp * drdz_local + 
-         vstmp * dsdz_local + 
-         vttmp * dtdz_local;
+    T v1 = vrtmp * drdx_local + 
+           vstmp * dsdx_local + 
+           vttmp * dtdx_local;
+    T v2 = vrtmp * drdy_local + 
+           vstmp * dsdy_local + 
+           vttmp * dtdy_local;
+    T v3 = vrtmp * drdz_local + 
+           vstmp * dsdz_local + 
+           vttmp * dtdz_local;
 
-    w1 = wrtmp * drdx_local + 
-         wstmp * dsdx_local + 
-         wttmp * dtdx_local;
-    w2 = wrtmp * drdy_local + 
-         wstmp * dsdy_local + 
-         wttmp * dtdy_local;
-    w3 = wrtmp * drdz_local + 
-         wstmp * dsdz_local + 
-         wttmp * dtdz_local;
+    T w1 = wrtmp * drdx_local + 
+           wstmp * dsdx_local + 
+           wttmp * dtdx_local;
+    T w2 = wrtmp * drdy_local + 
+           wstmp * dsdy_local + 
+           wttmp * dtdy_local;
+    T w3 = wrtmp * drdz_local + 
+           wstmp * dsdz_local + 
+           wttmp * dtdz_local;
 
-    s11[ij + k*LX*LX + ele] = dj*(u1 + u1);
-    s22[ij + k*LX*LX + ele] = dj*(v2 + v2);
-    s33[ij + k*LX*LX + ele] = dj*(w3 + w3);
-    s12[ij + k*LX*LX + ele] = dj*(u2 + v1);
-    s13[ij + k*LX*LX + ele] = dj*(u3 + w1);
-    s23[ij + k*LX*LX + ele] = dj*(v3 + w2);   
+    s11[ijk + ele] = dj*(u1 + u1);
+    s22[ijk + ele] = dj*(v2 + v2);
+    s33[ijk + ele] = dj*(w3 + w3);
+    s12[ijk + ele] = dj*(u2 + v1);
+    s13[ijk + ele] = dj*(u3 + w1);
+    s23[ijk + ele] = dj*(v3 + w2);   
   }
 }
 
@@ -265,9 +256,9 @@ __global__ void __launch_bounds__(LX*LX,3)
     T uttmp = 0.0;
     T vttmp = 0.0;
     T wttmp = 0.0;
-    shu[ij] = ru[k];
-    shv[ij] = rv[k];
-    shw[ij] = rw[k];
+    shu[ij_p] = ru[k];
+    shv[ij_p] = rv[k];
+    shw[ij_p] = rw[k];
 
     for (int l = 0; l < LX; l++){
       uttmp += shdz[k+l*(LX+1)] * ru[l];
@@ -296,46 +287,37 @@ __global__ void __launch_bounds__(LX*LX,3)
       wrtmp += shdx[i+l*(LX+1)] * shw[l+j*(LX+1)];
       wstmp += shdy[j+l*(LX+1)] * shw[i+l*(LX+1)];
     }
+    __syncthreads();
 
-    T u1 = 0.0;
-    T u2 = 0.0;
-    T u3 = 0.0;
-    T v1 = 0.0;
-    T v2 = 0.0;
-    T v3 = 0.0;
-    T w1 = 0.0;
-    T w2 = 0.0;
-    T w3 = 0.0;
+    T u1 = urtmp * drdx_local + 
+           ustmp * dsdx_local + 
+           uttmp * dtdx_local;
+    T u2 = urtmp * drdy_local + 
+           ustmp * dsdy_local + 
+           uttmp * dtdy_local;
+    T u3 = urtmp * drdz_local + 
+           ustmp * dsdz_local + 
+           uttmp * dtdz_local;
 
-    u1 = urtmp * drdx_local + 
-         ustmp * dsdx_local + 
-         uttmp * dtdx_local;
-    u2 = urtmp * drdy_local + 
-         ustmp * dsdy_local + 
-         uttmp * dtdy_local;
-    u3 = urtmp * drdz_local + 
-         ustmp * dsdz_local + 
-         uttmp * dtdz_local;
+    T v1 = vrtmp * drdx_local + 
+           vstmp * dsdx_local + 
+           vttmp * dtdx_local;
+    T v2 = vrtmp * drdy_local + 
+           vstmp * dsdy_local + 
+           vttmp * dtdy_local;
+    T v3 = vrtmp * drdz_local + 
+           vstmp * dsdz_local + 
+           vttmp * dtdz_local;
 
-    v1 = vrtmp * drdx_local + 
-         vstmp * dsdx_local + 
-         vttmp * dtdx_local;
-    v2 = vrtmp * drdy_local + 
-         vstmp * dsdy_local + 
-         vttmp * dtdy_local;
-    v3 = vrtmp * drdz_local + 
-         vstmp * dsdz_local + 
-         vttmp * dtdz_local;
-
-    w1 = wrtmp * drdx_local + 
-         wstmp * dsdx_local + 
-         wttmp * dtdx_local;
-    w2 = wrtmp * drdy_local + 
-         wstmp * dsdy_local + 
-         wttmp * dtdy_local;
-    w3 = wrtmp * drdz_local + 
-         wstmp * dsdz_local + 
-         wttmp * dtdz_local;
+    T w1 = wrtmp * drdx_local + 
+           wstmp * dsdx_local + 
+           wttmp * dtdx_local;
+    T w2 = wrtmp * drdy_local + 
+           wstmp * dsdy_local + 
+           wttmp * dtdy_local;
+    T w3 = wrtmp * drdz_local + 
+           wstmp * dsdz_local + 
+           wttmp * dtdz_local;
 
     s11[ij + k*LX*LX + ele] = dj*(u1 + u1);
     s22[ij + k*LX*LX + ele] = dj*(v2 + v2);
@@ -392,20 +374,6 @@ __global__ void __launch_bounds__(LX*LX,3)
   __shared__ T shwr2[LX * LX];
   __shared__ T shws2[LX * LX];
   T rwt2;
-  
-  T rs11[LX];
-  T rs22[LX];
-  T rs33[LX];
-  T rs12[LX];
-  T rs13[LX];
-  T rs23[LX];  
-
-  T rs11_svv[LX];
-  T rs22_svv[LX];
-  T rs33_svv[LX];
-  T rs12_svv[LX];
-  T rs13_svv[LX];
-  T rs23_svv[LX];
 
   T ruw[LX];
   T rvw[LX];
@@ -423,18 +391,6 @@ __global__ void __launch_bounds__(LX*LX,3)
 
 #pragma unroll
   for(int k = 0; k < LX; ++k){
-    rs11[k] = s11[ij + k*LX*LX + ele];
-    rs22[k] = s22[ij + k*LX*LX + ele];
-    rs33[k] = s33[ij + k*LX*LX + ele];
-    rs12[k] = s12[ij + k*LX*LX + ele];
-    rs13[k] = s13[ij + k*LX*LX + ele];
-    rs23[k] = s23[ij + k*LX*LX + ele];
-    rs11_svv[k] = s11[ij + k*LX*LX + ele] - s11_svv[ij + k*LX*LX + ele];
-    rs22_svv[k] = s22[ij + k*LX*LX + ele] - s22_svv[ij + k*LX*LX + ele];
-    rs33_svv[k] = s33[ij + k*LX*LX + ele] - s33_svv[ij + k*LX*LX + ele];
-    rs12_svv[k] = s12[ij + k*LX*LX + ele] - s12_svv[ij + k*LX*LX + ele];
-    rs13_svv[k] = s13[ij + k*LX*LX + ele] - s13_svv[ij + k*LX*LX + ele];
-    rs23_svv[k] = s23[ij + k*LX*LX + ele] - s23_svv[ij + k*LX*LX + ele];
     ruw[k] = 0.0;
     rvw[k] = 0.0;
     rww[k] = 0.0;
@@ -455,13 +411,26 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dtdz_local = dtdz[ijk+ele];
     const T dj = w3[ijk]*h1[ijk+ele];
     const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
+    
+    T rs11 = s11[ijk + ele];
+    T rs22 = s22[ijk + ele];
+    T rs33 = s33[ijk + ele];
+    T rs12 = s12[ijk + ele];
+    T rs13 = s13[ijk + ele];
+    T rs23 = s23[ijk + ele];
+    T rs11_svv = rs11 - s11_svv[ijk + ele];
+    T rs22_svv = rs22 - s22_svv[ijk + ele];
+    T rs33_svv = rs33 - s33_svv[ijk + ele];
+    T rs12_svv = rs12 - s12_svv[ijk + ele];
+    T rs13_svv = rs13 - s13_svv[ijk + ele];
+    T rs23_svv = rs23 - s23_svv[ijk + ele];
 
-    T rs11_h = dj * rs11[k] + dj_svv * rs11_svv[k];
-    T rs22_h = dj * rs22[k] + dj_svv * rs22_svv[k];
-    T rs33_h = dj * rs33[k] + dj_svv * rs33_svv[k];
-    T rs12_h = dj * rs12[k] + dj_svv * rs12_svv[k];
-    T rs13_h = dj * rs13[k] + dj_svv * rs13_svv[k];
-    T rs23_h = dj * rs23[k] + dj_svv * rs23_svv[k];
+    T rs11_h = dj * rs11 + dj_svv * rs11_svv;
+    T rs22_h = dj * rs22 + dj_svv * rs22_svv;
+    T rs33_h = dj * rs33 + dj_svv * rs33_svv;
+    T rs12_h = dj * rs12 + dj_svv * rs12_svv;
+    T rs13_h = dj * rs13 + dj_svv * rs13_svv;
+    T rs23_h = dj * rs23 + dj_svv * rs23_svv;
 
     shur2[ij] = drdx_local * rs11_h +
                 drdy_local * rs12_h +
@@ -501,13 +470,16 @@ __global__ void __launch_bounds__(LX*LX,3)
       uwijke += shur2[l+j*LX] * shdx[l+i*LX];
       ruw[l] += rut2 * shdz[k+l*LX];
       uwijke += shus2[i+l*LX] * shdy[l + j*LX];
+
       vwijke += shvr2[l+j*LX] * shdx[l+i*LX];
       rvw[l] += rvt2 * shdz[k+l*LX];
       vwijke += shvs2[i+l*LX] * shdy[l + j*LX];
+
       wwijke += shwr2[l+j*LX] * shdx[l+i*LX];
       rww[l] += rwt2 * shdz[k+l*LX];
       wwijke += shws2[i+l*LX] * shdy[l + j*LX];
     }
+    __syncthreads();
     ruw[k] += uwijke;
     rvw[k] += vwijke;
     rww[k] += wwijke;
@@ -566,20 +538,6 @@ __global__ void __launch_bounds__(LX*LX,3)
   __shared__ T shwr2[LX * LX];
   __shared__ T shws2[LX * (LX+1)];
   T rwt2;
-  
-  T rs11[LX];
-  T rs22[LX];
-  T rs33[LX];
-  T rs12[LX];
-  T rs13[LX];
-  T rs23[LX];  
-
-  T rs11_svv[LX];
-  T rs22_svv[LX];
-  T rs33_svv[LX];
-  T rs12_svv[LX];
-  T rs13_svv[LX];
-  T rs23_svv[LX];
 
   T ruw[LX];
   T rvw[LX];
@@ -598,18 +556,6 @@ __global__ void __launch_bounds__(LX*LX,3)
 
 #pragma unroll
   for(int k = 0; k < LX; ++k){
-    rs11[k] = s11[ij + k*LX*LX + ele];
-    rs22[k] = s22[ij + k*LX*LX + ele];
-    rs33[k] = s33[ij + k*LX*LX + ele];
-    rs12[k] = s12[ij + k*LX*LX + ele];
-    rs13[k] = s13[ij + k*LX*LX + ele];
-    rs23[k] = s23[ij + k*LX*LX + ele];
-    rs11_svv[k] = s11[ij + k*LX*LX + ele] - s11_svv[ij + k*LX*LX + ele];
-    rs22_svv[k] = s22[ij + k*LX*LX + ele] - s22_svv[ij + k*LX*LX + ele];
-    rs33_svv[k] = s33[ij + k*LX*LX + ele] - s33_svv[ij + k*LX*LX + ele];
-    rs12_svv[k] = s12[ij + k*LX*LX + ele] - s12_svv[ij + k*LX*LX + ele];
-    rs13_svv[k] = s13[ij + k*LX*LX + ele] - s13_svv[ij + k*LX*LX + ele];
-    rs23_svv[k] = s23[ij + k*LX*LX + ele] - s23_svv[ij + k*LX*LX + ele];
     ruw[k] = 0.0;
     rvw[k] = 0.0;
     rww[k] = 0.0;
@@ -630,13 +576,26 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dtdz_local = dtdz[ijk+ele];
     const T dj = w3[ijk]*h1[ijk+ele];
     const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
+    
+    T rs11 = s11[ijk + ele];
+    T rs22 = s22[ijk + ele];
+    T rs33 = s33[ijk + ele];
+    T rs12 = s12[ijk + ele];
+    T rs13 = s13[ijk + ele];
+    T rs23 = s23[ijk + ele];
+    T rs11_svv = s11[ijk + ele] - s11_svv[ijk + ele];
+    T rs22_svv = s22[ijk + ele] - s22_svv[ijk + ele];
+    T rs33_svv = s33[ijk + ele] - s33_svv[ijk + ele];
+    T rs12_svv = s12[ijk + ele] - s12_svv[ijk + ele];
+    T rs13_svv = s13[ijk + ele] - s13_svv[ijk + ele];
+    T rs23_svv = s23[ijk + ele] - s23_svv[ijk + ele];
 
-    T rs11_h = dj * rs11[k] + dj_svv * rs11_svv[k];
-    T rs22_h = dj * rs22[k] + dj_svv * rs22_svv[k];
-    T rs33_h = dj * rs33[k] + dj_svv * rs33_svv[k];
-    T rs12_h = dj * rs12[k] + dj_svv * rs12_svv[k];
-    T rs13_h = dj * rs13[k] + dj_svv * rs13_svv[k];
-    T rs23_h = dj * rs23[k] + dj_svv * rs23_svv[k];
+    T rs11_h = dj * rs11 + dj_svv * rs11_svv;
+    T rs22_h = dj * rs22 + dj_svv * rs22_svv;
+    T rs33_h = dj * rs33 + dj_svv * rs33_svv;
+    T rs12_h = dj * rs12 + dj_svv * rs12_svv;
+    T rs13_h = dj * rs13 + dj_svv * rs13_svv;
+    T rs23_h = dj * rs23 + dj_svv * rs23_svv;
 
     shur2[ij] = drdx_local * rs11_h +
                 drdy_local * rs12_h +
@@ -685,6 +644,7 @@ __global__ void __launch_bounds__(LX*LX,3)
       rww[l] += rwt2 * shdz[k+l*(LX+1)];
       wwijke += shws2[i+l*(LX+1)] * shdy[l + j*(LX+1)];
     }
+    __syncthreads();
     ruw[k] += uwijke;
     rvw[k] += vwijke;
     rww[k] += wwijke;
