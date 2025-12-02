@@ -112,16 +112,16 @@ __global__ void __launch_bounds__(LX*LX,3)
       urtmp += shdx[i+l*LX] * shu[l+j*LX];
       ustmp += shdy[j+l*LX] * shu[i+l*LX];
     }
-
-    ur[ij + k*LX*LX + ele] = dj * (urtmp * drdx_local + 
-                                   ustmp * dsdx_local + 
-                                   uttmp * dtdx_local);
-    us[ij + k*LX*LX + ele] = dj * (urtmp * drdy_local + 
-                                   ustmp * dsdy_local + 
-                                   uttmp * dtdy_local);
-    ut[ij + k*LX*LX + ele] = dj * (urtmp * drdz_local + 
-                                   ustmp * dsdz_local + 
-                                   uttmp * dtdz_local);    
+    __syncthreads();
+    ur[ijk + ele] = dj * (urtmp * drdx_local + 
+                          ustmp * dsdx_local + 
+                          uttmp * dtdx_local);
+    us[ijk + ele] = dj * (urtmp * drdy_local + 
+                          ustmp * dsdy_local + 
+                          uttmp * dtdy_local);
+    ut[ijk + ele] = dj * (urtmp * drdz_local + 
+                          ustmp * dsdz_local + 
+                          uttmp * dtdz_local);    
   }
 }
 
@@ -201,16 +201,16 @@ __global__ void __launch_bounds__(LX*LX,3)
       urtmp += shdx[i+l*(LX+1)] * shu[l+j*(LX+1)];
       ustmp += shdy[j+l*(LX+1)] * shu[i+l*(LX+1)];
     }
-
-    ur[ij + k*LX*LX + ele] = dj * (urtmp * drdx_local + 
-                                   ustmp * dsdx_local + 
-                                   uttmp * dtdx_local);
-    us[ij + k*LX*LX + ele] = dj * (urtmp * drdy_local + 
-                                   ustmp * dsdy_local + 
-                                   uttmp * dtdy_local);
-    ut[ij + k*LX*LX + ele] = dj * (urtmp * drdz_local + 
-                                   ustmp * dsdz_local + 
-                                   uttmp * dtdz_local);
+    __syncthreads();
+    ur[ijk + ele] = dj * (urtmp * drdx_local + 
+                          ustmp * dsdx_local + 
+                          uttmp * dtdx_local);
+    us[ijk + ele] = dj * (urtmp * drdy_local + 
+                          ustmp * dsdy_local + 
+                          uttmp * dtdy_local);
+    ut[ijk + ele] = dj * (urtmp * drdz_local + 
+                          ustmp * dsdz_local + 
+                          uttmp * dtdz_local);
   }
 }
 
@@ -246,13 +246,6 @@ __global__ void __launch_bounds__(LX*LX,3)
   __shared__ T shur2[LX * LX];
   __shared__ T shus2[LX * LX];
   T rut2;
-  
-  T rur[LX];
-  T rus[LX];
-  T rut[LX];
-  T rur_svv[LX];
-  T rus_svv[LX];
-  T rut_svv[LX];
 
   T ruw[LX];
 
@@ -268,12 +261,6 @@ __global__ void __launch_bounds__(LX*LX,3)
 
 #pragma unroll
   for(int k = 0; k < LX; ++k){
-    rur[k] = ur[ij + k*LX*LX + ele];
-    rus[k] = us[ij + k*LX*LX + ele];
-    rut[k] = ut[ij + k*LX*LX + ele];
-    rur_svv[k] = ur[ij + k*LX*LX + ele] - ur_svv[ij + k*LX*LX + ele];
-    rus_svv[k] = us[ij + k*LX*LX + ele] - us_svv[ij + k*LX*LX + ele];
-    rut_svv[k] = ut[ij + k*LX*LX + ele] - ut_svv[ij + k*LX*LX + ele];
     ruw[k] = 0.0;
   }
 
@@ -293,9 +280,16 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dj = w3[ijk]*h1[ijk+ele];
     const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
 
-    T ur_h = dj * rur[k] + dj_svv * rur_svv[k];
-    T us_h = dj * rus[k] + dj_svv * rus_svv[k];
-    T ut_h = dj * rut[k] + dj_svv * rut_svv[k];
+    T rur = ur[ijk + ele];
+    T rus = us[ijk + ele];
+    T rut = ut[ijk + ele];
+    T rur_svv = rur - ur_svv[ijk + ele];
+    T rus_svv = rus - us_svv[ijk + ele];
+    T rut_svv = rut - ut_svv[ijk + ele];
+
+    T ur_h = dj * rur + dj_svv * rur_svv;
+    T us_h = dj * rus + dj_svv * rus_svv;
+    T ut_h = dj * rut + dj_svv * rut_svv;
 
     shur2[ij] = drdx_local * ur_h +
                 drdy_local * us_h +
@@ -316,6 +310,7 @@ __global__ void __launch_bounds__(LX*LX,3)
       ruw[l] += rut2 * shdz[k+l*LX];
       uwijke += shus2[i+l*LX] * shdy[l + j*LX];
     }
+    __syncthreads();
     ruw[k] += uwijke; 
   }
 #pragma unroll
@@ -379,12 +374,6 @@ __global__ void __launch_bounds__(LX*LX,3)
 
 #pragma unroll
   for(int k = 0; k < LX; ++k){
-    rur[k] = ur[ij + k*LX*LX + ele];
-    rus[k] = us[ij + k*LX*LX + ele];
-    rut[k] = ut[ij + k*LX*LX + ele];
-    rur_svv[k] = ur[ij + k*LX*LX + ele] - ur_svv[ij + k*LX*LX + ele];
-    rus_svv[k] = us[ij + k*LX*LX + ele] - us_svv[ij + k*LX*LX + ele];
-    rut_svv[k] = ut[ij + k*LX*LX + ele] - ut_svv[ij + k*LX*LX + ele];
     ruw[k] = 0.0;
   }
 
@@ -404,9 +393,16 @@ __global__ void __launch_bounds__(LX*LX,3)
     const T dj = w3[ijk]*h1[ijk+ele];
     const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
 
-    T ur_h = dj * rur[k] + dj_svv * rur_svv[k];
-    T us_h = dj * rus[k] + dj_svv * rus_svv[k];
-    T ut_h = dj * rut[k] + dj_svv * rut_svv[k];
+    T rur = ur[ijk + ele];
+    T rus = us[ijk + ele];
+    T rut = ut[ijk + ele];
+    T rur_svv = rur - ur_svv[ijk + ele];
+    T rus_svv = rus - us_svv[ijk + ele];
+    T rut_svv = rut - ut_svv[ijk + ele];
+
+    T ur_h = dj * rur + dj_svv * rur_svv;
+    T us_h = dj * rus + dj_svv * rus_svv;
+    T ut_h = dj * rut + dj_svv * rut_svv;
 
     shur2[ij] = drdx_local * ur_h +
                 drdy_local * us_h +
@@ -427,6 +423,7 @@ __global__ void __launch_bounds__(LX*LX,3)
       ruw[l] += rut2 * shdz[k+l*(LX+1)];
       uwijke += shus2[i+l*(LX+1)] * shdy[l + j*(LX+1)];
     }
+    __syncthreads();
     ruw[k] += uwijke; 
   }
 #pragma unroll
