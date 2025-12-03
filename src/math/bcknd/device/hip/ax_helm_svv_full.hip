@@ -47,7 +47,7 @@ extern "C" {
 extern "C" {
 
   /**
-   * Fortran wrapper for device CUDA Ax_svv_full version, part 1
+   * Fortran wrapper for device HIP Ax_svv_full version, part 1
    */
   void hip_ax_helm_svv_full_vector_part1(void *s11, void *s22, void *s33,
                               void *s12, void *s13, void *s23,
@@ -124,7 +124,7 @@ extern "C" {
   }
 
   /**
-   * Fortran wrapper for device CUDA Ax_svv_full version, part 2
+   * Fortran wrapper for device HIP Ax_svv_full version, part 2
    */
   void hip_ax_helm_svv_full_vector_part2(void *au, void *av, void *aw,
                                    void *s11, void *s22, void *s33,
@@ -156,7 +156,7 @@ extern "C" {
                         (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
                         (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
                         (real *) w3, (real *) h1_svv);                      \
-    CUDA_CHECK(hipGetLastError());
+    HIP_CHECK(hipGetLastError());
 
 #define CASE_part2_KSTEP_PADDED(LX)                                                      \
     hipLaunchKernelGGL( HIP_KERNEL_NAME( ax_helm_svv_full_part2_kernel_vector_kstep_padded<real, LX> ), \
@@ -173,7 +173,7 @@ extern "C" {
                         (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
                         (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
                         (real *) w3, (real *) h1_svv);                      \
-    CUDA_CHECK(hipGetLastError());
+    HIP_CHECK(hipGetLastError());
 
 #define CASE_part2(LX)                                                                   \
     case LX:                                                                             \
