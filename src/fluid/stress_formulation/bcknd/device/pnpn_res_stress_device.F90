@@ -62,7 +62,7 @@ module pnpn_res_stress_device
        type(c_ptr), value :: ta1_d, ta2_d, ta3_d
        type(c_ptr), value :: svv_h1_d
        integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_1_hip
+     end subroutine pnpn_prs_stress_res_svv_part1_2_hip
   end interface
 
   interface
