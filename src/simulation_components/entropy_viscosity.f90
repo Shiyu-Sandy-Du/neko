@@ -103,7 +103,7 @@ module entropy_viscosity
      type(field_ptr_t), allocatable :: entropy_viscosity(:)
 
      !> Residual.
-     type(field_t), allocatable :: D(:)
+     type(field_ptr_t), allocatable :: D(:)
 
      !> Output writer.
      type(field_writer_t) :: writer
@@ -159,10 +159,12 @@ contains
     else
        this%n_scalars = 0
     end if
-    allocate(fields(1+this%n_scalars))
+    allocate(fields(2*(1+this%n_scalars)))
     fields(1) = 'entr_visc_vel'
+    fields(2) = 'entr_res_vel'
     do k = 1, this%n_scalars
-       write(fields(k+1), '(A,I0)') 'entr_visc_s', k
+       write(fields(2*k+1), '(A,I0)') 'entr_visc_s', k
+       write(fields(2*k+2), '(A,I0)') 'entr_res_s', k
     end do
     ! Add fields keyword to the json so that the field_writer picks it up.
     ! Will also add fields to 	simulation_components/entropy_viscosity.f90\the registry.
@@ -217,13 +219,15 @@ contains
 
     do k = 1, 1+this%n_scalars
        this%entropy_viscosity(k)%ptr => &
-              neko_field_registry%get_field(fields(k))
+              neko_field_registry%get_field(fields(2*k-1))
+       this%D(k)%ptr => &
+              neko_field_registry%get_field(fields(2*k))
 
        call this%E(k)%init(this%u%dof)
        call this%Elag(k)%init(this%E(k), 2)
        call this%wa(k)%init(this%u%dof)
 
-       call this%D(k)%init(this%u%dof)
+      !  call this%D(k)%init(this%u%dof)
        call this%abx1(k)%init(this%u%dof)
        call this%abx2(k)%init(this%u%dof)
        
@@ -337,7 +341,7 @@ contains
     associate(u => this%u, v => this%v, w => this%w, E => this%E(1), ta => ta(1)%ptr, &
              ext_bdf => this%ext_bdf, &
              dt => time%dt, coef => this%coef, wa => this%wa(1), &
-             D => this%D(1), gs => this%coef%gs_h, &
+             D => this%D(1)%ptr, gs => this%coef%gs_h, &
              adv => this%adv, &
              Xh => this%coef%Xh, &
              entropy_viscosity => this%entropy_viscosity(1)%ptr)
@@ -452,7 +456,7 @@ contains
                  fs => fs(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
-                 D => this%D(i+1), gs => this%coef%gs_h, &
+                 D => this%D(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
                  E_s_avg => E_s_avg(i), E_s_var => this%E_s_var(i), &
