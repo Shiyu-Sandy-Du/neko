@@ -88,7 +88,7 @@ module entropy_viscosity
      type(field_t), allocatable :: wa(:)
      !> Scalar field
      integer :: n_scalars = 0
-     type(field_ptr_t), allocatable :: s(:)
+     type(field_ptr_t), pointer :: s(:)
      type(field_t), allocatable :: E_s_var(:)
      type(field_t), allocatable :: E(:)
      type(field_series_t), allocatable :: Elag(:)
@@ -338,13 +338,14 @@ contains
     end do
 
     ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
-    associate(u => this%u, v => this%v, w => this%w, E => this%E(1), ta => ta(1)%ptr, &
+    associate(u => this%u, v => this%v, w => this%w, E => this%E(1), &
+             ta_1 => ta(1)%ptr, &
              ext_bdf => this%ext_bdf, &
              dt => time%dt, coef => this%coef, wa => this%wa(1), &
-             D => this%D(1)%ptr, gs => this%coef%gs_h, &
+             D_1 => this%D(1)%ptr, gs => this%coef%gs_h, &
              adv => this%adv, &
              Xh => this%coef%Xh, &
-             entropy_viscosity => this%entropy_viscosity(1)%ptr)
+             entropy_viscosity_1 => this%entropy_viscosity(1)%ptr)
 
     n = u%dof%size()
 
@@ -372,22 +373,22 @@ contains
       !    call col2(fw%x, coef%mult, n)
       ! end if
 
-      ! call field_col3(ta, fu, fu)
-      ! call field_copy(E, ta)
-      ! call field_col3(ta, fv, fv)
-      ! call field_add2(E, ta)
-      ! call field_col3(ta, fw, fw)
-      ! call field_add2(E, ta)
+      ! call field_col3(ta_1, fu, fu)
+      ! call field_copy(E, ta_1)
+      ! call field_col3(ta_1, fv, fv)
+      ! call field_add2(E, ta_1)
+      ! call field_col3(ta_1, fw, fw)
+      ! call field_add2(E, ta_1)
       ! call field_sqrt(E)
       
       ! filter the velocity magnitude all together
-      call field_rzero(ta)
-      call field_addcol3(ta, u, u)
-      call field_addcol3(ta, v, v)
-      call field_addcol3(ta, w, w)
-      call field_sqrt(ta)
-      call this%filter%apply(fu, ta)
-      call field_sub2(fu, ta)
+      call field_rzero(ta_1)
+      call field_addcol3(ta_1, u, u)
+      call field_addcol3(ta_1, v, v)
+      call field_addcol3(ta_1, w, w)
+      call field_sqrt(ta_1)
+      call this%filter%apply(fu, ta_1)
+      call field_sub2(fu, ta_1)
       call gs%op(fu, GS_OP_ADD)
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call device_col2(fu%x_d, coef%mult_d, n)
@@ -398,37 +399,37 @@ contains
       call field_copy(E, E)
       
     else
-      call field_col3(ta, u, u)
-      call field_copy(E, ta)
-      call field_col3(ta, v, v)
-      call field_add2(E, ta)
-      call field_col3(ta, w, w)
-      call field_add2(E, ta)
+      call field_col3(ta_1, u, u)
+      call field_copy(E, ta_1)
+      call field_col3(ta_1, v, v)
+      call field_add2(E, ta_1)
+      call field_col3(ta_1, w, w)
+      call field_add2(E, ta_1)
     end if
 
-    call field_copy(ta, E)
-    call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-    call field_sub2(ta, wa)
-    call field_copy(D, ta)
+    call field_copy(ta_1, E)
+    call field_cmult(ta_1, ext_bdf%diffusion_coeffs(1)/dt)
+    call field_sub2(ta_1, wa)
+    call field_copy(D_1, ta_1)
 
     ! advection part
-    call field_rzero(ta, n)
-    call adv%compute_scalar(u, v, w, E, ta, &
+    call field_rzero(ta_1, n)
+    call adv%compute_scalar(u, v, w, E, ta_1, &
          Xh, coef, n)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_invcol2(ta%x_d, coef%B_d, n)
+       call device_invcol2(ta_1%x_d, coef%B_d, n)
     else
-       call invcol2(ta%x, coef%B, n)
+       call invcol2(ta_1%x, coef%B, n)
     end if
-    call gs%op(ta, GS_OP_ADD)
+    call gs%op(ta_1, GS_OP_ADD)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_col2(ta%x_d, coef%mult_d, n)
+       call device_col2(ta_1%x_d, coef%mult_d, n)
     else
-       call col2(ta%x, coef%mult, n)
+       call col2(ta_1%x, coef%mult, n)
     end if
-    call field_sub2(D, ta, n)
-    call field_copy(entropy_viscosity, D)
-    call field_absval(entropy_viscosity)
+    call field_sub2(D_1, ta_1, n)
+    call field_copy(entropy_viscosity_1, D_1)
+    call field_absval(entropy_viscosity_1)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        E_vel_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
@@ -444,68 +445,68 @@ contains
        scaling_vel = this%c_E / glmax(this%E_vel_var%x, u%dof%size())
     end if
 
-    call field_cmult(entropy_viscosity, &
+    call field_cmult(entropy_viscosity_1, &
          scaling_vel)
-    call field_col2(entropy_viscosity, this%h2)
+    call field_col2(entropy_viscosity_1, this%h2)
 
    end associate
 
     do i = 1, this%n_scalars
        ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
-       associate(s => this%s(i)%ptr, &
-                 fs => fs(i)%ptr, E => this%E(i+1), ta => ta(i+1)%ptr, &
+       associate(s_i => this%s(i)%ptr, &
+                 fs_i => fs(i)%ptr, E => this%E(i+1), ta_i => ta(i+1)%ptr, &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
-                 D => this%D(i+1)%ptr, gs => this%coef%gs_h, &
+                 D_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
                  E_s_avg => E_s_avg(i), E_s_var => this%E_s_var(i), &
                  scaling_s => scaling_s(i), &
-                 entropy_viscosity => this%entropy_viscosity(i+1)%ptr)
+                 entropy_viscosity_i => this%entropy_viscosity(i+1)%ptr)
 
-       n = s%dof%size()
+       n = s_i%dof%size()
 
        if (this%if_filter) then
-         call this%filter%apply(fs, s)
-         call field_sub2(fs, s)
-         call gs%op(fs, GS_OP_ADD)
+         call this%filter%apply(fs_i, s_i)
+         call field_sub2(fs_i, s_i)
+         call gs%op(fs_i, GS_OP_ADD)
          if (NEKO_BCKND_DEVICE .eq. 1) then
-            call device_col2(fs%x_d, coef%mult_d, n)
+            call device_col2(fs_i%x_d, coef%mult_d, n)
          else
-            call col2(fs%x, coef%mult, n)
+            call col2(fs_i%x, coef%mult, n)
          end if
-         call field_copy(E, fs)
+         call field_copy(E, fs_i)
        else
-         call field_copy(E, s)
+         call field_copy(E, s_i)
        end if
 
        ! Take the absolute value as the entropy, however not differentiable at 0
       !  call field_absval(E)
        ! Take the square as the entropy
        call field_col2(E, E)
-       call field_copy(ta, E)
-       call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
-       call field_sub2(ta, wa)
-       call field_copy(D, ta)
+       call field_copy(ta_i, E)
+       call field_cmult(ta_i, ext_bdf%diffusion_coeffs(1)/dt)
+       call field_sub2(ta_i, wa)
+       call field_copy(D_i, ta_i)
 
        ! advection part
-       call field_rzero(ta, n)
-       call adv%compute_scalar(u, v, w, E, ta, &
+       call field_rzero(ta_i, n)
+       call adv%compute_scalar(u, v, w, E, ta_i, &
               Xh, coef, n)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_invcol2(ta%x_d, coef%B_d, n)
+          call device_invcol2(ta_i%x_d, coef%B_d, n)
        else
-          call invcol2(ta%x, coef%B, n)
+          call invcol2(ta_i%x, coef%B, n)
        end if
-       call gs%op(ta, GS_OP_ADD)
+       call gs%op(ta_i, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(ta%x_d, coef%mult_d, n)
+          call device_col2(ta_i%x_d, coef%mult_d, n)
        else
-          call col2(ta%x, coef%mult, n)
+          call col2(ta_i%x, coef%mult, n)
        end if
-       call field_sub2(D, ta, n)
-       call field_copy(entropy_viscosity, D)
-       call field_absval(entropy_viscosity)
+       call field_sub2(D_i, ta_i, n)
+       call field_copy(entropy_viscosity_i, D_i)
+       call field_absval(entropy_viscosity_i)
        
        if (NEKO_BCKND_DEVICE .eq. 1) then
           E_s_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
@@ -520,9 +521,9 @@ contains
           scaling_s = this%c_E / glmax(E_s_var%x, u%dof%size())
        end if
 
-       call field_cmult(entropy_viscosity, &
+       call field_cmult(entropy_viscosity_i, &
             scaling_s)
-       call field_col2(entropy_viscosity, this%h2)
+       call field_col2(entropy_viscosity_i, this%h2)
 
        end associate
     end do
