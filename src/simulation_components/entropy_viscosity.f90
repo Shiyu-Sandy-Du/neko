@@ -88,7 +88,7 @@ module entropy_viscosity
      type(field_t), allocatable :: wa(:)
      !> Scalar field
      integer :: n_scalars = 0
-     type(field_ptr_t), pointer :: s(:)
+     type(field_ptr_t), allocatable :: s(:)
      type(field_t), allocatable :: E_s_var(:)
      type(field_t), allocatable :: E(:)
      type(field_series_t), allocatable :: Elag(:)
