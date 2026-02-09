@@ -77,29 +77,24 @@ module entropy_viscosity
      logical :: if_filter = .false.
      !> X velocity component.
      type(field_t), pointer :: u
-     type(field_t) :: E_vel_var
      !> Y velocity component.
      type(field_t), pointer :: v
      !> Z velocity component.
      type(field_t), pointer :: w
-     !> Velocity magnitude.
-     type(field_t) :: vel_mag
      !> work array for the temporal derivative
      type(field_t), allocatable :: wa(:)
      !> Scalar field
      integer :: n_scalars = 0
      type(field_ptr_t), allocatable :: s(:)
-     type(field_t), allocatable :: E_s_var(:)
      type(field_t), allocatable :: E(:)
      type(field_series_t), allocatable :: Elag(:)
      !> coef
      type(coef_t), pointer :: coef
      !> Some field to be used
-     type(field_t), allocatable :: abx1(:), abx2(:)
      type(field_t) :: h2
      real(kind=rp) :: volume_domain
 
-     !> X entropy_viscosity component.
+     !> entropy_viscosity fields.
      type(field_ptr_t), allocatable :: entropy_viscosity(:)
 
      !> Residual.
@@ -197,14 +192,11 @@ contains
     this%v => neko_field_registry%get_field("v")
     this%w => neko_field_registry%get_field("w")
 
-    call this%E_vel_var%init(this%u%dof)
-    call this%vel_mag%init(this%u%dof)
 
     call this%h2%init(this%u%dof)
 
     if (this%n_scalars .ne. 0) then
        allocate(this%s(this%n_scalars))
-       allocate(this%E_s_var(this%n_scalars))
     end if
     
     allocate(this%E(1+this%n_scalars))
@@ -212,8 +204,6 @@ contains
     allocate(this%wa(1+this%n_scalars))
 
     allocate(this%D(1+this%n_scalars))
-    allocate(this%abx1(1+this%n_scalars))
-    allocate(this%abx2(1+this%n_scalars))
     
     allocate(this%entropy_viscosity(1+this%n_scalars))
 
@@ -226,14 +216,9 @@ contains
        call this%E(k)%init(this%u%dof)
        call this%Elag(k)%init(this%E(k), 2)
        call this%wa(k)%init(this%u%dof)
-
-      !  call this%D(k)%init(this%u%dof)
-       call this%abx1(k)%init(this%u%dof)
-       call this%abx2(k)%init(this%u%dof)
        
        if (k .le. this%n_scalars) then
           this%s(k)%ptr => this%scalars%scalar_fields(k)%s
-          call this%E_s_var(k)%init(this%u%dof)
        end if
     end do
 
@@ -317,16 +302,28 @@ contains
     type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
     type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu, fv, fw
+    type(field_ptr_t) :: E_vel_var
+    type(field_ptr_t) :: E_s_var(this%n_scalars)
     real(kind=rp) :: E_vel_avg
     real(kind=rp) :: E_s_avg(this%n_scalars)
     integer :: temp_indices(1+this%n_scalars)
     integer :: filt_field_indices(3+this%n_scalars)
+    integer :: E_vel_var_indices
+    integer :: E_s_var_indices(this%n_scalars)
     integer :: i, j, n
     real(kind=rp) :: scaling_vel, scaling_s(this%n_scalars)
 
     do i = 1, 1+this%n_scalars
        call neko_scratch_registry%request_field(ta(i)%ptr, &
                                                 temp_indices(i), .false.)
+    end do
+
+    call neko_scratch_registry%request_field(E_vel_var%ptr, &
+                                             E_vel_var_indices, .false.)
+
+    do i = 1, this%n_scalars
+       call neko_scratch_registry%request_field(E_s_var(i)%ptr, &
+                                                E_s_var_indices(i), .false.)
     end do
 
     call neko_scratch_registry%request_field(fu, filt_field_indices(1), .false.)
@@ -350,36 +347,6 @@ contains
     n = u%dof%size()
 
     if (this%if_filter) then
-
-      ! ! filter the velocity components separately
-      ! call this%filter%apply(fu, u)
-      ! call this%filter%apply(fv, v)
-      ! call this%filter%apply(fw, w)
-      
-      ! call field_sub2(fu, u)
-      ! call field_sub2(fv, v)
-      ! call field_sub2(fw, w)
-
-      ! call gs%op(fu, GS_OP_ADD)
-      ! call gs%op(fv, GS_OP_ADD)
-      ! call gs%op(fw, GS_OP_ADD)
-      ! if (NEKO_BCKND_DEVICE .eq. 1) then
-      !    call device_col2(fu%x_d, coef%mult_d, n)
-      !    call device_col2(fv%x_d, coef%mult_d, n)
-      !    call device_col2(fw%x_d, coef%mult_d, n)
-      ! else
-      !    call col2(fu%x, coef%mult, n)
-      !    call col2(fv%x, coef%mult, n)
-      !    call col2(fw%x, coef%mult, n)
-      ! end if
-
-      ! call field_col3(ta_1, fu, fu)
-      ! call field_copy(E, ta_1)
-      ! call field_col3(ta_1, fv, fv)
-      ! call field_add2(E, ta_1)
-      ! call field_col3(ta_1, fw, fw)
-      ! call field_add2(E, ta_1)
-      ! call field_sqrt(E)
       
       ! filter the velocity magnitude all together
       call field_rzero(ta_1)
@@ -436,13 +403,13 @@ contains
     else
        E_vel_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
     end if
-    call field_cadd2(this%E_vel_var, E, E_vel_avg)
-    call field_absval(this%E_vel_var)
-   
+    call field_cadd2(E_vel_var%ptr, E, E_vel_avg)
+    call field_absval(E_vel_var%ptr)
+
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       scaling_vel = this%c_E / device_glmax(this%E_vel_var%x_d, u%dof%size())
+       scaling_vel = this%c_E / device_glmax(E_vel_var%ptr%x_d, u%dof%size())
     else
-       scaling_vel = this%c_E / glmax(this%E_vel_var%x, u%dof%size())
+       scaling_vel = this%c_E / glmax(E_vel_var%ptr%x, u%dof%size())
     end if
 
     call field_cmult(entropy_viscosity_1, &
@@ -460,7 +427,7 @@ contains
                  D_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-                 E_s_avg => E_s_avg(i), E_s_var => this%E_s_var(i), &
+                 E_s_avg => E_s_avg(i), E_s_var_i => E_s_var(i)%ptr, &
                  scaling_s => scaling_s(i), &
                  entropy_viscosity_i => this%entropy_viscosity(i+1)%ptr)
 
@@ -480,8 +447,6 @@ contains
          call field_copy(E, s_i)
        end if
 
-       ! Take the absolute value as the entropy, however not differentiable at 0
-      !  call field_absval(E)
        ! Take the square as the entropy
        call field_col2(E, E)
        call field_copy(ta_i, E)
@@ -513,12 +478,12 @@ contains
        else
           E_s_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
        end if
-       call field_cadd2(E_s_var, E, E_s_avg)
-       call field_absval(E_s_var)
+       call field_cadd2(E_s_var_i, E, E_s_avg)
+       call field_absval(E_s_var_i)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          scaling_s = this%c_E / device_glmax(E_s_var%x_d, u%dof%size())
+          scaling_s = this%c_E / device_glmax(E_s_var_i%x_d, u%dof%size())
        else
-          scaling_s = this%c_E / glmax(E_s_var%x, u%dof%size())
+          scaling_s = this%c_E / glmax(E_s_var_i%x, u%dof%size())
        end if
 
        call field_cmult(entropy_viscosity_i, &
@@ -530,6 +495,8 @@ contains
 
     call neko_scratch_registry%relinquish_field(temp_indices)
     call neko_scratch_registry%relinquish_field(filt_field_indices)
+    call neko_scratch_registry%relinquish_field(E_vel_var_indices)
+    call neko_scratch_registry%relinquish_field(E_s_var_indices)
 
   end subroutine entropy_viscosity_compute
 
