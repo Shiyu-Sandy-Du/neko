@@ -4,7 +4,8 @@ module tensor_cpu
   implicit none
   private
 
-  public :: tnsr2d_el_cpu, tnsr3d_el_cpu, tnsr3d_cpu, tnsr1_3d_cpu
+  public :: tnsr2d_el_cpu, tnsr3d_el_cpu, tnsr3d_cpu, tnsr1_3d_cpu, &
+            dottnsr_3d_cpu, dot1tnsr_3d_cpu, maxnorm_3d_cpu
 
 contains
 
@@ -1474,4 +1475,43 @@ contains
 
   end subroutine tnsr1_3d_nu4nv2_cpu
 
+  subroutine dottnsr_3d_cpu(v, u, B, nu, nelv)
+     integer, intent(in) :: nu, nelv
+     real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+     real(kind=rp), intent(in) :: u(nu*nu*nu,nelv)
+     real(kind=rp), intent(in) :: B(nu*nu*nu, nelv)
+     real(kind=rp) :: tmp
+     integer :: e
+
+     do e = 1, nelv
+        v(:, e) = sum(B(:, e) * u(:, e))
+     end do
+
+  end subroutine dottnsr_3d_cpu
+
+  subroutine dot1tnsr_3d_cpu(v, B, nu, nelv)
+     integer, intent(in) :: nu, nelv
+     real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+     real(kind=rp), intent(in) :: B(nu*nu*nu, nelv)
+     real(kind=rp) :: tmp
+     integer :: e
+
+     do e = 1, nelv
+        v(:, e) = sum(B(:, e))
+     end do
+
+  end subroutine dot1tnsr_3d_cpu
+
+  subroutine maxnorm_3d_cpu(v, B, nu, nelv)
+     integer, intent(in) :: nu, nelv
+     real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+     real(kind=rp), intent(in) :: B(nu*nu*nu, nelv)
+     real(kind=rp) :: tmp
+     integer :: e
+
+     do e = 1, nelv
+        v(:, e) = maxval(abs(B(:, e)))
+     end do
+
+  end subroutine maxnorm_3d_cpu
 end module tensor_cpu

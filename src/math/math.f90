@@ -109,7 +109,7 @@ module math
        pwmax2, pwmax3, cpwmax2, cpwmax3, pwmin2, pwmin3, cpwmin2, cpwmin3, &
        masked_scatter_copy_0, cdiv, cdiv2, glsubnorm, &
        masked_copy, masked_gather_copy, masked_scatter_copy, square_root, &
-       sabscmp, dabscmp
+       sabscmp, dabscmp, invcol2_nonzero
 
 contains
 
@@ -848,6 +848,25 @@ contains
     end do
 
   end subroutine invcol2
+
+  !> Vector division \f$ a = a / b \f$ if \f$abs(b)>tol\f$
+  !! Otherwise \f$ a = a / tol \$f
+  subroutine invcol2_nonzero(a, b, tol, n)
+    integer, intent(in) :: n
+    real(kind=rp), dimension(n), intent(inout) :: a
+    real(kind=rp), dimension(n), intent(in) :: b
+    real(kind=rp), intent(in) :: tol
+    integer :: i
+
+    do i = 1, n
+       if (abs(b(i)) .gt. tol) then
+          a(i) = real(a(i),xp) /b(i)
+       else
+          a(i) = real(a(i),xp) /tol
+       end if
+    end do
+
+  end subroutine invcol2_nonzero
 
 
   !> Vector multiplication \f$ a = a \cdot b \f$

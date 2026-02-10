@@ -67,7 +67,7 @@ module field_math
        col2, col3, subcol3, add3s2, addcol3, addcol4, glsum, glsc2, glsc3, &
        masked_gather_copy_0, masked_scatter_copy_0, glsubnorm, invcol3, &
        absval, cadd2, square_root, pwmax2, pwmax3, cpwmax2, cpwmax3, &
-       pwmin2, pwmin3, cpwmin2, cpwmin3
+       pwmin2, pwmin3, cpwmin2, cpwmin3, invcol2_nonzero
   use device_math, only: device_rzero, device_rone, device_copy, device_cmult, &
        device_cadd, device_cfill, device_invcol1, device_vdot3, device_add2, &
        device_add3, device_add4, device_sub2, device_sub3, device_add2s1, &
@@ -92,7 +92,7 @@ module field_math
        field_glsc2, field_glsc3, field_add3, field_masked_gather_copy_0, &
        field_masked_scatter_copy_0, field_glsubnorm, field_absval, field_sqrt, &
        field_pwmax2, field_pwmax3, field_cpwmax2, field_cpwmax3, field_pwmin2, &
-       field_pwmin3, field_cpwmin2, field_cpwmin3
+       field_pwmin3, field_cpwmin2, field_cpwmin3, field_invcol2_nonzero
 
 contains
 
@@ -523,6 +523,29 @@ contains
     end if
 
   end subroutine field_invcol2
+
+  !> Vector division \f$ a = a / b \f$ if \f$abs(b)>tol\f$
+  !! Otherwise \f$ a = a / tol \$f
+  subroutine field_invcol2_nonzero(a, b, tol, n)
+    integer, intent(in), optional :: n
+    type(field_t), intent(inout) :: a
+    type(field_t), intent(in) :: b
+    real(kind=rp), intent(in) :: tol
+    integer :: size
+
+    if (present(n)) then
+       size = n
+    else
+       size = a%size()
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call neko_error("device_invcol2_nonzero not implemented")
+    else
+       call invcol2_nonzero(a%x, b%x, tol, size)
+    end if
+
+  end subroutine field_invcol2_nonzero
 
 
   !> Vector multiplication \f$ a = a \cdot b \f$

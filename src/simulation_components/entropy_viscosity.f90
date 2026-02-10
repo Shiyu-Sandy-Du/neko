@@ -42,7 +42,7 @@ module entropy_viscosity
   use simulation_component, only : simulation_component_t
   use field_registry, only : neko_field_registry
   use scratch_registry, only : neko_scratch_registry
-  use json_utils, only : json_get
+  use json_utils, only : json_get, json_get_or_default
   use field, only : field_t, field_ptr_t
   use field_series, only : field_series_t
   use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t
@@ -60,10 +60,12 @@ module entropy_viscosity
   use elementwise_filter, only : elementwise_filter_t
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
-                         field_invcol2, field_sqrt, field_add2, field_addcol3
-  use math, only : invcol2, col2, glsum, glsc2, glmax
+                         field_invcol2, field_sqrt, field_add2, field_addcol3, &
+                         field_invcol2_nonzero, field_add3
+  use math, only : invcol2, col2, glsum, glsc2, glmax, glmin
   use device_math, only : device_invcol2, device_col2, device_glsum, &
                           device_glsc2, device_glmax
+  use tensor, only : dottnsr_3d, dot1tnsr_3d, maxnorm_3d
   use gather_scatter, only : GS_OP_ADD
   use device
   implicit none
@@ -93,6 +95,13 @@ module entropy_viscosity
      !> Some field to be used
      type(field_t) :: h2
      real(kind=rp) :: volume_domain
+
+     !> Scaling option
+     character(len=:), allocatable :: scaling_option
+
+     !> Tolerance coefficient for a minimum entropy fluctuation level
+     !! with respect to the maximum fluctuation in the whole domain
+     real(kind=rp) :: tol_coef
 
      !> entropy_viscosity fields.
      type(field_ptr_t), allocatable :: entropy_viscosity(:)
@@ -131,10 +140,14 @@ contains
     class(entropy_viscosity_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
+    character(len=:), allocatable :: scaling_option
 
     call this%init_base(json, case)
     
     call json_get(json, "c_E", this%c_E)
+    call json_get(json, "scaling_option", scaling_option)
+    this%scaling_option = trim(scaling_option)
+    call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-3_rp)
 
     call this%init_common(json, case)
   end subroutine entropy_viscosity_init_from_json
@@ -232,13 +245,18 @@ contains
                             (this%coef%Xh%lx-1.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp)
     end do
-
+    
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
-                          HOST_TO_DEVICE, sync = .false.)
-       this%volume_domain = device_glsum(this%coef%B_d, this%u%dof%size())
-    else
-       this%volume_domain = glsum(this%coef%B, this%u%dof%size())
+          call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
+                             HOST_TO_DEVICE, sync = .false.)
+    end if
+   
+    if (this%scaling_option .eq. "global") then
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          this%volume_domain = device_glsum(this%coef%B_d, this%u%dof%size())
+       else
+          this%volume_domain = glsum(this%coef%B, this%u%dof%size())
+       end if
     end if
 
   end subroutine entropy_viscosity_init_common
@@ -299,27 +317,45 @@ contains
   subroutine entropy_viscosity_compute(this, time)
     class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    type(field_ptr_t) :: ta(1+this%n_scalars) ! temporal array
+    type(field_t), pointer :: ta ! temporal array
     type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu, fv, fw
-    type(field_ptr_t) :: E_vel_var
+
+    type(field_t), pointer :: E_vel_var
     type(field_ptr_t) :: E_s_var(this%n_scalars)
+    
+    type(field_t), pointer :: E_vel_avg_field
     real(kind=rp) :: E_vel_avg
-    real(kind=rp) :: E_s_avg(this%n_scalars)
-    integer :: temp_indices(1+this%n_scalars)
+    type(field_ptr_t) :: E_s_avg_field(this%n_scalars)
+    type(field_t), pointer :: B_elem
+    real(kind=rp) :: E_s_avg
+
+    integer :: temp_index
     integer :: filt_field_indices(3+this%n_scalars)
-    integer :: E_vel_var_indices
+    integer :: E_vel_avg_index
+    integer :: E_s_avg_indices(this%n_scalars)
+    integer :: E_vel_var_index
     integer :: E_s_var_indices(this%n_scalars)
+    integer :: B_elem_index
     integer :: i, j, n
     real(kind=rp) :: scaling_vel, scaling_s(this%n_scalars)
+    real(kind=rp) :: tol !The tolerance such that the quotien does not blow up
 
-    do i = 1, 1+this%n_scalars
-       call neko_scratch_registry%request_field(ta(i)%ptr, &
-                                                temp_indices(i), .false.)
-    end do
+    call neko_scratch_registry%request_field(ta, temp_index, .false.)
 
-    call neko_scratch_registry%request_field(E_vel_var%ptr, &
-                                             E_vel_var_indices, .false.)
+    call neko_scratch_registry%request_field(E_vel_var, &
+                                             E_vel_var_index, .false.)
+
+    if (this%scaling_option .eq. "elementwise") then
+       call neko_scratch_registry%request_field(E_vel_avg_field, &
+                                                E_vel_avg_index, .false.)
+
+       do i = 1, this%n_scalars
+          call neko_scratch_registry%request_field(E_s_avg_field(i)%ptr, &
+                                                   E_s_avg_indices(i), .false.)
+       end do
+       call neko_scratch_registry%request_field(B_elem, B_elem_index, .false.)
+    end if
 
     do i = 1, this%n_scalars
        call neko_scratch_registry%request_field(E_s_var(i)%ptr, &
@@ -336,7 +372,6 @@ contains
 
     ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
     associate(u => this%u, v => this%v, w => this%w, E => this%E(1), &
-             ta_1 => ta(1)%ptr, &
              ext_bdf => this%ext_bdf, &
              dt => time%dt, coef => this%coef, wa => this%wa(1), &
              D_1 => this%D(1)%ptr, gs => this%coef%gs_h, &
@@ -349,13 +384,13 @@ contains
     if (this%if_filter) then
       
       ! filter the velocity magnitude all together
-      call field_rzero(ta_1)
-      call field_addcol3(ta_1, u, u)
-      call field_addcol3(ta_1, v, v)
-      call field_addcol3(ta_1, w, w)
-      call field_sqrt(ta_1)
-      call this%filter%apply(fu, ta_1)
-      call field_sub2(fu, ta_1)
+      call field_rzero(ta)
+      call field_addcol3(ta, u, u)
+      call field_addcol3(ta, v, v)
+      call field_addcol3(ta, w, w)
+      call field_sqrt(ta)
+      call this%filter%apply(fu, ta)
+      call field_sub2(fu, ta)
       call gs%op(fu, GS_OP_ADD)
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call device_col2(fu%x_d, coef%mult_d, n)
@@ -366,35 +401,35 @@ contains
       call field_copy(E, E)
       
     else
-      call field_col3(ta_1, u, u)
-      call field_copy(E, ta_1)
-      call field_col3(ta_1, v, v)
-      call field_add2(E, ta_1)
-      call field_col3(ta_1, w, w)
-      call field_add2(E, ta_1)
+      call field_col3(ta, u, u)
+      call field_copy(E, ta)
+      call field_col3(ta, v, v)
+      call field_add2(E, ta)
+      call field_col3(ta, w, w)
+      call field_add2(E, ta)
     end if
 
-    call field_copy(ta_1, E)
-    call field_cmult(ta_1, ext_bdf%diffusion_coeffs(1)/dt)
-    call field_sub2(ta_1, wa)
-    call field_copy(D_1, ta_1)
+    call field_copy(ta, E)
+    call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+    call field_sub2(ta, wa)
+    call field_copy(D_1, ta)
 
     ! advection part
-    call field_rzero(ta_1, n)
-    call adv%compute_scalar(u, v, w, E, ta_1, &
+    call field_rzero(ta, n)
+    call adv%compute_scalar(u, v, w, E, ta, &
          Xh, coef, n)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_invcol2(ta_1%x_d, coef%B_d, n)
+       call device_invcol2(ta%x_d, coef%B_d, n)
     else
-       call invcol2(ta_1%x, coef%B, n)
+       call invcol2(ta%x, coef%B, n)
     end if
-    call gs%op(ta_1, GS_OP_ADD)
+    call gs%op(ta, GS_OP_ADD)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_col2(ta_1%x_d, coef%mult_d, n)
+       call device_col2(ta%x_d, coef%mult_d, n)
     else
-       call col2(ta_1%x, coef%mult, n)
+       call col2(ta%x, coef%mult, n)
     end if
-    call field_sub2(D_1, ta_1, n)
+    call field_sub2(D_1, ta, n)
     call field_copy(entropy_viscosity_1, D_1)
     call field_absval(entropy_viscosity_1)
 
@@ -403,13 +438,13 @@ contains
     else
        E_vel_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
     end if
-    call field_cadd2(E_vel_var%ptr, E, E_vel_avg)
-    call field_absval(E_vel_var%ptr)
+    call field_cadd2(E_vel_var, E, E_vel_avg)
+    call field_absval(E_vel_var)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       scaling_vel = this%c_E / device_glmax(E_vel_var%ptr%x_d, u%dof%size())
+       scaling_vel = this%c_E / device_glmax(E_vel_var%x_d, u%dof%size())
     else
-       scaling_vel = this%c_E / glmax(E_vel_var%ptr%x, u%dof%size())
+       scaling_vel = this%c_E / glmax(E_vel_var%x, u%dof%size())
     end if
 
     call field_cmult(entropy_viscosity_1, &
@@ -421,13 +456,14 @@ contains
     do i = 1, this%n_scalars
        ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
        associate(s_i => this%s(i)%ptr, &
-                 fs_i => fs(i)%ptr, E => this%E(i+1), ta_i => ta(i+1)%ptr, &
+                 fs_i => fs(i)%ptr, E => this%E(i+1), &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa => this%wa(i+1), &
                  D_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-                 E_s_avg => E_s_avg(i), E_s_var_i => E_s_var(i)%ptr, &
+                 E_s_var_i => E_s_var(i)%ptr, &
+                 E_s_avg_field_i => E_s_avg_field(i)%ptr, &
                  scaling_s => scaling_s(i), &
                  entropy_viscosity_i => this%entropy_viscosity(i+1)%ptr)
 
@@ -449,54 +485,86 @@ contains
 
        ! Take the square as the entropy
        call field_col2(E, E)
-       call field_copy(ta_i, E)
-       call field_cmult(ta_i, ext_bdf%diffusion_coeffs(1)/dt)
-       call field_sub2(ta_i, wa)
-       call field_copy(D_i, ta_i)
+       call field_copy(ta, E)
+       call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
+       call field_sub2(ta, wa)
+       call field_copy(D_i, ta)
 
        ! advection part
-       call field_rzero(ta_i, n)
-       call adv%compute_scalar(u, v, w, E, ta_i, &
+       call field_rzero(ta, n)
+       call adv%compute_scalar(u, v, w, E, ta, &
               Xh, coef, n)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_invcol2(ta_i%x_d, coef%B_d, n)
+          call device_invcol2(ta%x_d, coef%B_d, n)
        else
-          call invcol2(ta_i%x, coef%B, n)
+          call invcol2(ta%x, coef%B, n)
        end if
-       call gs%op(ta_i, GS_OP_ADD)
+       call gs%op(ta, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(ta_i%x_d, coef%mult_d, n)
+          call device_col2(ta%x_d, coef%mult_d, n)
        else
-          call col2(ta_i%x, coef%mult, n)
+          call col2(ta%x, coef%mult, n)
        end if
-       call field_sub2(D_i, ta_i, n)
+       call field_sub2(D_i, ta, n)
        call field_copy(entropy_viscosity_i, D_i)
        call field_absval(entropy_viscosity_i)
        
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          E_s_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
-       else
-          E_s_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
-       end if
-       call field_cadd2(E_s_var_i, E, E_s_avg)
-       call field_absval(E_s_var_i)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          scaling_s = this%c_E / device_glmax(E_s_var_i%x_d, u%dof%size())
-       else
-          scaling_s = this%c_E / glmax(E_s_var_i%x, u%dof%size())
+       if (this%scaling_option .eq. "global") then
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             E_s_avg = - device_glsc2(E%x_d, coef%B_d, n) / this%volume_domain
+          else
+             E_s_avg = - glsc2(E%x, coef%B, n) / this%volume_domain
+          end if
+          call field_cadd2(E_s_var_i, E, E_s_avg)
+          call field_absval(E_s_var_i)
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             scaling_s = this%c_E / device_glmax(E_s_var_i%x_d, u%dof%size())
+          else
+             scaling_s = this%c_E / glmax(E_s_var_i%x, u%dof%size())
+          end if
+
+          call field_cmult(entropy_viscosity_i, &
+               scaling_s)
+
+       else if (this%scaling_option .eq. "elementwise") then
+          call dottnsr_3d(E_s_avg_field_i%x, E%x, &
+               coef%B, coef%Xh%lx, coef%msh%nelv)
+          call dot1tnsr_3d(B_elem%x, coef%B, coef%Xh%lx, coef%msh%nelv)
+          call field_invcol2(E_s_avg_field_i, B_elem)
+          call field_cmult(E_s_avg_field_i, -1.0_rp)
+
+          call field_add3(E_s_var_i, E, E_s_avg_field_i)
+          call field_absval(E_s_var_i)
+
+          call field_cmult(entropy_viscosity_i, &
+               this%c_E)
+
+          call maxnorm_3d(ta%x, E_s_var_i%x, coef%Xh%lx, coef%msh%nelv)
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             call neko_error("device_glmin has not been implemented")
+          else
+             tol = this%tol_coef * (glmax(E%x, E%dof%size()) - &
+                                glmin(E%x, E%dof%size()))
+          end if 
+          call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
+
        end if
 
-       call field_cmult(entropy_viscosity_i, &
-            scaling_s)
        call field_col2(entropy_viscosity_i, this%h2)
 
        end associate
     end do
 
-    call neko_scratch_registry%relinquish_field(temp_indices)
+    call neko_scratch_registry%relinquish_field(temp_index)
     call neko_scratch_registry%relinquish_field(filt_field_indices)
-    call neko_scratch_registry%relinquish_field(E_vel_var_indices)
+    call neko_scratch_registry%relinquish_field(E_vel_var_index)
     call neko_scratch_registry%relinquish_field(E_s_var_indices)
+
+    if (this%scaling_option .eq. "elementwise") then
+       call neko_scratch_registry%relinquish_field(E_vel_avg_index)
+       call neko_scratch_registry%relinquish_field(E_s_avg_indices)
+       call neko_scratch_registry%relinquish_field(B_elem_index)
+    end if
 
   end subroutine entropy_viscosity_compute
 

@@ -59,10 +59,12 @@
 !
 !> Tensor operations.
 module tensor
+  use utils, only : neko_error
   use tensor_xsmm, only : tnsr3d_xsmm, tnsr1_3d_xsmm, &
        tnsr2d_el_xsmm, tnsr3d_el_xsmm
   use tensor_cpu, only : tnsr3d_cpu, tnsr1_3d_cpu, &
-       tnsr2d_el_cpu, tnsr3d_el_cpu
+      tnsr2d_el_cpu, tnsr3d_el_cpu, dottnsr_3d_cpu, dot1tnsr_3d_cpu, &
+      maxnorm_3d_cpu
   use tensor_sx, only : tnsr3d_sx, tnsr1_3d_sx, &
        tnsr2d_el_sx, tnsr3d_el_sx
   use tensor_device, only : tnsr3d_device, tnsr3d_el_list_device
@@ -84,7 +86,8 @@ module tensor
 
   public :: tensr3, transpose, trsp, trsp1, &
        tnsr2d_el, tnsr3d_el, tnsr3d, tnsr1_3d, addtnsr, &
-       triple_tensor_product, tnsr3d_el_list
+       triple_tensor_product, tnsr3d_el_list, dottnsr_3d, dot1tnsr_3d, &
+       maxnorm_3d
 
 
 contains
@@ -361,5 +364,68 @@ contains
     call triple_tensor_product_scalar(v(3), u3, nu, Hr, Hs, Ht)
 
   end subroutine triple_tensor_product_vector
+
+  !> Inner product of two tensors inside each element
+  subroutine dottnsr_3d(v, u, B, nu, nelv)
+    integer, intent(in) :: nu, nelv
+    real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+    real(kind=rp), intent(in) :: u(nu*nu*nu,nelv)
+    real(kind=rp), intent(in) :: B(nu*nu*nu,nelv)
+    type(c_ptr) :: v_d, u_d, B_d
+
+    if (nelv .eq. 0) return
+    
+    if (NEKO_BCKND_SX .eq. 1) then
+       call neko_error("dottnsr_3d is not implemented for the SX backend.")
+    else if (NEKO_BCKND_DEVICE .eq. 1) then
+       v_d = device_get_ptr(v)
+       u_d = device_get_ptr(u)
+       B_d = device_get_ptr(B)
+      !  call dottnsr_3d_device(v_d, u_d, B_d, nu, nelv)
+    else
+       call dottnsr_3d_cpu(v, u, B, nu, nelv)
+    end if
+
+  end subroutine dottnsr_3d
+
+    !> Sum of a single tensor inside each element
+  subroutine dot1tnsr_3d(v, B, nu, nelv)
+    integer, intent(in) :: nu, nelv
+    real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+    real(kind=rp), intent(in) :: B(nu*nu*nu,nelv)
+    type(c_ptr) :: v_d, B_d
+
+    if (nelv .eq. 0) return
+       if (NEKO_BCKND_SX .eq. 1) then
+       call neko_error("dot1tnsr_3d is not implemented for the SX backend.")
+    else if (NEKO_BCKND_DEVICE .eq. 1) then
+       v_d = device_get_ptr(v)
+       B_d = device_get_ptr(B)
+      !  call dot1tnsr_3d_device(v_d, u_d, B_d, nu, nelv)
+    else
+       call dot1tnsr_3d_cpu(v, B, nu, nelv)
+    end if
+
+  end subroutine dot1tnsr_3d
+
+   !> Take the max norm of a single tensor inside each element
+  subroutine maxnorm_3d(v, B, nu, nelv)
+    integer, intent(in) :: nu, nelv
+    real(kind=rp), intent(inout) :: v(nu*nu*nu,nelv)
+    real(kind=rp), intent(in) :: B(nu*nu*nu,nelv)
+    type(c_ptr) :: v_d, B_d
+
+    if (nelv .eq. 0) return
+       if (NEKO_BCKND_SX .eq. 1) then
+       call neko_error("dot1tnsr_3d is not implemented for the SX backend.")
+    else if (NEKO_BCKND_DEVICE .eq. 1) then
+       v_d = device_get_ptr(v)
+       B_d = device_get_ptr(B)
+      !  call maxnorm_3d_device(v_d, u_d, B_d, nu, nelv)
+    else
+       call maxnorm_3d_cpu(v, B, nu, nelv)
+    end if
+
+  end subroutine maxnorm_3d
 
 end module tensor
