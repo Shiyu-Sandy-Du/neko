@@ -135,4 +135,40 @@ extern "C" {
     }    
   }
 
+  /** Fortran wrapper for dottnsr_3d **/
+  void cuda_dottnsr_3d(void *v, void *u, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
+    const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+
+    dottnsr_3d_kernel<real>
+      <<<nblcks, nthrds, 0, stream>>>((real *) v, (real *) u,
+                                      (real *) B, *nu);
+    CUDA_CHECK(cudaGetLastError());
+  }
+
+  /** Fortran wrapper for dot1tnsr_3d **/
+  void cuda_dot1tnsr_3d(void *v, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
+    const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+
+    dot1tnsr_3d_kernel<real>
+      <<<nblcks, nthrds, 0, stream>>>((real *) v,
+                                      (real *) B, *nu);
+    CUDA_CHECK(cudaGetLastError());
+  }
+
+  /** Fortran wrapper for maxnorm_3d **/
+  void cuda_maxnorm_3d(void *v, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
+    const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+
+    maxnorm_3d_kernel<real>
+      <<<nblcks, nthrds, 0, stream>>>((real *) v,
+                                      (real *) B, *nu);
+    CUDA_CHECK(cudaGetLastError());
+  }
+
 }

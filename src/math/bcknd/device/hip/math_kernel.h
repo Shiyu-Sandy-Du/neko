@@ -459,6 +459,30 @@ __global__ void invcol2_kernel(T * __restrict__ a,
 }
 
 /**
+ * Device kernel for invcol2_nonzero
+ */
+template< typename T >
+__global__ void invcol2_nonzero_kernel(T * __restrict__ a,
+                               const T * __restrict__ b,
+                               const T tol,
+                               const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  for (int i = idx; i < n; i += str) {
+    if (fabs(b[i]) > tol) 
+    {
+      a[i] = a[i] / b[i];
+    }
+    else
+    {
+      a[i] = a[i] / tol;
+    }
+  }
+}
+
+/**
  * Device kernel for invcol3
  */
 template< typename T >
@@ -690,6 +714,20 @@ __inline__ __device__ T reduce_max_warp(T val) {
 }
 
 /**
+ * Warp shuffle reduction of minimisation
+ */
+template< typename T>
+__inline__ __device__ T reduce_min_warp(T val) {
+  val = fmin(val, __shfl_down(val, 32));
+  val = fmin(val, __shfl_down(val, 16));
+  val = fmin(val, __shfl_down(val, 8));
+  val = fmin(val, __shfl_down(val, 4));
+  val = fmin(val, __shfl_down(val, 2));
+  val = fmin(val, __shfl_down(val, 1));
+  return val;
+}
+
+/**
  * Vector reduction kernel
  */
 template< typename T >
@@ -749,6 +787,37 @@ __global__ void reduce_max_kernel(T * bufred, const T ninf, const int n) {
 
   if (threadIdx.x == 0)
     bufred[blockIdx.x] = max;
+}
+
+/**
+ * Vector reduction minimisation kernel
+ */
+template< typename T >
+__global__ void reduce_min_kernel(T * bufred, const T ninf, const int n) {
+
+  T min = ninf;
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  for (int i = idx; i<n ; i += str)
+  {
+    min = fmin(min, bufred[i]);
+  }
+
+  __shared__ T shared[64];
+  unsigned int lane = threadIdx.x % warpSize;
+  unsigned int wid = threadIdx.x / warpSize;
+
+  min = reduce_min_warp<T>(min);
+  if (lane == 0)
+    shared[wid] = min;
+  __syncthreads();
+
+  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  if (wid == 0)
+    min = reduce_min_warp<T>(min);
+
+  if (threadIdx.x == 0)
+    bufred[blockIdx.x] = min;
 }
 
 /**
@@ -1000,6 +1069,42 @@ __global__ void glmax_kernel(const T * a,
 
   if (threadIdx.x == 0)
     buf_h[blockIdx.x] = max;
+
+}
+
+/**
+ * Device kernel for glmin
+ */
+template< typename T >
+__global__ void glmin_kernel(const T * a,
+                             const T ninf,
+                             T * buf_h,
+                             const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int wid = threadIdx.x / warpSize;
+
+  __shared__ T shared[64];
+  T min = ninf;
+  for (int i = idx; i<n ; i += str)
+  {
+    min = fmin(min, a[i]);
+  }
+
+  min = reduce_min_warp<T>(min);
+  if (lane == 0)
+    shared[wid] = min;
+  __syncthreads();
+
+  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  if (wid == 0)
+    min = reduce_min_warp<T>(min);
+
+  if (threadIdx.x == 0)
+    buf_h[blockIdx.x] = min;
 
 }
 

@@ -207,6 +207,101 @@ __global__ void tnsr3d_kernel_large(T  * __restrict__  v,
   }
 }
 
+template< typename T >
+__global__ void dottnsr_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ u,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
 
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp += u[i + e*nu*nu*nu] * B[i + e*nu*nu*nu];
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] += shwork[idx + s];
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
+
+template< typename T >
+__global__ void dot1tnsr_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
+
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp += B[i + e*nu*nu*nu];
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] += shwork[idx + s];
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
+
+template< typename T >
+__global__ void maxnorm_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
+
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp = fmax(fabs(B[i + e*nu*nu*nu]), tmp);
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] = fmax(shwork[idx + s],shwork[idx]);
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
 
 #endif // __MATH_TENSOR_KERNEL_H__

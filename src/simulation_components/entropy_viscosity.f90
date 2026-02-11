@@ -64,7 +64,7 @@ module entropy_viscosity
                          field_invcol2_nonzero, field_add3
   use math, only : invcol2, col2, glsum, glsc2, glmax, glmin
   use device_math, only : device_invcol2, device_col2, device_glsum, &
-                          device_glsc2, device_glmax
+                          device_glsc2, device_glmax, device_glmin
   use tensor, only : dottnsr_3d, dot1tnsr_3d, maxnorm_3d
   use gather_scatter, only : GS_OP_ADD
   use device
@@ -541,7 +541,8 @@ contains
 
           call maxnorm_3d(ta%x, E_s_var_i%x, coef%Xh%lx, coef%msh%nelv)
           if (NEKO_BCKND_DEVICE .eq. 1) then
-             call neko_error("device_glmin has not been implemented")
+             tol = this%tol_coef * (device_glmax(E%x_d, E%dof%size()) - &
+                                device_glmin(E%x_d, E%dof%size()))
           else
              tol = this%tol_coef * (glmax(E%x, E%dof%size()) - &
                                 glmin(E%x, E%dof%size()))

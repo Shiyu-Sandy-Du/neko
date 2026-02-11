@@ -36,7 +36,8 @@ module tensor_device
   implicit none
   private
 
-  public :: tnsr3d_device, tnsr3d_el_list_device
+  public :: tnsr3d_device, tnsr3d_el_list_device, dottnsr_3d_device, &
+            dot1tnsr_3d_device, maxnorm_3d_device
 
 #ifdef HAVE_HIP
   interface
@@ -55,6 +56,30 @@ module tensor_device
        integer(c_int) :: nu, nv, nelv
      end subroutine hip_tnsr3d
   end interface
+  interface
+     subroutine hip_dottnsr_3d(v_d, u_d, B_d, nu, nelv) &
+          bind(c, name='hip_dottnsr_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, u_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine hip_dottnsr_3d
+  end interface
+  interface
+     subroutine hip_dot1tnsr_3d(v_d, B_d, nu, nelv) &
+          bind(c, name='hip_dot1tnsr_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine hip_dot1tnsr_3d
+  end interface
+  interface
+     subroutine hip_maxnorm_3d(v_d, B_d, nu, nelv) &
+          bind(c, name='hip_maxnorm_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine hip_maxnorm_3d
+  end interface
 #elif HAVE_CUDA
   interface
      subroutine cuda_tnsr3d_el_list(v_d, nv, u_d, nu, A_d, Bt_d, Ct_d, elements, n_points) &
@@ -71,6 +96,30 @@ module tensor_device
        type(c_ptr), value :: v_d, u_d, A_d, Bt_d, Ct_d
        integer(c_int) :: nu, nv, nelv
      end subroutine cuda_tnsr3d
+  end interface
+  interface
+     subroutine cuda_dottnsr_3d(v_d, u_d, B_d, nu, nelv) &
+          bind(c, name='cuda_dottnsr_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, u_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine cuda_dottnsr_3d
+  end interface
+  interface
+     subroutine cuda_dot1tnsr_3d(v_d, B_d, nu, nelv) &
+          bind(c, name='cuda_dot1tnsr_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine cuda_dot1tnsr_3d
+  end interface
+  interface
+     subroutine cuda_maxnorm_3d(v_d, B_d, nu, nelv) &
+          bind(c, name='cuda_maxnorm_3d')
+       use, intrinsic :: iso_c_binding
+       type(c_ptr), value :: v_d, B_d
+       integer(c_int) :: nu, nelv
+     end subroutine cuda_maxnorm_3d
   end interface
 #elif HAVE_OPENCL
   interface
@@ -120,5 +169,46 @@ contains
 #endif
   end subroutine tnsr3d_el_list_device
 
+  subroutine dottnsr_3d_device(v_d, u_d, B_d, nu, nelv)
+    type(c_ptr) :: v_d, u_d, B_d
+    integer(c_int) :: nu, nelv
+#ifdef HAVE_HIP
+    call hip_dottnsr_3d(v_d, u_d, B_d, nu, nelv)
+#elif HAVE_CUDA
+    call cuda_dottnsr_3d(v_d, u_d, B_d, nu, nelv)
+#elif HAVE_OPENCL
+    call neko_error('dottnsr_3d_device not implemented on OPENCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+  end subroutine dottnsr_3d_device
+
+  subroutine dot1tnsr_3d_device(v_d, B_d, nu, nelv)
+    type(c_ptr) :: v_d, B_d
+    integer(c_int) :: nu, nelv
+#ifdef HAVE_HIP
+    call hip_dot1tnsr_3d(v_d, B_d, nu, nelv)
+#elif HAVE_CUDA
+    call cuda_dot1tnsr_3d(v_d, B_d, nu, nelv)
+#elif HAVE_OPENCL
+    call neko_error('dot1tnsr_3d_device not implemented on OPENCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+  end subroutine dot1tnsr_3d_device
+
+  subroutine maxnorm_3d_device(v_d, B_d, nu, nelv)
+    type(c_ptr) :: v_d, B_d
+    integer(c_int) :: nu, nelv
+#ifdef HAVE_HIP
+    call hip_maxnorm_3d(v_d, B_d, nu, nelv)
+#elif HAVE_CUDA
+    call cuda_maxnorm_3d(v_d, B_d, nu, nelv)
+#elif HAVE_OPENCL
+    call neko_error('maxnorm_3d_device not implemented on OPENCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+  end subroutine maxnorm_3d_device
 
 end module tensor_device

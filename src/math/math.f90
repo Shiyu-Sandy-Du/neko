@@ -849,8 +849,8 @@ contains
 
   end subroutine invcol2
 
-  !> Vector division \f$ a = a / b \f$ if \f$abs(b)>tol\f$
-  !! Otherwise \f$ a = a / tol \$f
+  !> Vector division \f$ a = a / b \f$ if \f$ abs(b)>tol \f$
+  !! Otherwise \f$ a = a / tol \f$
   subroutine invcol2_nonzero(a, b, tol, n)
     integer, intent(in) :: n
     real(kind=rp), dimension(n), intent(inout) :: a

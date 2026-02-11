@@ -78,7 +78,7 @@ module field_math
        device_glsubnorm, device_invcol3, device_absval, &
        device_cadd2, device_square_root, device_pwmax2, device_pwmax3, &
        device_cpwmax2, device_cpwmax3, device_pwmin2, device_pwmin3, &
-       device_cpwmin2, device_cpwmin3
+       device_cpwmin2, device_cpwmin3, device_invcol2_nonzero
   use, intrinsic :: iso_c_binding, only: c_ptr
   implicit none
   private
@@ -524,7 +524,7 @@ contains
 
   end subroutine field_invcol2
 
-  !> Vector division \f$ a = a / b \f$ if \f$abs(b)>tol\f$
+  !> Vector division \f$ a = a / b \f$ if \f$ abs(b)>tol \f$
   !! Otherwise \f$ a = a / tol \$f
   subroutine field_invcol2_nonzero(a, b, tol, n)
     integer, intent(in), optional :: n
@@ -540,7 +540,7 @@ contains
     end if
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call neko_error("device_invcol2_nonzero not implemented")
+       call device_invcol2_nonzero(a%x_d, b%x_d, tol, size)
     else
        call invcol2_nonzero(a%x, b%x, tol, size)
     end if

@@ -67,7 +67,8 @@ module tensor
       maxnorm_3d_cpu
   use tensor_sx, only : tnsr3d_sx, tnsr1_3d_sx, &
        tnsr2d_el_sx, tnsr3d_el_sx
-  use tensor_device, only : tnsr3d_device, tnsr3d_el_list_device
+  use tensor_device, only : tnsr3d_device, tnsr3d_el_list_device, &
+       dottnsr_3d_device, dot1tnsr_3d_device, maxnorm_3d_device
   use num_types, only : rp
   use mxm_wrapper, only : mxm
   use neko_config, only : NEKO_BCKND_SX, NEKO_BCKND_XSMM, NEKO_BCKND_DEVICE
@@ -381,7 +382,7 @@ contains
        v_d = device_get_ptr(v)
        u_d = device_get_ptr(u)
        B_d = device_get_ptr(B)
-      !  call dottnsr_3d_device(v_d, u_d, B_d, nu, nelv)
+       call dottnsr_3d_device(v_d, u_d, B_d, nu, nelv)
     else
        call dottnsr_3d_cpu(v, u, B, nu, nelv)
     end if
@@ -401,7 +402,7 @@ contains
     else if (NEKO_BCKND_DEVICE .eq. 1) then
        v_d = device_get_ptr(v)
        B_d = device_get_ptr(B)
-      !  call dot1tnsr_3d_device(v_d, u_d, B_d, nu, nelv)
+       call dot1tnsr_3d_device(v_d, B_d, nu, nelv)
     else
        call dot1tnsr_3d_cpu(v, B, nu, nelv)
     end if
@@ -421,7 +422,7 @@ contains
     else if (NEKO_BCKND_DEVICE .eq. 1) then
        v_d = device_get_ptr(v)
        B_d = device_get_ptr(B)
-      !  call maxnorm_3d_device(v_d, u_d, B_d, nu, nelv)
+       call maxnorm_3d_device(v_d, B_d, nu, nelv)
     else
        call maxnorm_3d_cpu(v, B, nu, nelv)
     end if

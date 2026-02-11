@@ -239,6 +239,15 @@ module hip_math
        integer(c_int) :: n
      end subroutine hip_invcol2
 
+     subroutine hip_invcol2_nonzero(a_d, b_d, tol, n, strm) &
+          bind(c, name = 'hip_invcol2_nonzero')
+       use, intrinsic :: iso_c_binding, only: c_ptr, c_int
+       import c_rp
+       type(c_ptr), value :: a_d, b_d, strm
+       real(c_rp) :: tol
+       integer(c_int) :: n
+     end subroutine hip_invcol2_nonzero
+
      subroutine hip_invcol3(a_d, b_d, c_d, n, strm) &
           bind(c, name = 'hip_invcol3')
        use, intrinsic :: iso_c_binding, only: c_ptr, c_int
@@ -395,6 +404,15 @@ module hip_math
        real(c_rp) :: ninf
        integer(c_int) :: n
      end function hip_glmax
+
+     real(c_rp) function hip_glmin(a_d, ninf, n, strm) &
+          bind(c, name = 'hip_glmin')
+       use, intrinsic :: iso_c_binding, only: c_int, c_ptr
+       import c_rp
+       type(c_ptr), value :: a_d, strm
+       real(c_rp) :: ninf
+       integer(c_int) :: n
+     end function hip_glmin
 
      subroutine hip_absval(a_d, n, strm) &
           bind(c, name = 'hip_absval')

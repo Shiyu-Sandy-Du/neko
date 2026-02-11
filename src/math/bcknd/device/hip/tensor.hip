@@ -130,5 +130,40 @@ extern "C" {
     }
   }
 
+  /** Fortran wrapper for dottnsr_3d **/
+  void hip_dottnsr_3d(void *v, void *u, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
 
-}
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(dottnsr_3d<real>),
+                       nblcks, nthrds, 0,
+                       (hipStream_t) glb_cmd_queue,
+                       (real *) v, (real *) B, *nu);
+    HIP_CHECK(hipGetLastError());
+  }
+
+  /** Fortran wrapper for dot1tnsr_3d **/
+  void hip_dot1tnsr_3d(void *v, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(dot1tnsr_3d_kernel<real>),
+                       nblcks, nthrds, 0,
+                       (hipStream_t) glb_cmd_queue,
+                       (real *) v, (real *) B, *nu);
+    HIP_CHECK(hipGetLastError());
+
+  }
+
+  /** Fortran wrapper for maxnorm_3d **/
+  void hip_maxnorm_3d(void *v, void *B, int *nu, int *nel) {
+    const dim3 nthrds(1024, 1, 1);
+    const dim3 nblcks(*nel, 1, 1);
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(maxnorm_3d_kernel<real>),
+                       nblcks, nthrds, 0,
+                       (hipStream_t) glb_cmd_queue,
+                       (real *) v, (real *) B, *nu);
+    HIP_CHECK(hipGetLastError());
+
+  }

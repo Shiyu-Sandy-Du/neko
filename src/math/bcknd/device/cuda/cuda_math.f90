@@ -238,6 +238,15 @@ module cuda_math
        integer(c_int) :: n
      end subroutine cuda_invcol2
 
+     subroutine cuda_invcol2_nonzero(a_d, b_d, tol, n, strm) &
+          bind(c, name = 'cuda_invcol2_nonzero')
+       use, intrinsic :: iso_c_binding, only: c_int, c_ptr
+       import c_rp
+       type(c_ptr), value :: a_d, b_d, strm
+       real(c_rp) :: tol
+       integer(c_int) :: n
+     end subroutine cuda_invcol2_nonzero
+
      subroutine cuda_invcol3(a_d, b_d, c_d, n, strm) &
           bind(c, name = 'cuda_invcol3')
        use, intrinsic :: iso_c_binding, only: c_int, c_ptr
@@ -393,6 +402,15 @@ module cuda_math
        real(c_rp) :: ninf
        integer(c_int) :: n
      end function cuda_glmax
+
+     real(c_rp) function cuda_glmin(a_d, ninf, n, strm) &
+          bind(c, name = 'cuda_glmin')
+       use, intrinsic :: iso_c_binding, only: c_int, c_ptr
+       import c_rp
+       type(c_ptr), value :: a_d, strm
+       real(c_rp) :: ninf
+       integer(c_int) :: n
+     end function cuda_glmin
 
      subroutine cuda_absval(a_d, n, strm) &
           bind(c, name = 'cuda_absval')

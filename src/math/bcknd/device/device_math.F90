@@ -63,10 +63,11 @@ module device_math
        device_vcross, device_absval, device_masked_atomic_reduction_0, &
        device_masked_gather_copy_0, device_masked_scatter_copy_0, &
        device_invcol3, device_cdiv, &
-       device_glmax, device_square_root, &
+       device_glmax, device_glmin, device_square_root, &
        device_cdiv2, device_glsubnorm, &
        device_pwmax2, device_pwmax3, device_cpwmax2, device_cpwmax3, &
-       device_pwmin2, device_pwmin3, device_cpwmin2, device_cpwmin3
+       device_pwmin2, device_pwmin3, device_cpwmin2, device_cpwmin3, &
+       device_invcol2_nonzero
 
 contains
 
@@ -755,6 +756,35 @@ contains
 #endif
   end subroutine device_invcol2
 
+  !> Vector division \f$ a = a / b \f$ if \f$ abs(b)>tol \f$
+  !! Otherwise \f$ a = a / tol \f$
+  subroutine device_invcol2_nonzero(a_d, b_d, tol, n, strm)
+    type(c_ptr) :: a_d, b_d
+    real(kind=rp) :: tol
+    integer :: n
+    type(c_ptr), optional :: strm
+    type(c_ptr) :: strm_
+
+    if (n .lt. 1) return
+
+    if (present(strm)) then
+       strm_ = strm
+    else
+       strm_ = glb_cmd_queue
+    end if
+
+#if HAVE_HIP
+    call hip_invcol2_nonzero(a_d, b_d, tol, n, strm_)
+#elif HAVE_CUDA
+    call cuda_invcol2_nonzero(a_d, b_d, tol, n, strm_)
+#elif HAVE_OPENCL
+    ! call opencl_invcol2(a_d, b_d, n, strm_)
+    call neko_error('device_invol2_nonzero not implemented in OPENCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+  end subroutine device_invcol2_nonzero
+
   !> Vector division \f$ a = b / c \f$
   subroutine device_invcol3(a_d, b_d, c_d, n, strm)
     type(c_ptr) :: a_d, b_d, c_d
@@ -1304,6 +1334,39 @@ contains
     end if
 #endif
   end function device_glmax
+
+  !>Min of a vector of length n
+  function device_glmin(a_d, n, strm) result(res)
+    type(c_ptr) :: a_d
+    integer :: n, ierr
+    real(kind=rp) :: res, ninf
+    type(c_ptr), optional :: strm
+    type(c_ptr) :: strm_
+
+    if (present(strm)) then
+       strm_ = strm
+    else
+       strm_ = glb_cmd_queue
+    end if
+
+    ninf = -huge(0.0_rp)
+#if HAVE_HIP
+    res = hip_glmin(a_d, ninf, n, strm_)
+#elif HAVE_CUDA
+    res = cuda_glmin(a_d, ninf, n, strm_)
+#elif HAVE_OPENCL
+    call neko_error('glmin is not supported by OpenCL')
+#else
+    call neko_error('No device backend configured')
+#endif
+
+#ifndef HAVE_DEVICE_MPI
+    if (pe_size .gt. 1) then
+       call MPI_Allreduce(MPI_IN_PLACE, res, 1, &
+            MPI_REAL_PRECISION, MPI_MAX, NEKO_COMM, ierr)
+    end if
+#endif
+  end function device_glmin
 
   subroutine device_absval(a_d, n, strm)
     integer, intent(in) :: n

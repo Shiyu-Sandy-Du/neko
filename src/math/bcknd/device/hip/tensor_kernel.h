@@ -1,7 +1,7 @@
 #ifndef __MATH_TENSOR_KERNEL_H__
 #define __MATH_TENSOR_KERNEL_H__
 /*
- Copyright (c) 2022, The Neko Authors
+ Copyright (c) 2021-2022, The Neko Authors
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -45,12 +45,12 @@ __global__ void tnsr3d_el_kernel(T  * __restrict__  v,
                               const int n_points) {
   __shared__ T shwork[N*N*N];
   __shared__ T shwork2[N*N*N];
-
+  
   const int idx = threadIdx.x;
   const int str = blockDim.x;
   const int pt = blockIdx.x;
   const int e = elements[pt];
-
+  
   for (int ii = idx; ii< nu*nu*nv; ii += str) {
     T tmp = 0.0;
     int j = ii/nv;
@@ -60,31 +60,31 @@ __global__ void tnsr3d_el_kernel(T  * __restrict__  v,
     }
     shwork[ii] = tmp;
   }
-
+  
   __syncthreads();
-
+  
   for (int ijk = idx; ijk< nu*nv*nv; ijk += str) {
     const int jk = ijk / nv;
     const int i = ijk - jk * nv;
     const int k = jk / nv;
     const int j = jk - k * nv;
     T tmp = 0.0;
-    const int ik2 = i + k*nv*nu;
+    const int ik2 = i + k*nv*nu; 
     for( int l = 0; l < nu; l++){
       tmp += Bt[l+j*nu+pt*nv*nu]*shwork[l*nv+ik2];
     }
     shwork2[ijk] = tmp;
   }
-
+  
   __syncthreads();
-
+  
   for (int ijk = idx; ijk< nv*nv*nv; ijk += str) {
     const int jk = ijk / nv;
     const int i = ijk - jk * nv;
     const int k = jk / nv;
     const int j = jk - k * nv;
     T tmp = 0.0;
-    const int ij2 = i + j*nv;
+    const int ij2 = i + j*nv; 
     for( int l = 0; l < nu; l++){
       tmp += Ct[l+k*nu+pt*nv*nu]*shwork2[ij2 + l*nv*nv];
     }
@@ -93,12 +93,13 @@ __global__ void tnsr3d_el_kernel(T  * __restrict__  v,
 
 }
 
-
+        
+ 
 template< typename T, const int N >
 __global__ void tnsr3d_kernel(T  * __restrict__  v,
-	                      const int nv,
+                              const int nv,
                               const T * __restrict__ u,
-	                      const int nu,
+                              const int nu,
                               const T * __restrict__ A,
                               const T * __restrict__ Bt,
                               const T * __restrict__ Ct) {
@@ -148,9 +149,159 @@ __global__ void tnsr3d_kernel(T  * __restrict__  v,
     }
     v[ijk+e*nv*nv*nv] = tmp;
   }
-  
 }
 
+template< typename T, const int N >
+__global__ void tnsr3d_kernel_large(T  * __restrict__  v,
+                                    const int nv,
+                                    const T * __restrict__ u,
+                                    const int nu,
+                                    const T * __restrict__ A,
+                                    const T * __restrict__ Bt,
+                                    const T * __restrict__ Ct) {
+  __shared__ T shwork[N*N*N];
+  T shwork2[N*N*N];
+  
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  for (int ii = idx; ii< nu*nu*nv; ii += str) {
+    T tmp = 0.0;
+    int j = ii/nv;
+    int i = ii - j*nv;
+    for( int l = 0; l < nu; l++){
+      tmp += A[i+l*nv]*u[l+nu*j+e*nu*nu*nu];
+    }
+    shwork[ii] = tmp;
+  }
+  
+  __syncthreads();
+  
+  for (int ijk = idx; ijk< nu*nv*nv; ijk += str) {
+    const int jk = ijk / nv;
+    const int i = ijk - jk * nv;
+    const int k = jk / nv;
+    const int j = jk - k * nv;
+    T tmp = 0.0;
+    const int ik2 = i + k*nv*nu; 
+    for( int l = 0; l < nu; l++){
+      tmp += Bt[l+j*nu]*shwork[l*nv+ik2];
+    }
+    shwork2[ijk] = tmp;
+  }
+  
+  __syncthreads();
+  
+  for (int ijk = idx; ijk< nv*nv*nv; ijk += str) {
+    const int jk = ijk / nv;
+    const int i = ijk - jk * nv;
+    const int k = jk / nv;
+    const int j = jk - k * nv;
+    T tmp = 0.0;
+    const int ij2 = i + j*nv; 
+    for( int l = 0; l < nu; l++){
+      tmp += Ct[l+k*nu]*shwork2[ij2 + l*nv*nv];
+    }
+    v[ijk+e*nv*nv*nv] = tmp;
+  }
+}
 
+template< typename T >
+__global__ void dottnsr_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ u,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
+
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp += u[i + e*nu*nu*nu] * B[i + e*nu*nu*nu];
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] += shwork[idx + s];
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
+
+template< typename T >
+__global__ void dot1tnsr_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
+
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp += B[i + e*nu*nu*nu];
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] += shwork[idx + s];
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
+
+template< typename T >
+__global__ void maxnorm_3d_kernel(T  * __restrict__  v,
+                                  const T * __restrict__ B,
+                                  const int nu) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int e = blockIdx.x;
+  
+  // 1024 is a bit hardcoded by the .cu file
+  __shared__ T shwork[1024];
+
+  T tmp = 0.0;
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    tmp = fmax(fabs(B[i + e*nu*nu*nu]), tmp);
+  }
+  shwork[idx] = tmp;
+
+  __syncthreads();
+
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (idx < s) {
+      shwork[idx] = fmax(shwork[idx + s],shwork[idx]);
+    }
+    __syncthreads();
+  }
+
+  T result = shwork[0];
+  for (int i = idx; i < nu*nu*nu; i += str) {
+    v[i + e*nu*nu*nu] = result;
+  }
+}
 
 #endif // __MATH_TENSOR_KERNEL_H__
