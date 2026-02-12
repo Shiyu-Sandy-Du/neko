@@ -138,7 +138,7 @@ extern "C" {
     hipLaunchKernelGGL(HIP_KERNEL_NAME(dottnsr_3d_kernel<real>),
                        nblcks, nthrds, 0,
                        (hipStream_t) glb_cmd_queue,
-                       (real *) v, (real *) B, *nu);
+                       (real *) v, (real *) u, (real *) B, *nu);
     HIP_CHECK(hipGetLastError());
   }
 
