@@ -401,9 +401,7 @@ contains
     n = u%dof%size()
 
     if (this%if_filter) then
-      
       ! filter the velocity magnitude all together
-      call field_rzero(ta)
       call field_addcol3(ta, u, u)
       call field_addcol3(ta, v, v)
       call field_addcol3(ta, w, w)
@@ -418,7 +416,6 @@ contains
       end if
       call field_copy(E_vel, fu)
       call field_col2(E_vel, E_vel)
-      
     else
       call field_col3(ta, u, u)
       call field_copy(E_vel, ta)
