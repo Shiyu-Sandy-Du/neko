@@ -403,12 +403,12 @@ module cuda_math
        integer(c_int) :: n
      end function cuda_glmax
 
-     real(c_rp) function cuda_glmin(a_d, ninf, n, strm) &
+     real(c_rp) function cuda_glmin(a_d, inf, n, strm) &
           bind(c, name = 'cuda_glmin')
        use, intrinsic :: iso_c_binding, only: c_int, c_ptr
        import c_rp
        type(c_ptr), value :: a_d, strm
-       real(c_rp) :: ninf
+       real(c_rp) :: inf
        integer(c_int) :: n
      end function cuda_glmin
 

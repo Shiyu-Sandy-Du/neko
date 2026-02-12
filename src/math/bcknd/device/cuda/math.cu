@@ -955,7 +955,7 @@ extern "C" {
    * Fortran wrapper glmin
    * Take the minimum a vector of length n
    */
-  real cuda_glmin(void *a, real *ninf, int *n, cudaStream_t stream) {
+  real cuda_glmin(void *a, real *inf, int *n, cudaStream_t stream) {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -963,11 +963,11 @@ extern "C" {
     cuda_redbuf_check_alloc(nb);
     if ( *n > 0) {
       glmin_kernel<real>
-        <<<nblcks, nthrds, 0, stream>>>((real *) a, *ninf,
+        <<<nblcks, nthrds, 0, stream>>>((real *) a, *inf,
                                         (real *) bufred_d, *n);
       CUDA_CHECK(cudaGetLastError());
       reduce_min_kernel<real><<<1, 1024, 0, stream>>> ((real *) bufred_d, 
-                                                        *ninf, nb);
+                                                        *inf, nb);
       CUDA_CHECK(cudaGetLastError());
     }
     else {

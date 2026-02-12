@@ -285,6 +285,11 @@ contains
      call field_rzero(wa)
      call makebdf%compute_scalar(Elag, wa%x, E, coef%B, &
                rho%x(1,1,1,1), dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
+     if (NEKO_BCKND_DEVICE .eq. 1) then
+        call device_invcol2(wa%x_d, coef%B_d, n)
+     else
+        call invcol2(wa%x, coef%B, n)
+     end if
      call Elag%update()
      
     end associate

@@ -795,9 +795,9 @@ __global__ void reduce_max_kernel(T * bufred, const T ninf, const int n) {
  * Vector reduction minimisation kernel
  */
 template< typename T >
-__global__ void reduce_min_kernel(T * bufred, const T ninf, const int n) {
+__global__ void reduce_min_kernel(T * bufred, const T inf, const int n) {
 
-  T min = ninf;
+  T min = inf;
   const int idx = blockIdx.x * blockDim.x + threadIdx.x;
   const int str = blockDim.x * gridDim.x;
   for (int i = idx; i<n ; i += str)
@@ -814,7 +814,7 @@ __global__ void reduce_min_kernel(T * bufred, const T ninf, const int n) {
     shared[wid] = min;
   __syncthreads();
 
-  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : inf;
   if (wid == 0)
     min = reduce_min_warp<T>(min);
 
@@ -1080,7 +1080,7 @@ __global__ void glmax_kernel(const T * a,
  */
 template< typename T >
 __global__ void glmin_kernel(const T * a,
-                             const T ninf,
+                             const T inf,
                              T * buf_h,
                              const int n) {
 
@@ -1091,7 +1091,7 @@ __global__ void glmin_kernel(const T * a,
   const unsigned int wid = threadIdx.x / warpSize;
 
   __shared__ T shared[32];
-  T min = ninf;
+  T min = inf;
   for (int i = idx; i<n ; i += str)
   {
     min = fmin(min, a[i]);
@@ -1102,7 +1102,7 @@ __global__ void glmin_kernel(const T * a,
     shared[wid] = min;
   __syncthreads();
 
-  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : ninf;
+  min = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : inf;
   if (wid == 0)
     min = reduce_min_warp<T>(min);
 

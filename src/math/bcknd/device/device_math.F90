@@ -1339,7 +1339,7 @@ contains
   function device_glmin(a_d, n, strm) result(res)
     type(c_ptr) :: a_d
     integer :: n, ierr
-    real(kind=rp) :: res, ninf
+    real(kind=rp) :: res, inf
     type(c_ptr), optional :: strm
     type(c_ptr) :: strm_
 
@@ -1349,11 +1349,11 @@ contains
        strm_ = glb_cmd_queue
     end if
 
-    ninf = -huge(0.0_rp)
+    inf = huge(0.0_rp)
 #if HAVE_HIP
-    res = hip_glmin(a_d, ninf, n, strm_)
+    res = hip_glmin(a_d, inf, n, strm_)
 #elif HAVE_CUDA
-    res = cuda_glmin(a_d, ninf, n, strm_)
+    res = cuda_glmin(a_d, inf, n, strm_)
 #elif HAVE_OPENCL
     call neko_error('glmin is not supported by OpenCL')
 #else

@@ -926,7 +926,7 @@ extern "C" {
    * Fortran wrapper glmin
    * Take the minmum of a vector of length n
    */
-  real hip_glmin(void *a, real *ninf, int *n, hipStream_t stream) {
+  real hip_glmin(void *a, real *inf, int *n, hipStream_t stream) {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -935,10 +935,10 @@ extern "C" {
     if( *n > 0) {
       hipLaunchKernelGGL(HIP_KERNEL_NAME(glmin_kernel<real>),
                          nblcks, nthrds, 0, stream,
-                         (real *) a, *ninf, bufred_d, *n);
+                         (real *) a, *inf, bufred_d, *n);
       HIP_CHECK(hipGetLastError());
       hipLaunchKernelGGL(HIP_KERNEL_NAME(reduce_min_kernel<real>),
-                         1, 1024, 0, stream, bufred_d, *ninf, nb);
+                         1, 1024, 0, stream, bufred_d, *inf, nb);
       HIP_CHECK(hipGetLastError());
     }
     else {
