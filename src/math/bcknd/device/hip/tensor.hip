@@ -135,7 +135,7 @@ extern "C" {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(*nel, 1, 1);
 
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(dottnsr_3d<real>),
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(dottnsr_3d_kernel<real>),
                        nblcks, nthrds, 0,
                        (hipStream_t) glb_cmd_queue,
                        (real *) v, (real *) B, *nu);
@@ -167,3 +167,4 @@ extern "C" {
     HIP_CHECK(hipGetLastError());
 
   }
+}
