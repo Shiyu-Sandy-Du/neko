@@ -337,24 +337,28 @@ contains
     type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu, fv, fw
 
+    ! Variables to be used if the scaling option is global average
     type(field_t), pointer :: E_vel_var
     type(field_ptr_t) :: E_s_var(this%n_scalars)
-    
-    type(field_t), pointer :: E_vel_avg_field
     real(kind=rp) :: E_vel_avg
+    real(kind=rp) :: E_s_avg
+    integer :: E_vel_var_index
+    integer :: E_s_var_indices(this%n_scalars)
+
+    ! Variables to be used if the scaling option is elementwise
+    type(field_t), pointer :: E_vel_avg_field
     type(field_ptr_t) :: E_s_avg_field(this%n_scalars)
     type(field_t), pointer :: B_elem
-    real(kind=rp) :: E_s_avg
+    integer :: E_vel_avg_index
+    integer :: E_s_avg_indices(this%n_scalars)
+    integer :: B_elem_index
+    real(kind=rp) :: tol
 
     integer :: temp_index
     integer :: filt_field_indices(3+this%n_scalars)
-    integer :: E_vel_avg_index
-    integer :: E_s_avg_indices(this%n_scalars)
-    integer :: E_vel_var_index
-    integer :: E_s_var_indices(this%n_scalars)
-    integer :: B_elem_index
+
     integer :: i, j, n
-    real(kind=rp) :: tol, scaling_factor
+    real(kind=rp) :: scaling_factor
 
     call neko_scratch_registry%request_field(ta, temp_index, .false.)
 
@@ -468,11 +472,15 @@ contains
 
     else if (this%scaling_option .eq. "global_minmax") then
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          scaling_factor = device_glmax(E_vel%x_d, E_vel%dof%size()) - &
-                           device_glmin(E_vel%x_d, E_vel%dof%size())
+          scaling_factor = device_glmax(E_vel%x_d, &
+                                        E_vel%dof%size()) - &
+                           device_glmin(E_vel%x_d, &
+                                        E_vel%dof%size())
        else
-          scaling_factor = glmax(E_vel%x, E_vel%dof%size()) - &
-                           glmin(E_vel%x, E_vel%dof%size())
+          scaling_factor = glmax(E_vel%x, &
+                                 E_vel%dof%size()) - &
+                           glmin(E_vel%x, &
+                                 E_vel%dof%size())
        end if
        if (scaling_factor .lt. NEKO_EPS) then
           scaling_factor = 0.0_rp
@@ -585,12 +593,17 @@ contains
 
        else if (this%scaling_option .eq. "global_minmax") then
           if (NEKO_BCKND_DEVICE .eq. 1) then
-             scaling_factor = device_glmax(E_s_i%x_d, E_s_i%dof%size()) - &
-                              device_glmin(E_s_i%x_d, E_s_i%dof%size())
+             scaling_factor = device_glmax(E_s_i%x_d, &
+                                           E_s_i%dof%size()) - &
+                              device_glmin(E_s_i%x_d, &
+                                           E_s_i%dof%size())
           else
-             scaling_factor = glmax(E_s_i%x, E_s_i%dof%size()) - &
-                              glmin(E_s_i%x, E_s_i%dof%size())
+             scaling_factor = glmax(E_s_i%x, &
+                                    E_s_i%dof%size()) - &
+                              glmin(E_s_i%x, &
+                                    E_s_i%dof%size())
           end if
+
           if (scaling_factor .lt. NEKO_EPS) then
              scaling_factor = 0.0_rp
           else
