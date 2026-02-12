@@ -61,7 +61,7 @@ module entropy_viscosity
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd2, &
                          field_invcol2, field_sqrt, field_add2, field_addcol3, &
-                         field_invcol2_nonzero, field_add3
+                         field_invcol2_nonzero, field_add3, field_pwmin2
   use math, only : NEKO_EPS, invcol2, col2, glsum, glsc2, glmax, glmin
   use device_math, only : device_invcol2, device_col2, device_glsum, &
                           device_glsc2, device_glmax, device_glmin
@@ -74,6 +74,9 @@ module entropy_viscosity
   type, public, extends(simulation_component_t) :: entropy_viscosity_t
      !> coefficient
      real(kind=rp) :: c_E
+     !> Upper bound coefficient
+     real(kind=rp) :: c_max = 0.5_rp
+     type(field_t) :: h_k 
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
      logical :: if_filter = .false.
@@ -217,6 +220,7 @@ contains
 
 
     call this%h2%init(this%u%dof)
+    call this%h_k%init(this%u%dof)
 
     if (this%n_scalars .ne. 0) then
        allocate(this%s(this%n_scalars))
@@ -254,10 +258,13 @@ contains
                             volume_element**(1.0_rp/3.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp)
+       this%h_k%x(:,:,:,e) = minval(this%coef%B(:, :, :, e))**(1.0_rp/3.0_rp)
     end do
     
     if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
+       call device_memcpy(this%h2%x, this%h2%x_d, this%u%dof%size(), &
+                             HOST_TO_DEVICE, sync = .false.)
+       call device_memcpy(this%h_k%x, this%h_k%x_d, this%u%dof%size(), &
                              HOST_TO_DEVICE, sync = .false.)
     end if
    
@@ -337,6 +344,9 @@ contains
     type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu, fv, fw
 
+    ! Upper bound
+    type(field_t), pointer :: local_max_ws ! ws for wave speed
+
     ! Variables to be used if the scaling option is global average
     type(field_t), pointer :: E_vel_var
     type(field_ptr_t) :: E_s_var(this%n_scalars)
@@ -354,13 +364,15 @@ contains
     integer :: B_elem_index
     real(kind=rp) :: tol
 
-    integer :: temp_index
+    integer :: temp_indices(2)
     integer :: filt_field_indices(3+this%n_scalars)
 
     integer :: i, j, n
     real(kind=rp) :: scaling_factor
 
-    call neko_scratch_registry%request_field(ta, temp_index, .false.)
+    call neko_scratch_registry%request_field(ta, temp_indices(1), .false.)
+    call neko_scratch_registry%request_field(local_max_ws, &
+         temp_indices(2), .false.)
 
     if (this%scaling_option .eq. "global_average") then
        call neko_scratch_registry%request_field(E_vel_var, &
@@ -407,6 +419,7 @@ contains
       call field_addcol3(ta, v, v)
       call field_addcol3(ta, w, w)
       call field_sqrt(ta)
+      call maxnorm_3d(local_max_ws%x, ta%x, coef%Xh%lx, coef%msh%nelv)
       call this%filter%apply(fu, ta)
       call field_sub2(fu, ta)
       call gs%op(fu, GS_OP_ADD)
@@ -424,7 +437,14 @@ contains
       call field_add2(E_vel, ta)
       call field_col3(ta, w, w)
       call field_add2(E_vel, ta)
+      call field_copy(ta, E_vel)
+      call field_sqrt(ta)
+      call maxnorm_3d(local_max_ws%x, ta%x, coef%Xh%lx, coef%msh%nelv)
     end if
+
+    call field_col2(local_max_ws, this%h_k)
+    ! now local_max_ws is a work array for the upper bound of the viscosity
+    call field_cmult(local_max_ws, this%c_max)
 
     call field_copy(ta, E_vel)
     call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
@@ -509,6 +529,7 @@ contains
 
 
     call field_col2(entropy_viscosity_vel, this%h2)
+    call field_pwmin2(entropy_viscosity_vel, local_max_ws)
 
    end associate
 
@@ -625,11 +646,12 @@ contains
        end if
 
        call field_col2(entropy_viscosity_i, this%h2)
+       call field_pwmin2(entropy_viscosity_i, local_max_ws)
 
        end associate
     end do
 
-    call neko_scratch_registry%relinquish_field(temp_index)
+    call neko_scratch_registry%relinquish_field(temp_indices)
     call neko_scratch_registry%relinquish_field(filt_field_indices)
 
     if (this%scaling_option .eq. "global_average") then
