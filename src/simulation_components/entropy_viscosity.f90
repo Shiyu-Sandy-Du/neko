@@ -258,7 +258,7 @@ contains
                             volume_element**(1.0_rp/3.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp)
-       this%h_k%x(:,:,:,e) = minval(this%coef%B(:, :, :, e))**(1.0_rp/3.0_rp)
+       this%h_k%x(:,:,:,e) = volume_element**(1.0_rp/3.0_rp)
     end do
     
     if (NEKO_BCKND_DEVICE .eq. 1) then
