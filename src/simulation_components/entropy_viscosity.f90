@@ -172,7 +172,7 @@ contains
     class(case_t), intent(inout), target ::case
     character(len=20), allocatable :: fields(:)
     integer :: e, k
-    real(kind=rp) :: volume_element
+    real(kind=rp) :: volume_element, diameter
 
     if (allocated(case%scalars)) then
        this%scalars => case%scalars
@@ -250,15 +250,19 @@ contains
     end do
 
     do e = 1, this%coef%msh%nelv
-       volume_element = 0.0_rp
-       do k = 1, this%coef%Xh%lx * this%coef%Xh%ly * this%coef%Xh%lz
-          volume_element = volume_element + this%coef%B(k, 1, 1, e)
-       end do
-       this%h2%x(:,:,:,e) = volume_element**(1.0_rp/3.0_rp) * &
-                            volume_element**(1.0_rp/3.0_rp) / &
+      !  volume_element = 0.0_rp
+      !  do k = 1, this%coef%Xh%lx * this%coef%Xh%ly * this%coef%Xh%lz
+      !     volume_element = volume_element + this%coef%B(k, 1, 1, e)
+      !  end do
+      !  this%h2%x(:,:,:,e) = volume_element**(1.0_rp/3.0_rp) * &
+      !                       volume_element**(1.0_rp/3.0_rp) / &
+      !                       (this%coef%Xh%lx-1.0_rp) / &
+      !                       (this%coef%Xh%lx-1.0_rp)
+       diameter = this%coef%msh%elements(e)%e%diameter()
+       this%h2%x(:,:,:,e) = diameter * diameter / &
                             (this%coef%Xh%lx-1.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp)
-       this%h_k%x(:,:,:,e) = volume_element**(1.0_rp/3.0_rp)
+       this%h_k%x(:,:,:,e) = this%coef%msh%elements(e)%e%diameter()
     end do
     
     if (NEKO_BCKND_DEVICE .eq. 1) then
