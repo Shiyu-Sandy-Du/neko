@@ -75,7 +75,7 @@ module entropy_viscosity
      !> coefficient
      real(kind=rp) :: c_E
      !> Upper bound coefficient
-     real(kind=rp) :: c_max = 0.5_rp
+     real(kind=rp) :: c_max = 1.0_rp
      type(field_t) :: h_k 
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
