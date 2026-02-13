@@ -154,8 +154,8 @@ contains
     select case (trim(scaling_option))
     case ("global_average")
     case ("global_minmax")
-   !  case ("elementwise")
-   !     call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-3_rp)
+    case ("elementwise")
+       call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-3_rp)
     case default
        call neko_error("Invalide scaling option for entropy viscosity")
     end select
@@ -386,15 +386,21 @@ contains
                                              E_s_var_indices(i), .false.)
        end do
 
-   !  else if (this%scaling_option .eq. "elementwise") then
-   !     call neko_scratch_registry%request_field(E_vel_avg_field, &
-   !                                              E_vel_avg_index, .false.)
+    else if (this%scaling_option .eq. "elementwise") then
+       call neko_scratch_registry%request_field(E_vel_var, &
+                                             E_vel_var_index, .false.)
+       do i = 1, this%n_scalars
+          call neko_scratch_registry%request_field(E_s_var(i)%ptr, &
+                                             E_s_var_indices(i), .false.)
+       end do
+       call neko_scratch_registry%request_field(E_vel_avg_field, &
+                                                E_vel_avg_index, .false.)
 
-   !     do i = 1, this%n_scalars
-   !        call neko_scratch_registry%request_field(E_s_avg_field(i)%ptr, &
-   !                                                 E_s_avg_indices(i), .false.)
-   !     end do
-   !     call neko_scratch_registry%request_field(B_elem, B_elem_index, .false.)
+       do i = 1, this%n_scalars
+          call neko_scratch_registry%request_field(E_s_avg_field(i)%ptr, &
+                                                   E_s_avg_indices(i), .false.)
+       end do
+       call neko_scratch_registry%request_field(B_elem, B_elem_index, .false.)
     end if
 
     call neko_scratch_registry%request_field(fu, filt_field_indices(1), .false.)
@@ -505,30 +511,29 @@ contains
           scaling_factor = this%c_E / scaling_factor
        end if
        call field_cmult(entropy_viscosity_vel, scaling_factor)
-   !  ! Temporal implementation of elementwise scaling
-   !  else if (this%scaling_option .eq. "elementwise") then
-   !     call dottnsr_3d(E_vel_avg_field%x, E_vel%x, &
-   !             coef%B, coef%Xh%lx, coef%msh%nelv)
-   !     call dot1tnsr_3d(B_elem%x, coef%B, coef%Xh%lx, coef%msh%nelv)
-   !     call field_invcol2(E_vel_avg_field, B_elem)
-   !     call field_cmult(E_vel_avg_field, -1.0_rp)
+    ! Temporal implementation of elementwise scaling
+    else if (this%scaling_option .eq. "elementwise") then
+       call dottnsr_3d(E_vel_avg_field%x, E_vel%x, &
+               coef%B, coef%Xh%lx, coef%msh%nelv)
+       call dot1tnsr_3d(B_elem%x, coef%B, coef%Xh%lx, coef%msh%nelv)
+       call field_invcol2(E_vel_avg_field, B_elem)
+       call field_cmult(E_vel_avg_field, -1.0_rp)
 
-   !     call field_add3(E_vel_var, E_vel, E_vel_avg_field)
-   !     call field_absval(E_vel_var)
+       call field_add3(E_vel_var, E_vel, E_vel_avg_field)
+       call field_absval(E_vel_var)
 
-   !     call field_cmult(entropy_viscosity_vel, &
-   !             this%c_E)
+       call field_cmult(entropy_viscosity_vel, &
+               this%c_E)
 
-   !     call maxnorm_3d(ta%x, E_vel_var%x, coef%Xh%lx, coef%msh%nelv)
-   !     if (NEKO_BCKND_DEVICE .eq. 1) then
-   !        tol = this%tol_coef * (device_glmax(E_vel%x_d, E_vel%dof%size()) - &
-   !                               device_glmin(E_vel%x_d, E_vel%dof%size()))
-   !     else
-   !        tol = this%tol_coef * (glmax(E_vel%x, E_vel%dof%size()) - &
-   !                               glmin(E_vel%x, E_vel%dof%size()))
-   !     end if 
-   !     write(*,*) "xxx", tol
-   !     call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
+       call maxnorm_3d(ta%x, E_vel_var%x, coef%Xh%lx, coef%msh%nelv)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          tol = this%tol_coef * (device_glmax(E_vel%x_d, E_vel%dof%size()) - &
+                                 device_glmin(E_vel%x_d, E_vel%dof%size()))
+       else
+          tol = this%tol_coef * (glmax(E_vel%x, E_vel%dof%size()) - &
+                                 glmin(E_vel%x, E_vel%dof%size()))
+       end if 
+       call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
     end if
 
 
@@ -624,28 +629,29 @@ contains
           end if
 
           call field_cmult(entropy_viscosity_i, scaling_factor)
-      !  else if (this%scaling_option .eq. "elementwise") then
-         !  call dottnsr_3d(E_s_avg_field_i%x, E_s_i%x, &
-         !       coef%B, coef%Xh%lx, coef%msh%nelv)
-         !  call dot1tnsr_3d(B_elem%x, coef%B, coef%Xh%lx, coef%msh%nelv)
-         !  call field_invcol2(E_s_avg_field_i, B_elem)
-         !  call field_cmult(E_s_avg_field_i, -1.0_rp)
 
-         !  call field_add3(E_s_var_i, E_s_i, E_s_avg_field_i)
-         !  call field_absval(E_s_var_i)
+       else if (this%scaling_option .eq. "elementwise") then
+          call dottnsr_3d(E_s_avg_field_i%x, E_s_i%x, &
+               coef%B, coef%Xh%lx, coef%msh%nelv)
+          call dot1tnsr_3d(B_elem%x, coef%B, coef%Xh%lx, coef%msh%nelv)
+          call field_invcol2(E_s_avg_field_i, B_elem)
+          call field_cmult(E_s_avg_field_i, -1.0_rp)
 
-         !  call field_cmult(entropy_viscosity_i, &
-         !       this%c_E)
+          call field_add3(E_s_var_i, E_s_i, E_s_avg_field_i)
+          call field_absval(E_s_var_i)
 
-         !  call maxnorm_3d(ta%x, E_s_var_i%x, coef%Xh%lx, coef%msh%nelv)
-         !  if (NEKO_BCKND_DEVICE .eq. 1) then
-         !     tol = this%tol_coef * (device_glmax(E_s_i%x_d, E_s_i%dof%size()) - &
-         !                        device_glmin(E_s_i%x_d, E_s_i%dof%size()))
-         !  else
-         !     tol = this%tol_coef * (glmax(E_s_i%x, E_s_i%dof%size()) - &
-         !                        glmin(E_s_i%x, E_s_i%dof%size()))
-         !  end if 
-         !  call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
+          call field_cmult(entropy_viscosity_i, &
+               this%c_E)
+
+          call maxnorm_3d(ta%x, E_s_var_i%x, coef%Xh%lx, coef%msh%nelv)
+          if (NEKO_BCKND_DEVICE .eq. 1) then
+             tol = this%tol_coef * (device_glmax(E_s_i%x_d, E_s_i%dof%size()) - &
+                                device_glmin(E_s_i%x_d, E_s_i%dof%size()))
+          else
+             tol = this%tol_coef * (glmax(E_s_i%x, E_s_i%dof%size()) - &
+                                glmin(E_s_i%x, E_s_i%dof%size()))
+          end if 
+          call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
 
        end if
 
@@ -661,10 +667,12 @@ contains
     if (this%scaling_option .eq. "global_average") then
        call neko_scratch_registry%relinquish_field(E_vel_var_index)
        call neko_scratch_registry%relinquish_field(E_s_var_indices)
-   !  else if (this%scaling_option .eq. "elementwise") then
-   !     call neko_scratch_registry%relinquish_field(E_vel_avg_index)
-   !     call neko_scratch_registry%relinquish_field(E_s_avg_indices)
-   !     call neko_scratch_registry%relinquish_field(B_elem_index)
+    else if (this%scaling_option .eq. "elementwise") then
+       call neko_scratch_registry%relinquish_field(E_vel_var_index)
+       call neko_scratch_registry%relinquish_field(E_s_var_indices)
+       call neko_scratch_registry%relinquish_field(E_vel_avg_index)
+       call neko_scratch_registry%relinquish_field(E_s_avg_indices)
+       call neko_scratch_registry%relinquish_field(B_elem_index)
     end if
 
   end subroutine entropy_viscosity_compute
