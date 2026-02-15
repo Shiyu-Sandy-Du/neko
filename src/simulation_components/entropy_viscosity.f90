@@ -240,6 +240,9 @@ contains
        this%D(k)%ptr => &
               neko_field_registry%get_field(fields(2*k))
 
+       call field_rzero(this%entropy_viscosity(k)%ptr)
+       call field_rzero(this%D(k)%ptr)
+
        call this%E(k)%init(this%u%dof)
        call this%Elag(k)%init(this%E(k), 2)
        call this%wa(k)%init(this%u%dof)
@@ -262,7 +265,7 @@ contains
        this%h2%x(:,:,:,e) = diameter * diameter / &
                             (this%coef%Xh%lx-1.0_rp) / &
                             (this%coef%Xh%lx-1.0_rp)
-       this%h_k%x(:,:,:,e) = this%coef%msh%elements(e)%e%diameter()
+       this%h_k%x(:,:,:,e) = diameter
     end do
     
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -533,7 +536,8 @@ contains
           tol = this%tol_coef * (glmax(E_vel%x, E_vel%dof%size()) - &
                                  glmin(E_vel%x, E_vel%dof%size()))
        end if 
-       call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
+       ! call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
+       call field_invcol2(entropy_viscosity_vel, ta)
     end if
 
 
@@ -651,8 +655,8 @@ contains
              tol = this%tol_coef * (glmax(E_s_i%x, E_s_i%dof%size()) - &
                                 glmin(E_s_i%x, E_s_i%dof%size()))
           end if 
-          call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
-
+          ! call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
+          call field_invcol2(entropy_viscosity_i, ta)
        end if
 
        call field_col2(entropy_viscosity_i, this%h2)
