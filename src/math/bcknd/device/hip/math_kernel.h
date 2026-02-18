@@ -477,7 +477,7 @@ __global__ void invcol2_nonzero_kernel(T * __restrict__ a,
     }
     else
     {
-      a[i] = a[i] / tol;
+      a[i] = 0.0;
     }
   }
 }
