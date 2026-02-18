@@ -324,7 +324,6 @@ contains
     class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: ta ! temporal array
-    type(field_ptr_t) :: fs(this%n_scalars)
     type(field_t), pointer :: fu
 
     ! Upper bound
@@ -346,7 +345,7 @@ contains
     real(kind=rp) :: tol
 
     integer :: temp_indices(2)
-    integer :: filt_field_indices(1+this%n_scalars)
+    integer :: filt_field_index
 
     integer :: i, j, n
     real(kind=rp) :: scaling_factor
@@ -356,12 +355,8 @@ contains
     call neko_scratch_registry%request_field(local_max_ws, &
          temp_indices(2), .false.)
 
-    ! create work arrays for filtered field
-    call neko_scratch_registry%request_field(fu, filt_field_indices(1), .false.)
-    do i = 1, this%n_scalars
-       call neko_scratch_registry%request_field(fs(i)%ptr, &
-            filt_field_indices(1+i), .false.)
-    end do
+    ! create the work array for filtered field
+    call neko_scratch_registry%request_field(fu, filt_field_index, .false.)
 
     ! create work arrays for scaling
     call neko_scratch_registry%request_field(E_true, &
@@ -372,7 +367,6 @@ contains
 
     call neko_scratch_registry%request_field(E_avg_field, &
                                              E_avg_index, .false.)
-
 
     call neko_scratch_registry%request_field(B_elem, B_elem_index, .false.)
 
@@ -488,8 +482,7 @@ contains
 
     do i = 1, this%n_scalars
        ! The updated part for the BDF scheme of dE/dt and the updated ui dE/dxi
-       associate(s_i => this%s(i)%ptr, &
-                 fs_i => fs(i)%ptr, E_s_i => this%E(i+1), &
+       associate(s_i => this%s(i)%ptr, E_s_i => this%E(i+1), &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa_s_i => this%wa(i+1), &
                  D_s_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
@@ -500,15 +493,15 @@ contains
        n = s_i%dof%size()
 
        if (this%if_filter) then
-         call this%filter%apply(fs_i, s_i)
-         call field_sub2(fs_i, s_i)
-         call gs%op(fs_i, GS_OP_ADD)
+         call this%filter%apply(fu, s_i)
+         call field_sub2(fu, s_i)
+         call gs%op(fu, GS_OP_ADD)
          if (NEKO_BCKND_DEVICE .eq. 1) then
-            call device_col2(fs_i%x_d, coef%mult_d, n)
+            call device_col2(fu%x_d, coef%mult_d, n)
          else
-            call col2(fs_i%x, coef%mult, n)
+            call col2(fu%x, coef%mult, n)
          end if
-         call field_copy(E_s_i, fs_i)
+         call field_copy(E_s_i, fu)
        else
          call field_copy(E_s_i, s_i)
        end if
@@ -537,7 +530,7 @@ contains
        call field_sub2(D_s_i, ta, n)
        
        ! multiply 2 and the filtered field itself to get the real residual
-       call field_col2(D_s_i, fs_i)
+       call field_col2(D_s_i, fu)
        call field_cmult(D_s_i, 2.0_rp)
 
        call field_copy(entropy_viscosity_i, D_s_i)
@@ -582,8 +575,7 @@ contains
     end do
 
     call neko_scratch_registry%relinquish_field(temp_indices)
-    call neko_scratch_registry%relinquish_field(filt_field_indices)
-
+    call neko_scratch_registry%relinquish_field(filt_field_index)
     call neko_scratch_registry%relinquish_field(E_true_index)
     call neko_scratch_registry%relinquish_field(E_var_index)
     call neko_scratch_registry%relinquish_field(E_avg_index)
