@@ -77,6 +77,8 @@ module entropy_viscosity
      !> Upper bound coefficient
      real(kind=rp) :: c_max
      type(field_t) :: h_k 
+     !> The power coefficient for the elementwise filter
+     real(kind=rp) :: power_coef = 1.5_rp
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
      logical :: if_filter = .false.
@@ -188,7 +190,13 @@ contains
     if (json%valid_path("filter")) then
        this%if_filter = .true.
        call this%filter%init(json, this%coef)
-       this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
+      !  this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
+       ! give the weight of around 0.2 to the second highest mode while keeping the kernel smooth
+       do k = 1, this%coef%Xh%lx
+          this%filter%transfer(k) = ((k - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
+                                 ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+          this%filter%transfer(k) = 1.0_rp - this%filter%transfer(k)
+       end do
        call this%filter%build_1d()
     end if
 
