@@ -292,6 +292,37 @@ contains
               ext_bdf => this%ext_bdf)
 
      n = wa_vel%dof%size()
+     
+     ! Compute the entropy at the first time step
+     if (time%tstep .eq. 1) then
+        call field_rzero(E_vel)
+        if (this%if_filter) then
+           ! filter the velocity magnitude all together
+           call field_addcol3(E_vel, this%u, this%u)
+           call field_addcol3(E_vel, this%v, this%v)
+           call field_addcol3(E_vel, this%w, this%w)
+           call field_sqrt(E_vel)
+           call this%filter%apply(wa_vel, E_vel)
+           call field_sub2(wa_vel, E_vel)
+           call this%coef%gs_h%op(wa_vel, GS_OP_ADD)
+           if (NEKO_BCKND_DEVICE .eq. 1) then
+              call device_col2(wa_vel%x_d, coef%mult_d, n)
+           else
+              call col2(wa_vel%x, coef%mult, n)
+           end if
+           ! Here E_vel is just fu such that the residual is computed correctly
+           call field_copy(E_vel, wa_vel)
+        else
+           call field_col3(wa_vel, this%u, this%u)
+           call field_add2(E_vel, wa_vel)
+           call field_col3(wa_vel, this%v, this%v)
+           call field_add2(E_vel, wa_vel)
+           call field_col3(wa_vel, this%w, this%w)
+           call field_add2(E_vel, wa_vel)
+           call field_sqrt(E_vel)
+        end if
+     end if
+
      call field_rzero(wa_vel)
      call makebdf%compute_scalar(Elag_vel, wa_vel%x, E_vel, coef%B, &
                rho%x(1,1,1,1), dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
@@ -311,6 +342,22 @@ contains
                  rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
                  makebdf => this%makebdf, E_s_i => this%E(i+1), &
                  Elag_s_i => this%Elag(i+1), ext_bdf => this%ext_bdf)
+       ! Compute the entropy at the first time step
+       if (time%tstep .eq. 1) then
+          if (this%if_filter) then
+             call this%filter%apply(wa_s_i, this%s(i)%ptr)
+             call field_sub2(wa_s_i, this%s(i)%ptr)
+             call this%coef%gs_h%op(wa_s_i, GS_OP_ADD)
+             if (NEKO_BCKND_DEVICE .eq. 1) then
+                call device_col2(wa_s_i%x_d, coef%mult_d, n)
+             else
+                call col2(wa_s_i%x, coef%mult, n)
+             end if
+             call field_copy(E_s_i, wa_s_i)
+          else
+             call field_copy(E_s_i, this%s(i)%ptr)
+          end if
+       end if
       
        call field_rzero(wa_s_i)
        call makebdf%compute_scalar(Elag_s_i, wa_s_i%x, E_s_i, coef%B, rho%x(1,1,1,1), &
