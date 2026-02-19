@@ -46,7 +46,7 @@ module entropy_viscosity
   use field, only : field_t, field_ptr_t
   use field_series, only : field_series_t
   use rhs_maker, only : rhs_maker_bdf_t, rhs_maker_ext_t
-  use adv_no_dealias, only : adv_no_dealias_t
+  use advection, only : advection_t
   use time_scheme_controller, only : time_scheme_controller_t
   use coefs, only : coef_t
   use field_series, only : field_series_ptr_t
@@ -75,7 +75,7 @@ module entropy_viscosity
      !> coefficient
      real(kind=rp) :: c_E
      !> Upper bound coefficient
-     real(kind=rp) :: c_max = 0.5_rp
+     real(kind=rp) :: c_max
      type(field_t) :: h_k 
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
@@ -108,6 +108,9 @@ module entropy_viscosity
      !> Residual.
      type(field_ptr_t), allocatable :: D(:)
 
+     !> Upper bound
+     type(field_ptr_t), allocatable :: ev_cap ! ws for wave speed
+
      !> Output writer.
      type(field_writer_t) :: writer
 
@@ -117,7 +120,7 @@ module entropy_viscosity
      class(rhs_maker_bdf_t), pointer :: makebdf
      class(rhs_maker_ext_t), pointer :: makeext
      ! adv should be forced to be no-dealised version for nodal operation
-     type(adv_no_dealias_t) :: adv
+     class(advection_t), pointer :: adv
      type(time_scheme_controller_t), pointer :: ext_bdf
 
    contains
@@ -143,7 +146,9 @@ contains
 
     call this%init_base(json, case)
     
-    call json_get(json, "c_E", this%c_E)    
+    call json_get(json, "c_E", this%c_E)
+    call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-2_rp)
+    call json_get_or_default(json, "c_max", this%c_max, 0.5_rp)
 
     call this%init_common(json, case)
   end subroutine entropy_viscosity_init_from_json
@@ -163,13 +168,15 @@ contains
     else
        this%n_scalars = 0
     end if
-    allocate(fields(2*(1+this%n_scalars)))
+    allocate(fields(1+2*(1+this%n_scalars)))
     fields(1) = 'entr_visc_vel'
     fields(2) = 'entr_res_vel'
     do k = 1, this%n_scalars
        write(fields(2*k+1), '(A,I0)') 'entr_visc_s', k
        write(fields(2*k+2), '(A,I0)') 'entr_res_s', k
     end do
+    fields(1+2*(1+this%n_scalars)) = 'max_entr_visc'
+
     ! Add fields keyword to the json so that the field_writer picks it up.
     ! Will also add fields to 	simulation_components/entropy_viscosity.f90\the registry.
     call json%add("fields", fields)
@@ -191,12 +198,11 @@ contains
       this%makebdf => f1%makebdf
       this%makeext => f1%makeabf
       this%ext_bdf => f1%ext_bdf
+      this%adv => f1%adv
     class default
       call neko_error("For fluid, entropy &
       &viscosity currently only support pnpn scheme")
     end select
-
-    call this%adv%init(this%coef)
 
     this%u => neko_field_registry%get_field("u")
     this%v => neko_field_registry%get_field("v")
@@ -217,6 +223,7 @@ contains
     allocate(this%D(1+this%n_scalars))
     
     allocate(this%entropy_viscosity(1+this%n_scalars))
+    allocate(this%ev_cap)
 
     do k = 1, 1+this%n_scalars
        this%entropy_viscosity(k)%ptr => &
@@ -235,6 +242,8 @@ contains
           this%s(k)%ptr => this%scalars%scalar_fields(k)%s
        end if
     end do
+    this%ev_cap%ptr => &
+              neko_field_registry%get_field(fields(1+2*(1+this%n_scalars)))
 
     do e = 1, this%coef%msh%nelv
       !  volume_element = 0.0_rp
@@ -325,9 +334,6 @@ contains
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: ta ! temporal array
     type(field_t), pointer :: fu
-
-    ! Upper bound
-    type(field_t), pointer :: local_max_ws ! ws for wave speed
     
     ! Arrays for scaling
     type(field_t), pointer :: E_true
@@ -344,16 +350,14 @@ contains
 
     real(kind=rp) :: tol
 
-    integer :: temp_indices(2)
+    integer :: temp_index
     integer :: filt_field_index
 
     integer :: i, j, n
     real(kind=rp) :: scaling_factor
     
     ! create the work array and the upper bound
-    call neko_scratch_registry%request_field(ta, temp_indices(1), .false.)
-    call neko_scratch_registry%request_field(local_max_ws, &
-         temp_indices(2), .false.)
+    call neko_scratch_registry%request_field(ta, temp_index, .false.)
 
     ! create the work array for filtered field
     call neko_scratch_registry%request_field(fu, filt_field_index, .false.)
@@ -377,6 +381,7 @@ contains
              D_vel => this%D(1)%ptr, gs => this%coef%gs_h, &
              adv => this%adv, &
              Xh => this%coef%Xh, &
+             ev_cap => this%ev_cap%ptr, &
              entropy_viscosity_vel => this%entropy_viscosity(1)%ptr)
 
     n = u%dof%size()
@@ -388,7 +393,7 @@ contains
       call field_addcol3(ta, v, v)
       call field_addcol3(ta, w, w)
       call field_sqrt(ta)
-      call maxnorm_3d(local_max_ws%x, ta%x, coef%Xh%lx, coef%msh%nelv)
+      call maxnorm_3d(ev_cap%x, ta%x, coef%Xh%lx, coef%msh%nelv)
       call this%filter%apply(fu, ta)
       call field_sub2(fu, ta)
       call gs%op(fu, GS_OP_ADD)
@@ -407,12 +412,12 @@ contains
       call field_col3(ta, w, w)
       call field_add2(E_vel, ta)
       call field_sqrt(E_vel)
-      call maxnorm_3d(local_max_ws%x, E_vel%x, coef%Xh%lx, coef%msh%nelv)
+      call maxnorm_3d(ev_cap%x, E_vel%x, coef%Xh%lx, coef%msh%nelv)
     end if
 
-    call field_col2(local_max_ws, this%h_k)
-    ! now local_max_ws is a work array for the upper bound of the viscosity
-    call field_cmult(local_max_ws, this%c_max)
+    call field_col2(ev_cap, this%h_k)
+    ! now ev_cap is a work array for the upper bound of the viscosity
+    call field_cmult(ev_cap, this%c_max)
 
     ! temporal derivative
     call field_copy(ta, E_vel)
@@ -469,7 +474,7 @@ contains
     call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
 
     call field_col2(entropy_viscosity_vel, this%h2)
-    call field_pwmin2(entropy_viscosity_vel, local_max_ws)
+    call field_pwmin2(entropy_viscosity_vel, ev_cap)
 
     call gs%op(entropy_viscosity_vel, GS_OP_ADD)
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -488,6 +493,7 @@ contains
                  D_s_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
+                 ev_cap => this%ev_cap%ptr, &
                  entropy_viscosity_i => this%entropy_viscosity(i+1)%ptr)
 
        n = s_i%dof%size()
@@ -562,7 +568,7 @@ contains
        call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
 
        call field_col2(entropy_viscosity_i, this%h2)
-       call field_pwmin2(entropy_viscosity_i, local_max_ws)
+       call field_pwmin2(entropy_viscosity_i, ev_cap)
 
        call gs%op(entropy_viscosity_i, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -574,7 +580,7 @@ contains
        end associate
     end do
 
-    call neko_scratch_registry%relinquish_field(temp_indices)
+    call neko_scratch_registry%relinquish_field(temp_index)
     call neko_scratch_registry%relinquish_field(filt_field_index)
     call neko_scratch_registry%relinquish_field(E_true_index)
     call neko_scratch_registry%relinquish_field(E_var_index)
