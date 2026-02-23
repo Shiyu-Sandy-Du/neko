@@ -77,8 +77,11 @@ module entropy_viscosity
      !> Upper bound coefficient
      real(kind=rp) :: c_max
      type(field_t) :: h_k 
+     !> The option for the quantity on which residual is computed
+     character(len=:), allocatable :: residual_option
      !> The power coefficient for the elementwise filter
-     real(kind=rp) :: power_coef = 1.5_rp
+     logical :: sharp_cutoff
+     real(kind=rp) :: power_coef = 2.0_rp
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
      logical :: if_filter = .false.
@@ -145,12 +148,24 @@ contains
     class(entropy_viscosity_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
+    character(len=:), allocatable :: residual_option
 
     call this%init_base(json, case)
     
     call json_get(json, "c_E", this%c_E)
     call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-2_rp)
     call json_get_or_default(json, "c_max", this%c_max, 0.5_rp)
+
+    ! Choose the quantity on which the residual is computed
+    call json_get(json, "residual_option", residual_option)
+    this%residual_option = trim(residual_option)
+    select case(this%residual_option)
+    case ("entropy")
+    case ("solution")
+    case default
+       call neko_error("invalid input for residual_option for &
+                       &residual-based viscosity")
+    end select
 
     call this%init_common(json, case)
   end subroutine entropy_viscosity_init_from_json
@@ -190,13 +205,20 @@ contains
     if (json%valid_path("filter")) then
        this%if_filter = .true.
        call this%filter%init(json, this%coef)
-      !  this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp ! filter out the highest order mode
-       ! give the weight of around 0.2 to the second highest mode while keeping the kernel smooth
-       do k = 1, this%coef%Xh%lx
-          this%filter%transfer(k) = ((k - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
-                                 ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
-          this%filter%transfer(k) = 1.0_rp - this%filter%transfer(k)
-       end do
+       call json_get_or_default(json, "filter_sharp_cutoff", &
+                                this%sharp_cutoff, .false.)
+       if (this%sharp_cutoff) then
+          ! filter out the highest order mode
+          this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp 
+       else
+          ! give the weight of around 0.1 to the second highest mode
+          do k = 1, this%coef%Xh%lx
+             this%filter%transfer(k) = &
+                  ((k - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
+                  ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+             this%filter%transfer(k) = 1.0_rp - this%filter%transfer(k)
+          end do
+       end if
        call this%filter%build_1d()
     end if
 
@@ -368,7 +390,8 @@ contains
        end if
       
        call field_rzero(wa_s_i)
-       call makebdf%compute_scalar(Elag_s_i, wa_s_i%x, E_s_i, coef%B, rho%x(1,1,1,1), &
+       call makebdf%compute_scalar(Elag_s_i, wa_s_i%x, E_s_i, coef%B, &
+               rho%x(1,1,1,1), &
                dt, ext_bdf%diffusion_coeffs, ext_bdf%ndiff, n)
        if (NEKO_BCKND_DEVICE .eq. 1) then
           call device_invcol2(wa_s_i%x_d, coef%B_d, n)
@@ -497,15 +520,24 @@ contains
     end if
     call field_sub2(D_vel, ta, n)
    
-    ! multiply 2 and the filtered field itself to get the real residual
-    call field_col2(D_vel, fu)
-    call field_cmult(D_vel, 2.0_rp)
+    if (this%residual_option .eq. "entropy") then
+       ! multiply 2 and the filtered field itself to get the real residual
+       call field_col2(D_vel, fu)
+       call field_cmult(D_vel, 2.0_rp)
+    end if
     
     call field_copy(entropy_viscosity_vel, D_vel)
     call field_absval(entropy_viscosity_vel)
 
-    ! Correct E_vel to be fu^2
-    call field_col3(E_true, E_vel, E_vel)
+    if (this%residual_option .eq. "entropy") then
+       ! Correct E_vel to be fu^2
+       call field_col3(E_true, E_vel, E_vel)
+    else if (this%residual_option .eq. "solution") then
+       call field_copy(E_true, E_vel)
+    else
+       call neko_error("invalid input for residual_option for residual-based &
+               &viscosity")
+    end if
 
     call dottnsr_3d(E_avg_field%x, E_true%x, &
          coef%B, coef%Xh%lx, coef%msh%nelv)
@@ -590,15 +622,24 @@ contains
        end if
        call field_sub2(D_s_i, ta, n)
        
-       ! multiply 2 and the filtered field itself to get the real residual
-       call field_col2(D_s_i, fu)
-       call field_cmult(D_s_i, 2.0_rp)
+       if (this%residual_option .eq. "entropy") then
+          ! multiply 2 and the filtered field itself to get the real residual
+          call field_col2(D_s_i, fu)
+          call field_cmult(D_s_i, 2.0_rp)
+       end if
 
        call field_copy(entropy_viscosity_i, D_s_i)
        call field_absval(entropy_viscosity_i)
 
-       ! Correct E_vel to be fs^2
-       call field_col3(E_true, E_s_i, E_s_i)
+       if (this%residual_option .eq. "entropy") then
+          ! Correct E_vel to be fs^2
+          call field_col3(E_true, E_s_i, E_s_i)
+       else if (this%residual_option .eq. "solution") then
+          call field_copy(E_true, E_s_i)
+       else
+          call neko_error("invalid input for residual_option for residual-based &
+                          &viscosity")
+       end if
 
        call dottnsr_3d(E_avg_field%x, E_true%x, &
             coef%B, coef%Xh%lx, coef%msh%nelv)
