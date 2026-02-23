@@ -34,13 +34,13 @@
 !> A simulation component that computes entropy_viscosity
 !! The values are stored in the field registry under the name 'entropy_viscosity'
 
-module entropy_viscosity
+module entropy_viscosity_incompressible
   use neko_config, only : NEKO_BCKND_DEVICE
   use device, only : device_memcpy
   use num_types, only : rp
   use json_module, only : json_file
   use simulation_component, only : simulation_component_t
-  use field_registry, only : neko_field_registry
+  use registry, only : neko_registry
   use scratch_registry, only : neko_scratch_registry
   use json_utils, only : json_get, json_get_or_default
   use field, only : field_t, field_ptr_t
@@ -71,7 +71,8 @@ module entropy_viscosity
   implicit none
   private
 
-  type, public, extends(simulation_component_t) :: entropy_viscosity_t
+  type, public, extends(simulation_component_t) :: &
+                  entropy_viscosity_incompressible_t
      !> coefficient
      real(kind=rp) :: c_E
      !> Upper bound coefficient
@@ -139,13 +140,13 @@ module entropy_viscosity
      procedure, pass(this) :: preprocess_ => entropy_viscosity_preprocess
      !> Part of the residual viscosity computation after the time stepping
      procedure, pass(this) :: compute_ => entropy_viscosity_compute
-  end type entropy_viscosity_t
+  end type entropy_viscosity_incompressible_t
 
 contains
 
   !> Constructor from json.
   subroutine entropy_viscosity_init_from_json(this, json, case)
-    class(entropy_viscosity_t), intent(inout), target :: this
+    class(entropy_viscosity_incompressible_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
     character(len=:), allocatable :: residual_option
@@ -172,7 +173,7 @@ contains
 
   !> Common part of constructors.
   subroutine entropy_viscosity_init_common(this, json, case)
-    class(entropy_viscosity_t), intent(inout) :: this
+    class(entropy_viscosity_incompressible_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
     character(len=20), allocatable :: fields(:)
@@ -234,9 +235,9 @@ contains
       &viscosity currently only support pnpn scheme")
     end select
 
-    this%u => neko_field_registry%get_field("u")
-    this%v => neko_field_registry%get_field("v")
-    this%w => neko_field_registry%get_field("w")
+    this%u => neko_registry%get_field("u")
+    this%v => neko_registry%get_field("v")
+    this%w => neko_registry%get_field("w")
 
 
     call this%h2%init(this%u%dof)
@@ -257,9 +258,9 @@ contains
 
     do k = 1, 1+this%n_scalars
        this%entropy_viscosity(k)%ptr => &
-              neko_field_registry%get_field(fields(2*k-1))
+              neko_registry%get_field(fields(2*k-1))
        this%D(k)%ptr => &
-              neko_field_registry%get_field(fields(2*k))
+              neko_registry%get_field(fields(2*k))
 
        call field_rzero(this%entropy_viscosity(k)%ptr)
        call field_rzero(this%D(k)%ptr)
@@ -269,11 +270,11 @@ contains
        call this%wa(k)%init(this%u%dof)
        
        if (k .le. this%n_scalars) then
-          this%s(k)%ptr => this%scalars%scalar_fields(k)%s
+          this%s(k)%ptr => this%scalars%scalar_fields(k)%scalar%s
        end if
     end do
     this%ev_cap%ptr => &
-              neko_field_registry%get_field(fields(1+2*(1+this%n_scalars)))
+              neko_registry%get_field(fields(1+2*(1+this%n_scalars)))
 
     do e = 1, this%coef%msh%nelv
       !  volume_element = 0.0_rp
@@ -302,14 +303,14 @@ contains
 
   !> Destructor.
   subroutine entropy_viscosity_free(this)
-    class(entropy_viscosity_t), intent(inout) :: this
+    class(entropy_viscosity_incompressible_t), intent(inout) :: this
     call this%free_base()
   end subroutine entropy_viscosity_free
 
   !> Part of the entropy_viscosity computation before the time stepping.
   !! @param time The time state.
   subroutine entropy_viscosity_preprocess(this, time)
-    class(entropy_viscosity_t), intent(inout) :: this
+    class(entropy_viscosity_incompressible_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     integer :: i, n
 
@@ -369,7 +370,7 @@ contains
        ! Time lag part for the BDF scheme of dE/dt
        associate(wa_s_i => this%wa(i+1), &
                  coef => this%coef, &
-                 rho => this%scalars%scalar_fields(i)%rho, dt => time%dt, &
+                 rho => this%scalars%scalar_fields(i)%scalar%rho, dt => time%dt, &
                  makebdf => this%makebdf, E_s_i => this%E(i+1), &
                  Elag_s_i => this%Elag(i+1), ext_bdf => this%ext_bdf)
        ! Compute the entropy at the first time step
@@ -408,7 +409,7 @@ contains
   !> Part of the entropy_viscosity computation after the time stepping.
   !! @param time The time state.
   subroutine entropy_viscosity_compute(this, time)
-    class(entropy_viscosity_t), intent(inout) :: this
+    class(entropy_viscosity_incompressible_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: ta ! temporal array
     type(field_t), pointer :: fu
@@ -685,4 +686,4 @@ contains
 
   end subroutine entropy_viscosity_compute
 
-end module entropy_viscosity
+end module entropy_viscosity_incompressible

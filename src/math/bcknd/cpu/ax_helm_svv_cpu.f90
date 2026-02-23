@@ -117,9 +117,9 @@ contains
     real(kind=rp), intent(in) :: Dyt(lx,lx)
     real(kind=rp), intent(in) :: Dzt(lx,lx)
     real(kind=rp), intent(in) :: svv_h1(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: svv_Q(lx, lx), svv_Qt(lx, lx)
+    real(kind=rp), intent(inout) :: svv_Q(lx, lx), svv_Qt(lx, lx)
     character(len=*) :: svv_direction
-    real(kind=rp), intent(in) :: ident(lx, lx)
+    real(kind=rp), intent(inout) :: ident(lx, lx)
     real(kind=rp) :: ur_h
     real(kind=rp) :: us_h
     real(kind=rp) :: ut_h

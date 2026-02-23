@@ -35,7 +35,7 @@
 module spectral_vanishing_viscosity
   use num_types, only : rp
   use elementwise_filter, only: elementwise_filter_t
-  use field_registry, only : neko_field_registry
+  use registry, only : neko_registry
   use field, only : field_t, field_ptr_t
   use utils, only : neko_error, neko_type_error
   use json_module, only : json_file
@@ -135,8 +135,8 @@ contains
     case ("field")
        call json_get_or_default(json, "svv.nu.time_variable", this%tvar_h1, .true.)
        call json_get(json, "svv.nu.field_name", this%nue_field_name)
-       if (neko_field_registry%field_exists(this%nue_field_name)) then
-          this%nue => neko_field_registry%get_field(this%nue_field_name)
+       if (neko_registry%field_exists(this%nue_field_name)) then
+          this%nue => neko_registry%get_field(this%nue_field_name)
           if (NEKO_BCKND_DEVICE .eq. 1) then
              call device_copy(this%h1_d, this%nue%x_d, this%coef%dof%size())
           else
@@ -177,7 +177,7 @@ contains
     if (.not. this%tvar_h1) return
 
     if (tstep .eq. 1) then
-       this%nue => neko_field_registry%get_field(this%nue_field_name)
+       this%nue => neko_registry%get_field(this%nue_field_name)
     end if
 
     if (NEKO_BCKND_DEVICE .eq. 1) then

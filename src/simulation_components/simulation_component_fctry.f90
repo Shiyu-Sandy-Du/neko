@@ -48,7 +48,7 @@ submodule (simulation_component) simulation_component_fctry
   use divergence_simcomp, only : divergence_t
   use derivative_simcomp, only : derivative_t
   use spectral_error, only: spectral_error_t
-  use entropy_viscosity, only : entropy_viscosity_t
+  use entropy_viscosity_incompressible, only : entropy_viscosity_incompressible_t
   use utils, only : neko_type_error, neko_type_registration_error
   implicit none
 
@@ -142,7 +142,7 @@ contains
     case ("spectral_error")
        allocate(spectral_error_t::object)
     case ("entropy_viscosity")
-       allocate(entropy_viscosity_t::object)
+       allocate(entropy_viscosity_incompressible_t::object)
     case default
        do i = 1, simcomp_registry_size
           if (trim(type_name) == &

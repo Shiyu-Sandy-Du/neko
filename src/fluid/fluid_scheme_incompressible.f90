@@ -625,7 +625,7 @@ contains
        ! Add turbulent contribution
        call field_addcol3(this%mu_tot, nut, this%rho)
        if (len(trim(this%nue_field_name)) > 0) then
-          nue => neko_field_registry%get_field(this%nue_field_name)
+          nue => neko_registry%get_field(this%nue_field_name)
           ! Add entropy viscosity contribution
           call field_addcol3(this%mu_tot, nue, this%rho)
        end if
@@ -634,7 +634,7 @@ contains
           ! Copy material property
           call field_copy(this%mu_tot, this%mu)
           ! Add entropy viscosity contribution
-          nue => neko_field_registry%get_field(this%nue_field_name)
+          nue => neko_registry%get_field(this%nue_field_name)
           call field_addcol3(this%mu_tot, nue, this%rho)
        end if
     end if
