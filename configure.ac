@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([neko],[1.99.1])
+AC_INIT([neko],[1.99.3])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_MAINTAINER_MODE
 AC_CONFIG_MACRO_DIR([m4])
@@ -376,6 +376,7 @@ FCFLAGS="$FCFLAGS $NEKO_PKG_FCFLAGS"
 
 AC_CONFIG_FILES([Makefile\
         src/Makefile\
+        src/python/Makefile\
         tests/unit/Makefile\
         src/comm/comm.F90\
         src/config/neko_config.f90\
@@ -416,14 +417,15 @@ AC_CONFIG_FILES([tests/unit/stack/Makefile\
         tests/unit/octree/Makefile\
         tests/unit/vector/Makefile\
         tests/unit/matrix/Makefile\
+        tests/unit/case_file_utils/Makefile\
         tests/unit/scratch_registry/Makefile\
-        tests/unit/field_registry/Makefile\
-        tests/unit/vector_registry/Makefile\
+        tests/unit/registry/Makefile\
         tests/unit/fast3d/Makefile\
         tests/unit/time_scheme/Makefile\
         tests/unit/time_scheme_controller/Makefile\
         tests/unit/runge_kutta_scheme/Makefile\
         tests/unit/time_based_controller/Makefile\
+        tests/unit/json_utils/Makefile\
         tests/unit/point_interpolation/Makefile])
 
 if test "x${enable_contrib}" = xyes; then
@@ -444,4 +446,3 @@ fi
 AC_CONFIG_FILES([doc/Doxyfile doc/Makefile])
 
 AC_OUTPUT
-

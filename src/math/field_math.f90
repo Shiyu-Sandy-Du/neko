@@ -58,17 +58,17 @@
 ! not be used for advertising or product endorsement purposes.
 !
 module field_math
-  use neko_config, only: NEKO_BCKND_DEVICE
-  use num_types, only: rp
-  use field, only: field_t
+  use neko_config, only : NEKO_BCKND_DEVICE
+  use num_types, only : rp
+  use field, only : field_t
   use device, only : device_get_ptr
-  use math, only: rzero, rone, copy, cmult, cadd, cfill, invcol1, vdot3, add2, &
+  use math, only : rzero, rone, copy, cmult, cadd, cfill, invcol1, vdot3, add2, &
        add3, add4, sub2, sub3, add2s1, add2s2, addsqr2s2, cmult2, invcol2, &
        col2, col3, subcol3, add3s2, addcol3, addcol4, glsum, glsc2, glsc3, &
        masked_gather_copy_0, masked_scatter_copy_0, glsubnorm, invcol3, &
-       absval, cadd2, square_root, pwmax2, pwmax3, cpwmax2, cpwmax3, &
-       pwmin2, pwmin3, cpwmin2, cpwmin3, invcol2_nonzero
-  use device_math, only: device_rzero, device_rone, device_copy, device_cmult, &
+       pwmax2, pwmax3, cpwmax2, cpwmax3, pwmin2, pwmin3, cpwmin2, cpwmin3, &
+       absval, cadd2, square_root, invcol2_nonzero
+  use device_math, only : device_rzero, device_rone, device_copy, device_cmult, &
        device_cadd, device_cfill, device_invcol1, device_vdot3, device_add2, &
        device_add3, device_add4, device_sub2, device_sub3, device_add2s1, &
        device_add2s2, device_addsqr2s2, device_cmult2, device_invcol2, &
@@ -79,7 +79,7 @@ module field_math
        device_cadd2, device_square_root, device_pwmax2, device_pwmax3, &
        device_cpwmax2, device_cpwmax3, device_pwmin2, device_pwmin3, &
        device_cpwmin2, device_cpwmin3, device_invcol2_nonzero
-  use, intrinsic :: iso_c_binding, only: c_ptr
+  use, intrinsic :: iso_c_binding, only : c_ptr
   implicit none
   private
 

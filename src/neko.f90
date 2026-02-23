@@ -100,7 +100,7 @@ module neko
   use field_list, only : field_list_t
   use user_source_term, only : user_source_term_t
   use vector, only : vector_t, vector_ptr_t
-  use vector_registry, only : neko_vector_registry, vector_registry_t
+  use vector_list, only : vector_list_t
   use matrix, only : matrix_t
   use tensor
   use simulation_component, only : simulation_component_t, &
@@ -113,7 +113,7 @@ module neko
        profiler_start_region, profiler_end_region
   use system, only : system_cpu_name, system_cpuid
   use drag_torque, only : drag_torque_zone, drag_torque_facet, drag_torque_pt
-  use field_registry, only : neko_field_registry, field_registry_t
+  use registry, only : neko_registry, neko_const_registry, registry_t
   use scratch_registry, only : neko_scratch_registry, scratch_registry_t
   use simcomp_executor, only : neko_simcomps
   use data_streamer, only : data_streamer_t
@@ -152,8 +152,9 @@ module neko
 contains
 
   !> Initialise Neko
-  subroutine neko_init(C)
+  subroutine neko_init(C, filename)
     type(case_t), target, intent(inout), optional :: C
+    character(len=*), intent(in), optional :: filename
     character(len=NEKO_FNAME_LEN) :: case_file, args
     character(len=LOG_SIZE) :: log_buf
     character(len=10) :: suffix
@@ -169,25 +170,29 @@ contains
     call device_init
 
     call neko_log%init()
-    call neko_field_registry%init()
-    call neko_vector_registry%init()
+    call neko_registry%init()
+    call neko_const_registry%init()
     call neko_scratch_registry%init()
 
     call neko_log%header(NEKO_VERSION, NEKO_BUILD_INFO)
 
     if (present(C)) then
 
-       !
-       ! Command line arguments
-       !
-       argc = command_argument_count()
+       if (present(filename)) then
+          case_file = filename
+       else
+          !
+          ! Command line arguments
+          !
+          argc = command_argument_count()
 
-       if (argc .lt. 1) then
-          if (pe_rank .eq. 0) write(*,*) 'Usage: ./neko <case file>'
-          stop
+          if (argc .lt. 1) then
+             if (pe_rank .eq. 0) write(*,*) 'Usage: ./neko <case file>'
+             stop
+          end if
+
+          call get_command_argument(1, case_file)
        end if
-
-       call get_command_argument(1, case_file)
 
        call filename_suffix(case_file, suffix)
 
@@ -267,8 +272,10 @@ contains
        call C%free()
     end if
 
-    call neko_field_registry%free()
+    call neko_registry%free()
     call neko_user_access%free()
+    call neko_log%free()
+
     call device_finalize
     call neko_mpi_types_free
     call comm_free

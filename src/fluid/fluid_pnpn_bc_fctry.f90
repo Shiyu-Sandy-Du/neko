@@ -80,6 +80,13 @@ contains
     character(len=:), allocatable :: type
     integer :: i, j, k
     integer, allocatable :: zone_indices(:)
+    character(len=:), allocatable :: default_name
+    character(len=64) :: buf
+
+    if (associated(object)) then
+       call object%free()
+       nullify(object)
+    end if
 
     call json_get(json, "type", type)
 
@@ -106,12 +113,17 @@ contains
             FLUID_PNPN_KNOWN_BCS)
     end select
 
-    call json_get(json, "zone_indices", zone_indices)
+    call json_get_or_lookup(json, "zone_indices", zone_indices)
     call object%init(coef, json)
 
     do i = 1, size(zone_indices)
        call object%mark_zone(coef%msh%labeled_zones(zone_indices(i)))
     end do
+
+    write(buf,'("pressure_bc_",I0)') zone_indices(1)
+    default_name = trim(buf)
+    call json_get_or_default(json, "name", object%name, default_name)
+    object%zone_indices = zone_indices
     call object%finalize()
 
     ! All pressure bcs are currently strong, so for all of them we
@@ -125,6 +137,14 @@ contains
           end do
        end do
     end do
+
+    if (allocated(type)) then
+       deallocate(type)
+    end if
+
+    if (allocated(zone_indices)) then
+       deallocate(zone_indices)
+    end if
   end subroutine pressure_bc_factory
 
   !> Factory routine for velocity boundary conditions.
@@ -142,6 +162,8 @@ contains
     character(len=:), allocatable :: type
     integer :: i, j, k
     integer, allocatable :: zone_indices(:)
+    character(len=:), allocatable :: default_name
+    character(len=64) :: buf
 
     call json_get(json, "type", type)
 
@@ -178,11 +200,16 @@ contains
             FLUID_PNPN_KNOWN_BCS)
     end select
 
-    call json_get(json, "zone_indices", zone_indices)
+    call json_get_or_lookup(json, "zone_indices", zone_indices)
     call object%init(coef, json)
     do i = 1, size(zone_indices)
        call object%mark_zone(coef%msh%labeled_zones(zone_indices(i)))
     end do
+
+    write(buf,'("velocity_bc_",I0)') zone_indices(1)
+    default_name = trim(buf)
+    call json_get_or_default(json, "name", object%name, default_name)
+    object%zone_indices = zone_indices
     call object%finalize()
 
     ! Exclude these two because they are bcs for the residual, not velocity
@@ -197,6 +224,14 @@ contains
              end do
           end do
        end do
+    end if
+
+    if (allocated(type)) then
+       deallocate(type)
+    end if
+
+    if (allocated(zone_indices)) then
+       deallocate(zone_indices)
     end if
   end subroutine velocity_bc_factory
 
