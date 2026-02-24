@@ -82,7 +82,7 @@ module entropy_viscosity_incompressible
      character(len=:), allocatable :: residual_option
      !> The power coefficient for the elementwise filter
      logical :: sharp_cutoff
-     real(kind=rp) :: power_coef = 2.0_rp
+     real(kind=rp) :: power_coef = 1.5_rp
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
      logical :: if_filter = .false.
@@ -656,10 +656,9 @@ contains
 
        call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          tol = this%tol_coef * (device_glmax(E_true%x_d, n) - &
-                                 device_glmin(E_true%x_d, n))
+          tol = this%tol_coef * device_glmax(E_var%x_d, n)
        else
-          tol = this%tol_coef * (glmax(E_true%x, n) - glmin(E_true%x, n))
+          tol = this%tol_coef * glmax(E_var%x, n)
        end if 
 
        call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
