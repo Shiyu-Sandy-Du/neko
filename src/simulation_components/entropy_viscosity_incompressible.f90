@@ -59,7 +59,7 @@ module entropy_viscosity_incompressible
   use utils, only : neko_error
   use elementwise_filter, only : elementwise_filter_t
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
-                         field_cmult, field_sub2, field_col2, field_cadd2, &
+                         field_cmult, field_sub2, field_col2, field_cadd, &
                          field_invcol2, field_sqrt, field_add2, field_addcol3, &
                          field_invcol2_nonzero, field_add3, field_pwmin2
   use math, only : NEKO_EPS, invcol2, col2, glsum, glsc2, glmax, glmin
@@ -554,11 +554,15 @@ contains
 
     call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       tol = this%tol_coef * device_glmax(E_var%x_d,  n)
+       tol = this%tol_coef * device_glmax(E_var%x_d,  n) * this%tol_coef * device_glmax(E_var%x_d,  n)
     else
-       tol = this%tol_coef * glmax(E_var%x,  n)
+       tol = this%tol_coef * glmax(E_var%x,  n) * this%tol_coef * glmax(E_var%x,  n)
     end if 
-    call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
+    call field_col2(ta, ta)
+    call field_cadd(ta, tol)
+    call field_sqrt(ta)
+    call field_invcol2(entropy_viscosity_vel, ta)
+   !  call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
 
     call field_col2(entropy_viscosity_vel, this%h2)
     call field_pwmin2(entropy_viscosity_vel, ev_cap)
@@ -655,12 +659,15 @@ contains
 
        call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          tol = this%tol_coef * device_glmax(E_var%x_d, n)
+          tol = this%tol_coef * device_glmax(E_var%x_d, n) * this%tol_coef * device_glmax(E_var%x_d, n)
        else
-          tol = this%tol_coef * glmax(E_var%x, n)
+          tol = this%tol_coef * glmax(E_var%x, n) * this%tol_coef * glmax(E_var%x, n)
        end if 
-
-       call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
+       call field_col2(ta, ta)
+       call field_cadd(ta, tol)
+       call field_sqrt(ta)
+       call field_invcol2(entropy_viscosity_i, ta)
+      !  call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
 
        call field_col2(entropy_viscosity_i, this%h2)
        call field_pwmin2(entropy_viscosity_i, ev_cap)
