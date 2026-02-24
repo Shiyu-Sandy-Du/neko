@@ -554,10 +554,9 @@ contains
 
     call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       tol = this%tol_coef * (device_glmax(E_true%x_d, n) - &
-                              device_glmin(E_true%x_d, n))
+       tol = this%tol_coef * device_glmax(E_var%x_d,  n)
     else
-       tol = this%tol_coef * (glmax(E_true%x, n) - glmin(E_true%x, n))
+       tol = this%tol_coef * glmax(E_var%x,  n)
     end if 
     call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
 
