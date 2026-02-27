@@ -558,9 +558,10 @@ contains
     else
        tol = this%tol_coef * glmax(E_var%x,  n) * this%tol_coef * glmax(E_var%x,  n)
     end if 
+    call field_col2(entropy_viscosity_vel, ta)
     call field_col2(ta, ta)
     call field_cadd(ta, tol)
-    call field_sqrt(ta)
+   !  call field_sqrt(ta)
     call field_invcol2(entropy_viscosity_vel, ta)
    !  call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
 
@@ -663,9 +664,10 @@ contains
        else
           tol = this%tol_coef * glmax(E_var%x, n) * this%tol_coef * glmax(E_var%x, n)
        end if 
+       call field_col2(entropy_viscosity_i, ta)
        call field_col2(ta, ta)
        call field_cadd(ta, tol)
-       call field_sqrt(ta)
+      !  call field_sqrt(ta)
        call field_invcol2(entropy_viscosity_i, ta)
       !  call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
 
