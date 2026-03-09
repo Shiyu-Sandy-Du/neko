@@ -299,6 +299,7 @@ contains
 
     call json_get_or_default(params, "case.fluid.cyclic", this%c_Xh%cyclic, &
          .false.)
+    call this%c_Xh%check_cyclic()
 
     if (this%full_stress_formulation) then
        ! Setup backend dependent Ax routines
@@ -587,6 +588,9 @@ contains
     call this%bc_prs_surface%free()
     call this%bc_sym_surface%free()
     call this%bclst_vel_res%free()
+    call this%bclst_du%free()
+    call this%bclst_dv%free()
+    call this%bclst_dw%free()
     call this%bclst_dp%free()
     call this%proj_prs%free()
     call this%proj_vel%free()
