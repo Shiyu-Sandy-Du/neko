@@ -137,37 +137,49 @@ contains
     integer :: e, i, j, k, l
 
     do e = 1, n
-       do j = 1, lx * lx
-          do i = 1, lx
-             tmp = 0.0_rp
-             do k = 1, lx
-                tmp = tmp + Dx(i,k) * u(k,j,1,e)
-             end do
-             wur(i,j,1) = tmp
-          end do
-       end do
-
-       do k = 1, lx
-          do j = 1, lx
+       if (index(svv_direction, "r") > 0) then
+          do j = 1, lx * lx
              do i = 1, lx
                 tmp = 0.0_rp
-                do l = 1, lx
-                   tmp = tmp + Dy(j,l) * u(i,l,k,e)
+                do k = 1, lx
+                   tmp = tmp + Dx(i,k) * u(k,j,1,e)
                 end do
-                wus(i,j,k) = tmp
+                wur(i,j,1) = tmp
              end do
           end do
-       end do
+       else
+          wur(:,:,:) = 0.0_rp
+       end if
 
-       do k = 1, lx
-          do i = 1, lx*lx
-             tmp = 0.0_rp
-             do l = 1, lx
-                tmp = tmp + Dz(k,l) * u(i,1,l,e)
+       if (index(svv_direction, "s") > 0) then
+          do k = 1, lx
+             do j = 1, lx
+                do i = 1, lx
+                   tmp = 0.0_rp
+                   do l = 1, lx
+                      tmp = tmp + Dy(j,l) * u(i,l,k,e)
+                   end do
+                   wus(i,j,k) = tmp
+                end do
              end do
-             wut(i,1,k) = tmp
           end do
-       end do
+       else
+          wus(:,:,:) = 0.0_rp
+       end if
+
+       if (index(svv_direction, "t") > 0) then
+          do k = 1, lx
+             do i = 1, lx*lx
+                tmp = 0.0_rp
+                do l = 1, lx
+                   tmp = tmp + Dz(k,l) * u(i,1,l,e)
+                end do
+                wut(i,1,k) = tmp
+             end do
+          end do
+       else
+          wut(:,:,:) = 0.0_rp
+       end if
 
        do i = 1, lx*lx*lx
           u1(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
@@ -237,37 +249,44 @@ contains
                      + dtdz(i,1,1,e) * ut_h
        end do
 
-       do j = 1, lx*lx
-          do i = 1, lx
-             tmp = 0.0_rp
-             do k = 1, lx
-                tmp = tmp + Dxt(i,k) * wur(k,j,1)
-             end do
-             w(i,j,1,e) = tmp
-          end do
-       end do
-
-       do k = 1, lx
-          do j = 1, lx
+       w(:,:,:,e) = 0.0_rp
+       if (index(svv_direction, "r") > 0) then
+          do j = 1, lx*lx
              do i = 1, lx
                 tmp = 0.0_rp
-                do l = 1, lx
-                   tmp = tmp + Dyt(j,l) * wus(i,l,k)
+                do k = 1, lx
+                   tmp = tmp + Dxt(i,k) * wur(k,j,1)
                 end do
-                w(i,j,k,e) = w(i,j,k,e) + tmp
+                w(i,j,1,e) = tmp
              end do
           end do
-       end do
+       end if
 
-       do k = 1, lx
-          do i = 1, lx*lx
-             tmp = 0.0_rp
-             do l = 1, lx
-                tmp = tmp + Dzt(k,l) * wut(i,1,l)
+       if (index(svv_direction, "s") > 0) then
+          do k = 1, lx
+             do j = 1, lx
+                do i = 1, lx
+                   tmp = 0.0_rp
+                   do l = 1, lx
+                      tmp = tmp + Dyt(j,l) * wus(i,l,k)
+                   end do
+                   w(i,j,k,e) = w(i,j,k,e) + tmp
+                end do
              end do
-             w(i,1,k,e) = w(i,1,k,e) + tmp
           end do
-       end do
+       end if
+
+       if (index(svv_direction, "t") > 0) then
+          do k = 1, lx
+             do i = 1, lx*lx
+                tmp = 0.0_rp
+                do l = 1, lx
+                   tmp = tmp + Dzt(k,l) * wut(i,1,l)
+                end do
+                w(i,1,k,e) = w(i,1,k,e) + tmp
+             end do
+          end do
+       end if
 
     end do
   end subroutine ax_helm_svv_lx
