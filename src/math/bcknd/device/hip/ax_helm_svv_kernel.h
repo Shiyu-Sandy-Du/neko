@@ -295,6 +295,7 @@ __global__ void __launch_bounds__(LX*LX,3)
 
   const int e = blockIdx.x;
   const int i = threadIdx.x;
+  const int j = threadIdx.y;
   const int ij = i + j*LX;
   const int ele = e*LX*LX*LX;
 
@@ -419,6 +420,7 @@ __global__ void __launch_bounds__(LX*LX,3)
 
   const int e = blockIdx.x;
   const int i = threadIdx.x;
+  const int j = threadIdx.y;
   const int ij = i + j*LX;
   const int ele = e*LX*LX*LX;
 
@@ -475,6 +477,7 @@ __global__ void __launch_bounds__(LX*LX,3)
 
   const int e = blockIdx.x;
   const int i = threadIdx.x;
+  const int j = threadIdx.y;
   const int ij = i + j*LX;
   const int ele = e*LX*LX*LX;
 
