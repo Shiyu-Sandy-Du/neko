@@ -194,35 +194,36 @@ contains
        end do
 
        ! spatial convolution for spectral vanishing (low pass filter (LPF))
-       if (svv_direction .eq. "rst") then
+       select case(svv_direction)
+       case ("rst")
           call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, svv_Qt)
           call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, svv_Qt)
           call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, svv_Qt)
-       else if (svv_direction .eq. "rs") then
+       case ("rs")
           call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, ident)
           call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, ident)
           call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, ident)
-       else if (svv_direction .eq. "rt") then
+       case ("rt")
           call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, svv_Qt)
           call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, svv_Qt)
           call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, svv_Qt)
-       else if (svv_direction .eq. "st") then
+       case ("st")
           call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, svv_Qt)
           call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, svv_Qt)
           call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, svv_Qt)
-       else if (svv_direction .eq. "r") then
+       case ("r")
           call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, ident)
           call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, ident)
           call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, ident)
-       else if (svv_direction .eq. "s") then
+       case ("s")
           call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, ident)
           call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, ident)
           call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, ident)
-       else if (svv_direction .eq. "t") then
+       case ("t")
           call tnsr3d_el(u1_svv, lx, u1, lx, ident, ident, svv_Qt)
           call tnsr3d_el(u2_svv, lx, u2, lx, ident, ident, svv_Qt)
           call tnsr3d_el(u3_svv, lx, u3, lx, ident, ident, svv_Qt)
-       end if
+       end select
 
        do i = 1, lx*lx*lx
           ! high pass filter from the LPF result
@@ -238,15 +239,21 @@ contains
           ut_h = (svv_h1(i,1,1,e) * u3_svv(i,1,1) + &
                         h1(i,1,1,e) * u3(i,1,1)) * weights3(i,1,1)
           ! utilize wur, wus, wut as work arrays again
-          wur(i,1,1) = drdx(i,1,1,e) * ur_h &
-                     + drdy(i,1,1,e) * us_h &
-                     + drdz(i,1,1,e) * ut_h
-          wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
-                     + dsdy(i,1,1,e) * us_h &
-                     + dsdz(i,1,1,e) * ut_h
-          wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
-                     + dtdy(i,1,1,e) * us_h &
-                     + dtdz(i,1,1,e) * ut_h
+          if (index(svv_direction, "r") > 0) then
+             wur(i,1,1) = drdx(i,1,1,e) * ur_h &
+                        + drdy(i,1,1,e) * us_h &
+                        + drdz(i,1,1,e) * ut_h
+          end if
+          if (index(svv_direction, "s") > 0) then
+             wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
+                        + dsdy(i,1,1,e) * us_h &
+                        + dsdz(i,1,1,e) * ut_h
+          end if
+          if (index(svv_direction, "t") > 0) then
+             wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
+                        + dtdy(i,1,1,e) * us_h &
+                        + dtdz(i,1,1,e) * ut_h
+          end if
        end do
 
        w(:,:,:,e) = 0.0_rp
