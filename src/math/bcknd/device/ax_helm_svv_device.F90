@@ -108,7 +108,7 @@ module ax_helm_svv_device
        use, intrinsic :: iso_c_binding
        type(c_ptr), value :: ur_d, us_d, ut_d
        type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dy_d, dz_d
+       type(c_ptr), value :: dx_d, dz_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
        type(c_ptr), value :: jacinv_d
@@ -668,7 +668,7 @@ contains
     case ("rt")
        call hip_ax_helm_svv_part1_rt(ur_d, us_d, ut_d, &
             u_d, &
-            Xh%dx_d, Xh%dt_d, &
+            Xh%dx_d, Xh%dz_d, &
             coef%drdx_d, coef%drdy_d, coef%drdz_d, &
             coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
             coef%jacinv_d, &

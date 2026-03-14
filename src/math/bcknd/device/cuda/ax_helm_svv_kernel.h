@@ -505,7 +505,6 @@ __global__ void __launch_bounds__(LX*LX,3)
     }
     __syncthreads();
 
-#pragma unroll
     ur[ijk + ele] = dj * (uttmp * dtdx_local);
     us[ijk + ele] = dj * (uttmp * dtdy_local);
     ut[ijk + ele] = dj * (uttmp * dtdz_local);    
@@ -987,7 +986,6 @@ __global__ void __launch_bounds__(LX*LX,3)
     }
     __syncthreads();
 
-#pragma unroll
     ur[ijk + ele] = dj * (uttmp * dtdx_local);
     us[ijk + ele] = dj * (uttmp * dtdy_local);
     ut[ijk + ele] = dj * (uttmp * dtdz_local);
