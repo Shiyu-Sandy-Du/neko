@@ -131,7 +131,7 @@ module scalar_scheme
      !> Field list with cp and lambda
      type(field_list_t) :: material_properties
      !> Is SVV enabled?
-     logical :: svv_enabled
+     logical :: svv_enabled = .false.
      type(svv_t) :: svv
      procedure(user_material_properties_intf), nopass, pointer :: &
           user_material_properties => null()
