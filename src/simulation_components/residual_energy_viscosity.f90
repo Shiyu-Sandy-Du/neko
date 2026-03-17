@@ -31,10 +31,10 @@
 ! POSSIBILITY OF SUCH DAMAGE.
 !
 !
-!> A simulation component that computes entropy_viscosity
-!! The values are stored in the field registry under the name 'entropy_viscosity'
+!> A simulation component that computes RE_viscosity
+!! The values are stored in the field registry under the name 'RE_viscosity'
 
-module entropy_viscosity_incompressible
+module residual_energy_viscosity
   use neko_config, only : NEKO_BCKND_DEVICE
   use device, only : device_memcpy
   use num_types, only : rp
@@ -72,17 +72,12 @@ module entropy_viscosity_incompressible
   private
 
   type, public, extends(simulation_component_t) :: &
-                  entropy_viscosity_incompressible_t
+                  residual_energy_viscosity_t
      !> coefficient
-     real(kind=rp) :: c_E
+     real(kind=rp) :: c_R
      !> Upper bound coefficient
      real(kind=rp) :: c_max
      type(field_t) :: h_k 
-     !> The option for the quantity on which residual is computed
-     character(len=:), allocatable :: residual_option
-     !> The power coefficient for the elementwise filter
-     logical :: sharp_cutoff
-     real(kind=rp) :: power_coef = 1.5_rp
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
      logical :: if_filter = .false.
@@ -97,6 +92,8 @@ module entropy_viscosity_incompressible
      !> Scalar field
      integer :: n_scalars = 0
      type(field_ptr_t), allocatable :: s(:)
+     !> Residual energy:
+     !! here is the one with out 1/2 since it will canceled by scaling
      type(field_t), allocatable :: E(:)
      type(field_series_t), allocatable :: Elag(:)
      !> coef
@@ -104,18 +101,18 @@ module entropy_viscosity_incompressible
      !> Some field to be used
      type(field_t) :: h2
 
-     !> Tolerance coefficient for a minimum entropy fluctuation level
+     !> Tolerance coefficient for a minimum residual energy fluctuation level
      !! with respect to the maximum fluctuation in the whole domain
      real(kind=rp) :: tol_coef
 
-     !> entropy_viscosity fields.
-     type(field_ptr_t), allocatable :: entropy_viscosity(:)
+     !> RE_viscosity fields.
+     type(field_ptr_t), allocatable :: RE_viscosity(:)
 
      !> Residual.
-     type(field_ptr_t), allocatable :: D(:)
+     type(field_ptr_t), allocatable :: R(:)
 
      !> Upper bound
-     type(field_ptr_t), allocatable :: ev_cap ! ws for wave speed
+     type(field_ptr_t), allocatable :: rev_cap ! ws for wave speed
 
      !> Output writer.
      type(field_writer_t) :: writer
@@ -131,49 +128,37 @@ module entropy_viscosity_incompressible
 
    contains
      !> Constructor from json.
-     procedure, pass(this) :: init => entropy_viscosity_init_from_json
+     procedure, pass(this) :: init => RE_viscosity_init_from_json
      !> Common part of both constructors.
-     procedure, private, pass(this) :: init_common => entropy_viscosity_init_common
+     procedure, private, pass(this) :: init_common => RE_viscosity_init_common
      !> Destructor.
-     procedure, pass(this) :: free => entropy_viscosity_free
+     procedure, pass(this) :: free => RE_viscosity_free
      !> Part of the residual viscosity computation before the time stepping
-     procedure, pass(this) :: preprocess_ => entropy_viscosity_preprocess
+     procedure, pass(this) :: preprocess_ => RE_viscosity_preprocess
      !> Part of the residual viscosity computation after the time stepping
-     procedure, pass(this) :: compute_ => entropy_viscosity_compute
-  end type entropy_viscosity_incompressible_t
+     procedure, pass(this) :: compute_ => RE_viscosity_compute
+  end type residual_energy_viscosity_t
 
 contains
 
   !> Constructor from json.
-  subroutine entropy_viscosity_init_from_json(this, json, case)
-    class(entropy_viscosity_incompressible_t), intent(inout), target :: this
+  subroutine RE_viscosity_init_from_json(this, json, case)
+    class(residual_energy_viscosity_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
-    character(len=:), allocatable :: residual_option
 
     call this%init_base(json, case)
     
-    call json_get(json, "c_E", this%c_E)
+    call json_get(json, "c_R", this%c_R)
     call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-2_rp)
     call json_get_or_default(json, "c_max", this%c_max, 0.5_rp)
 
-    ! Choose the quantity on which the residual is computed
-    call json_get(json, "residual_option", residual_option)
-    this%residual_option = trim(residual_option)
-    select case(this%residual_option)
-    case ("entropy")
-    case ("solution")
-    case default
-       call neko_error("invalid input for residual_option for &
-                       &residual-based viscosity")
-    end select
-
     call this%init_common(json, case)
-  end subroutine entropy_viscosity_init_from_json
+  end subroutine RE_viscosity_init_from_json
 
   !> Common part of constructors.
-  subroutine entropy_viscosity_init_common(this, json, case)
-    class(entropy_viscosity_incompressible_t), intent(inout) :: this
+  subroutine RE_viscosity_init_common(this, json, case)
+    class(residual_energy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target ::case
     character(len=20), allocatable :: fields(:)
@@ -187,16 +172,16 @@ contains
        this%n_scalars = 0
     end if
     allocate(fields(1+2*(1+this%n_scalars)))
-    fields(1) = 'entr_visc_vel'
-    fields(2) = 'entr_res_vel'
+    fields(1) = 'rke_visc_vel'
+    fields(2) = 'rke_res_vel'
     do k = 1, this%n_scalars
-       write(fields(2*k+1), '(A,I0)') 'entr_visc_s', k
-       write(fields(2*k+2), '(A,I0)') 'entr_res_s', k
+       write(fields(2*k+1), '(A,I0)') 're_visc_s', k
+       write(fields(2*k+2), '(A,I0)') 're_res_s', k
     end do
-    fields(1+2*(1+this%n_scalars)) = 'max_entr_visc'
+    fields(1+2*(1+this%n_scalars)) = 'max_re_visc'
 
     ! Add fields keyword to the json so that the field_writer picks it up.
-    ! Will also add fields to 	simulation_components/entropy_viscosity.f90\the registry.
+    ! Will also add fields to 	simulation_components/RE_viscosity.f90\the registry.
     call json%add("fields", fields)
     call this%writer%init(json, case)
 
@@ -206,20 +191,6 @@ contains
     if (json%valid_path("filter")) then
        this%if_filter = .true.
        call this%filter%init(json, this%coef)
-       call json_get_or_default(json, "filter_sharp_cutoff", &
-                                this%sharp_cutoff, .false.)
-       if (this%sharp_cutoff) then
-          ! filter out the highest order mode
-          this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp 
-       else
-          ! give the weight of around 0.1 to the second highest mode
-          do k = 1, this%coef%Xh%lx
-             this%filter%transfer(k) = &
-                  ((k - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
-                  ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
-             this%filter%transfer(k) = 1.0_rp - this%filter%transfer(k)
-          end do
-       end if
        call this%filter%build_1d()
     end if
 
@@ -231,7 +202,7 @@ contains
       this%ext_bdf => f1%ext_bdf
       this%adv => f1%adv
     class default
-      call neko_error("For fluid, entropy &
+      call neko_error("For fluid, residual energy &
       &viscosity currently only support pnpn scheme")
     end select
 
@@ -251,19 +222,19 @@ contains
     allocate(this%Elag(1+this%n_scalars))
     allocate(this%wa(1+this%n_scalars))
 
-    allocate(this%D(1+this%n_scalars))
+    allocate(this%R(1+this%n_scalars))
     
-    allocate(this%entropy_viscosity(1+this%n_scalars))
-    allocate(this%ev_cap)
+    allocate(this%RE_viscosity(1+this%n_scalars))
+    allocate(this%rev_cap)
 
     do k = 1, 1+this%n_scalars
-       this%entropy_viscosity(k)%ptr => &
+       this%RE_viscosity(k)%ptr => &
               neko_registry%get_field(fields(2*k-1))
-       this%D(k)%ptr => &
+       this%R(k)%ptr => &
               neko_registry%get_field(fields(2*k))
 
-       call field_rzero(this%entropy_viscosity(k)%ptr)
-       call field_rzero(this%D(k)%ptr)
+       call field_rzero(this%RE_viscosity(k)%ptr)
+       call field_rzero(this%R(k)%ptr)
 
        call this%E(k)%init(this%u%dof)
        call this%Elag(k)%init(this%E(k), 2)
@@ -273,7 +244,7 @@ contains
           this%s(k)%ptr => this%scalars%scalar_fields(k)%scalar%s
        end if
     end do
-    this%ev_cap%ptr => &
+    this%rev_cap%ptr => &
               neko_registry%get_field(fields(1+2*(1+this%n_scalars)))
 
     do e = 1, this%coef%msh%nelv
@@ -299,18 +270,18 @@ contains
                              HOST_TO_DEVICE, sync = .false.)
     end if
 
-  end subroutine entropy_viscosity_init_common
+  end subroutine RE_viscosity_init_common
 
   !> Destructor.
-  subroutine entropy_viscosity_free(this)
-    class(entropy_viscosity_incompressible_t), intent(inout) :: this
+  subroutine RE_viscosity_free(this)
+    class(residual_energy_viscosity_t), intent(inout) :: this
     call this%free_base()
-  end subroutine entropy_viscosity_free
+  end subroutine RE_viscosity_free
 
-  !> Part of the entropy_viscosity computation before the time stepping.
+  !> Part of the RE_viscosity computation before the time stepping.
   !! @param time The time state.
-  subroutine entropy_viscosity_preprocess(this, time)
-    class(entropy_viscosity_incompressible_t), intent(inout) :: this
+  subroutine RE_viscosity_preprocess(this, time)
+    class(residual_energy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     integer :: i, n
 
@@ -324,7 +295,7 @@ contains
 
      n = wa_vel%dof%size()
      
-     ! Compute the entropy at the first time step
+     ! Compute the residual energy at the first time step
      if (time%tstep .eq. 1) then
         call field_rzero(E_vel)
         if (this%if_filter) then
@@ -373,7 +344,7 @@ contains
                  rho => this%scalars%scalar_fields(i)%scalar%rho, dt => time%dt, &
                  makebdf => this%makebdf, E_s_i => this%E(i+1), &
                  Elag_s_i => this%Elag(i+1), ext_bdf => this%ext_bdf)
-       ! Compute the entropy at the first time step
+       ! Compute the residual energy at the first time step
        if (time%tstep .eq. 1) then
           if (this%if_filter) then
              call this%filter%apply(wa_s_i, this%s(i)%ptr)
@@ -404,12 +375,12 @@ contains
        end associate
     end do
 
-  end subroutine entropy_viscosity_preprocess
+  end subroutine RE_viscosity_preprocess
 
-  !> Part of the entropy_viscosity computation after the time stepping.
+  !> Part of the RE_viscosity computation after the time stepping.
   !! @param time The time state.
-  subroutine entropy_viscosity_compute(this, time)
-    class(entropy_viscosity_incompressible_t), intent(inout) :: this
+  subroutine RE_viscosity_compute(this, time)
+    class(residual_energy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: ta ! temporal array
     type(field_t), pointer :: fu
@@ -457,11 +428,11 @@ contains
     associate(u => this%u, v => this%v, w => this%w, E_vel => this%E(1), &
              ext_bdf => this%ext_bdf, &
              dt => time%dt, coef => this%coef, wa_vel => this%wa(1), &
-             D_vel => this%D(1)%ptr, gs => this%coef%gs_h, &
+             R_vel => this%R(1)%ptr, gs => this%coef%gs_h, &
              adv => this%adv, &
              Xh => this%coef%Xh, &
-             ev_cap => this%ev_cap%ptr, &
-             entropy_viscosity_vel => this%entropy_viscosity(1)%ptr)
+             rev_cap => this%rev_cap%ptr, &
+             RE_viscosity_vel => this%RE_viscosity(1)%ptr)
 
     n = u%dof%size()
 
@@ -472,7 +443,7 @@ contains
       call field_addcol3(ta, v, v)
       call field_addcol3(ta, w, w)
       call field_sqrt(ta)
-      call maxnorm_3d(ev_cap%x, ta%x, coef%Xh%lx, coef%msh%nelv)
+      call maxnorm_3d(rev_cap%x, ta%x, coef%Xh%lx, coef%msh%nelv)
       call this%filter%apply(fu, ta)
       call field_sub2(fu, ta)
       call gs%op(fu, GS_OP_ADD)
@@ -491,18 +462,18 @@ contains
       call field_col3(ta, w, w)
       call field_add2(E_vel, ta)
       call field_sqrt(E_vel)
-      call maxnorm_3d(ev_cap%x, E_vel%x, coef%Xh%lx, coef%msh%nelv)
+      call maxnorm_3d(rev_cap%x, E_vel%x, coef%Xh%lx, coef%msh%nelv)
     end if
 
-    call field_col2(ev_cap, this%h_k)
-    ! now ev_cap is a work array for the upper bound of the viscosity
-    call field_cmult(ev_cap, this%c_max)
+    call field_col2(rev_cap, this%h_k)
+    ! now rev_cap is a work array for the upper bound of the viscosity
+    call field_cmult(rev_cap, this%c_max)
 
     ! temporal derivative
     call field_copy(ta, E_vel)
     call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
     call field_sub2(ta, wa_vel)
-    call field_copy(D_vel, ta)
+    call field_copy(R_vel, ta)
 
     ! advection part
     call field_rzero(ta)
@@ -519,26 +490,17 @@ contains
    !  else
    !     call col2(ta%x, coef%mult, n)
    !  end if
-    call field_sub2(D_vel, ta, n)
+    call field_sub2(R_vel, ta, n)
    
-    if (this%residual_option .eq. "entropy") then
-       ! multiply 2 and the filtered field itself to get the real residual
-       call field_col2(D_vel, fu)
-       call field_cmult(D_vel, 2.0_rp)
-    end if
+    ! multiply 2 and the filtered field itself to get the real residual
+    call field_col2(R_vel, fu)
+    call field_cmult(R_vel, 2.0_rp)
     
-    call field_copy(entropy_viscosity_vel, D_vel)
-    call field_absval(entropy_viscosity_vel)
+    call field_copy(RE_viscosity_vel, R_vel)
+    call field_absval(RE_viscosity_vel)
 
-    if (this%residual_option .eq. "entropy") then
-       ! Correct E_vel to be fu^2
-       call field_col3(E_true, E_vel, E_vel)
-    else if (this%residual_option .eq. "solution") then
-       call field_copy(E_true, E_vel)
-    else
-       call neko_error("invalid input for residual_option for residual-based &
-               &viscosity")
-    end if
+    ! Correct E_vel to be fu^2
+    call field_col3(E_true, E_vel, E_vel)
 
     call dottnsr_3d(E_avg_field%x, E_true%x, &
          coef%B, coef%Xh%lx, coef%msh%nelv)
@@ -549,8 +511,8 @@ contains
     call field_add3(E_var, E_true, E_avg_field)
     call field_absval(E_var)
 
-    call field_cmult(entropy_viscosity_vel, &
-         this%c_E)
+    call field_cmult(RE_viscosity_vel, &
+         this%c_R)
 
     call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -558,21 +520,21 @@ contains
     else
        tol = this%tol_coef * glmax(E_var%x,  n) * this%tol_coef * glmax(E_var%x,  n)
     end if 
-    call field_col2(entropy_viscosity_vel, ta)
+    call field_col2(RE_viscosity_vel, ta)
     call field_col2(ta, ta)
     call field_cadd(ta, tol)
    !  call field_sqrt(ta)
-    call field_invcol2(entropy_viscosity_vel, ta)
-   !  call field_invcol2_nonzero(entropy_viscosity_vel, ta, tol)
+    call field_invcol2(RE_viscosity_vel, ta)
+   !  call field_invcol2_nonzero(RE_viscosity_vel, ta, tol)
 
-    call field_col2(entropy_viscosity_vel, this%h2)
-    call field_pwmin2(entropy_viscosity_vel, ev_cap)
+    call field_col2(RE_viscosity_vel, this%h2)
+    call field_pwmin2(RE_viscosity_vel, rev_cap)
 
-    call gs%op(entropy_viscosity_vel, GS_OP_ADD)
+    call gs%op(RE_viscosity_vel, GS_OP_ADD)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_col2(entropy_viscosity_vel%x_d, coef%mult_d, n)
+       call device_col2(RE_viscosity_vel%x_d, coef%mult_d, n)
     else
-       call col2(entropy_viscosity_vel%x, coef%mult, n)
+       call col2(RE_viscosity_vel%x, coef%mult, n)
     end if
 
    end associate
@@ -582,11 +544,11 @@ contains
        associate(s_i => this%s(i)%ptr, E_s_i => this%E(i+1), &
                  ext_bdf => this%ext_bdf, &
                  dt => time%dt, coef => this%coef, wa_s_i => this%wa(i+1), &
-                 D_s_i => this%D(i+1)%ptr, gs => this%coef%gs_h, &
+                 R_s_i => this%R(i+1)%ptr, gs => this%coef%gs_h, &
                  adv => this%adv, &
                  u => this%u, v => this%v, w => this%w, Xh => this%coef%Xh, &
-                 ev_cap => this%ev_cap%ptr, &
-                 entropy_viscosity_i => this%entropy_viscosity(i+1)%ptr)
+                 rev_cap => this%rev_cap%ptr, &
+                 RE_viscosity_i => this%RE_viscosity(i+1)%ptr)
 
        n = s_i%dof%size()
 
@@ -608,7 +570,7 @@ contains
        call field_copy(ta, E_s_i)
        call field_cmult(ta, ext_bdf%diffusion_coeffs(1)/dt)
        call field_sub2(ta, wa_s_i)
-       call field_copy(D_s_i, ta)
+       call field_copy(R_s_i, ta)
 
        ! advection part
        call field_rzero(ta, n)
@@ -625,26 +587,17 @@ contains
       !  else
       !     call col2(ta%x, coef%mult, n)
       !  end if
-       call field_sub2(D_s_i, ta, n)
+       call field_sub2(R_s_i, ta, n)
        
-       if (this%residual_option .eq. "entropy") then
-          ! multiply 2 and the filtered field itself to get the real residual
-          call field_col2(D_s_i, fu)
-          call field_cmult(D_s_i, 2.0_rp)
-       end if
+       ! multiply 2 and the filtered field itself to get the real residual
+       call field_col2(R_s_i, fu)
+       call field_cmult(R_s_i, 2.0_rp)
 
-       call field_copy(entropy_viscosity_i, D_s_i)
-       call field_absval(entropy_viscosity_i)
+       call field_copy(RE_viscosity_i, R_s_i)
+       call field_absval(RE_viscosity_i)
 
-       if (this%residual_option .eq. "entropy") then
-          ! Correct E_vel to be fs^2
-          call field_col3(E_true, E_s_i, E_s_i)
-       else if (this%residual_option .eq. "solution") then
-          call field_copy(E_true, E_s_i)
-       else
-          call neko_error("invalid input for residual_option for residual-based &
-                          &viscosity")
-       end if
+       ! Correct E_vel to be fs^2
+       call field_col3(E_true, E_s_i, E_s_i)
 
        call dottnsr_3d(E_avg_field%x, E_true%x, &
             coef%B, coef%Xh%lx, coef%msh%nelv)
@@ -655,8 +608,8 @@ contains
        call field_add3(E_var, E_true, E_avg_field)
        call field_absval(E_var)
 
-       call field_cmult(entropy_viscosity_i, &
-            this%c_E)
+       call field_cmult(RE_viscosity_i, &
+            this%c_R)
 
        call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
        if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -664,21 +617,21 @@ contains
        else
           tol = this%tol_coef * glmax(E_var%x, n) * this%tol_coef * glmax(E_var%x, n)
        end if 
-       call field_col2(entropy_viscosity_i, ta)
+       call field_col2(RE_viscosity_i, ta)
        call field_col2(ta, ta)
        call field_cadd(ta, tol)
       !  call field_sqrt(ta)
-       call field_invcol2(entropy_viscosity_i, ta)
-      !  call field_invcol2_nonzero(entropy_viscosity_i, ta, tol)
+       call field_invcol2(RE_viscosity_i, ta)
+      !  call field_invcol2_nonzero(RE_viscosity_i, ta, tol)
 
-       call field_col2(entropy_viscosity_i, this%h2)
-       call field_pwmin2(entropy_viscosity_i, ev_cap)
+       call field_col2(RE_viscosity_i, this%h2)
+       call field_pwmin2(RE_viscosity_i, rev_cap)
 
-       call gs%op(entropy_viscosity_i, GS_OP_ADD)
+       call gs%op(RE_viscosity_i, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(entropy_viscosity_i%x_d, coef%mult_d, n)
+          call device_col2(RE_viscosity_i%x_d, coef%mult_d, n)
        else
-          call col2(entropy_viscosity_i%x, coef%mult, n)
+          call col2(RE_viscosity_i%x, coef%mult, n)
        end if
 
        end associate
@@ -691,6 +644,6 @@ contains
     call neko_scratch_registry%relinquish_field(E_avg_index)
     call neko_scratch_registry%relinquish_field(B_elem_index)
 
-  end subroutine entropy_viscosity_compute
+  end subroutine RE_viscosity_compute
 
-end module entropy_viscosity_incompressible
+end module residual_energy_viscosity

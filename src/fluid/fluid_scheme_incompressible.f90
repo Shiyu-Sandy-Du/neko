@@ -102,9 +102,6 @@ module fluid_scheme_incompressible
      !> The turbulent kinematic viscosity field name
      character(len=:), allocatable :: nut_field_name
 
-     !> The stabilization viscosity field name
-     character(len=:), allocatable :: nue_field_name
-
      ! The total viscosity field
      type(field_t), pointer :: mu_tot => null()
 
@@ -613,7 +610,7 @@ contains
   subroutine fluid_scheme_update_material_properties(this, time)
     class(fluid_scheme_incompressible_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    type(field_t), pointer :: nut, nue
+    type(field_t), pointer :: nut
 
     call this%user_material_properties(this%name, this%material_properties, &
          time)
@@ -624,19 +621,6 @@ contains
        call field_copy(this%mu_tot, this%mu)
        ! Add turbulent contribution
        call field_addcol3(this%mu_tot, nut, this%rho)
-       if (len(trim(this%nue_field_name)) > 0) then
-          nue => neko_registry%get_field(this%nue_field_name)
-          ! Add entropy viscosity contribution
-          call field_addcol3(this%mu_tot, nue, this%rho)
-       end if
-    else
-       if (len(trim(this%nue_field_name)) > 0) then
-          ! Copy material property
-          call field_copy(this%mu_tot, this%mu)
-          ! Add entropy viscosity contribution
-          nue => neko_registry%get_field(this%nue_field_name)
-          call field_addcol3(this%mu_tot, nue, this%rho)
-       end if
     end if
 
     ! Since mu, rho is a field_t, and we use the %x(1,1,1,1)

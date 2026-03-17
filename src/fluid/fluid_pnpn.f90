@@ -192,9 +192,6 @@ module fluid_pnpn
      !> Whether to use the full formulation of the viscous stress term
      logical :: full_stress_formulation = .false.
 
-     !> Whether to use the entropy viscosity stabilization
-     logical :: entr_visc = .false.
-
    contains
      !> Constructor.
      procedure, pass(this) :: init => fluid_pnpn_init
@@ -285,17 +282,6 @@ contains
 
     call json_get_or_default(params, "case.fluid.full_stress_formulation", &
          this%full_stress_formulation, .false.)
-    call json_get_or_default(params, "case.fluid.entropy_viscosity", &
-         this%entr_visc, .false.)
-
-    if (this%entr_visc) then
-       this%nue_field_name = "entr_visc_vel"
-    end if
-
-    if (this%full_stress_formulation .and. this%entr_visc) then
-       call neko_error("You cannot use entropy viscosity stabilization " // &
-            "with the full stress formulation.")
-    end if
 
     call json_get_or_default(params, "case.fluid.cyclic", this%c_Xh%cyclic, &
          .false.)
