@@ -308,12 +308,12 @@ contains
            call field_sqrt(E_vel)
            call this%filter%apply(wa_vel, E_vel)
            call field_sub2(wa_vel, E_vel)
-         !   call this%coef%gs_h%op(wa_vel, GS_OP_ADD)
-         !   if (NEKO_BCKND_DEVICE .eq. 1) then
-         !      call device_col2(wa_vel%x_d, coef%mult_d, n)
-         !   else
-         !      call col2(wa_vel%x, coef%mult, n)
-         !   end if
+           call this%coef%gs_h%op(wa_vel, GS_OP_ADD)
+           if (NEKO_BCKND_DEVICE .eq. 1) then
+              call device_col2(wa_vel%x_d, coef%mult_d, n)
+           else
+              call col2(wa_vel%x, coef%mult, n)
+           end if
            ! Here E_vel is just fu such that the residual is computed correctly
            call field_copy(E_vel, wa_vel)
         else
@@ -351,12 +351,12 @@ contains
           if (this%if_filter) then
              call this%filter%apply(wa_s_i, this%s(i)%ptr)
              call field_sub2(wa_s_i, this%s(i)%ptr)
-            !  call this%coef%gs_h%op(wa_s_i, GS_OP_ADD)
-            !  if (NEKO_BCKND_DEVICE .eq. 1) then
-            !     call device_col2(wa_s_i%x_d, coef%mult_d, n)
-            !  else
-            !     call col2(wa_s_i%x, coef%mult, n)
-            !  end if
+             call this%coef%gs_h%op(wa_s_i, GS_OP_ADD)
+             if (NEKO_BCKND_DEVICE .eq. 1) then
+                call device_col2(wa_s_i%x_d, coef%mult_d, n)
+             else
+                call col2(wa_s_i%x, coef%mult, n)
+             end if
              call field_copy(E_s_i, wa_s_i)
           else
              call field_copy(E_s_i, this%s(i)%ptr)
@@ -448,12 +448,12 @@ contains
       call maxnorm_3d(rev_cap%x, ta%x, coef%Xh%lx, coef%msh%nelv)
       call this%filter%apply(fu, ta)
       call field_sub2(fu, ta)
-      ! call gs%op(fu, GS_OP_ADD)
-      ! if (NEKO_BCKND_DEVICE .eq. 1) then
-      !    call device_col2(fu%x_d, coef%mult_d, n)
-      ! else
-      !    call col2(fu%x, coef%mult, n)
-      ! end if
+      call gs%op(fu, GS_OP_ADD)
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_col2(fu%x_d, coef%mult_d, n)
+      else
+         call col2(fu%x, coef%mult, n)
+      end if
       ! Here E_vel is just fu such that the residual is computed correctly
       call field_copy(E_vel, fu)
     else
@@ -486,12 +486,12 @@ contains
     else
        call invcol2(ta%x, coef%B, n)
     end if
-   !  call gs%op(ta, GS_OP_ADD)
-   !  if (NEKO_BCKND_DEVICE .eq. 1) then
-   !     call device_col2(ta%x_d, coef%mult_d, n)
-   !  else
-   !     call col2(ta%x, coef%mult, n)
-   !  end if
+    call gs%op(ta, GS_OP_ADD)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(ta%x_d, coef%mult_d, n)
+    else
+       call col2(ta%x, coef%mult, n)
+    end if
     call field_sub2(R_vel, ta, n)
    
     ! multiply 2 and the filtered field itself to get the real residual
@@ -557,12 +557,12 @@ contains
        if (this%if_filter) then
          call this%filter%apply(fu, s_i)
          call field_sub2(fu, s_i)
-         ! call gs%op(fu, GS_OP_ADD)
-         ! if (NEKO_BCKND_DEVICE .eq. 1) then
-         !    call device_col2(fu%x_d, coef%mult_d, n)
-         ! else
-         !    call col2(fu%x, coef%mult, n)
-         ! end if
+         call gs%op(fu, GS_OP_ADD)
+         if (NEKO_BCKND_DEVICE .eq. 1) then
+            call device_col2(fu%x_d, coef%mult_d, n)
+         else
+            call col2(fu%x, coef%mult, n)
+         end if
          call field_copy(E_s_i, fu)
        else
          call field_copy(E_s_i, s_i)
@@ -583,12 +583,12 @@ contains
        else
           call invcol2(ta%x, coef%B, n)
        end if
-      !  call gs%op(ta, GS_OP_ADD)
-      !  if (NEKO_BCKND_DEVICE .eq. 1) then
-      !     call device_col2(ta%x_d, coef%mult_d, n)
-      !  else
-      !     call col2(ta%x, coef%mult, n)
-      !  end if
+       call gs%op(ta, GS_OP_ADD)
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          call device_col2(ta%x_d, coef%mult_d, n)
+       else
+          call col2(ta%x, coef%mult, n)
+       end if
        call field_sub2(R_s_i, ta, n)
        
        ! multiply 2 and the filtered field itself to get the real residual
