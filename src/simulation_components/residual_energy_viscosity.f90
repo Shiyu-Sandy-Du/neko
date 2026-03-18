@@ -191,6 +191,8 @@ contains
     if (json%valid_path("filter")) then
        this%if_filter = .true.
        call this%filter%init(json, this%coef)
+       ! filter out the highest order mode
+       this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp 
        call this%filter%build_1d()
     end if
 
@@ -530,12 +532,12 @@ contains
     call field_col2(RE_viscosity_vel, this%h2)
     call field_pwmin2(RE_viscosity_vel, rev_cap)
 
-   !  call gs%op(RE_viscosity_vel, GS_OP_ADD)
-   !  if (NEKO_BCKND_DEVICE .eq. 1) then
-   !     call device_col2(RE_viscosity_vel%x_d, coef%mult_d, n)
-   !  else
-   !     call col2(RE_viscosity_vel%x, coef%mult, n)
-   !  end if
+    call gs%op(RE_viscosity_vel, GS_OP_ADD)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(RE_viscosity_vel%x_d, coef%mult_d, n)
+    else
+       call col2(RE_viscosity_vel%x, coef%mult, n)
+    end if
 
    end associate
 
@@ -591,9 +593,9 @@ contains
        
        ! multiply 2 and the filtered field itself to get the real residual
        call field_col2(R_s_i, fu)
-       call field_cmult(R_s_i, 2.0_rp)
 
        call field_copy(RE_viscosity_i, R_s_i)
+       call field_cmult(RE_viscosity_i, 2.0_rp)
        call field_absval(RE_viscosity_i)
 
        ! Correct E_vel to be fs^2
