@@ -486,12 +486,12 @@ contains
     else
        call invcol2(ta%x, coef%B, n)
     end if
-    call gs%op(ta, GS_OP_ADD)
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_col2(ta%x_d, coef%mult_d, n)
-    else
-       call col2(ta%x, coef%mult, n)
-    end if
+   !  call gs%op(ta, GS_OP_ADD)
+   !  if (NEKO_BCKND_DEVICE .eq. 1) then
+   !     call device_col2(ta%x_d, coef%mult_d, n)
+   !  else
+   !     call col2(ta%x, coef%mult, n)
+   !  end if
     call field_sub2(R_vel, ta, n)
    
     ! multiply 2 and the filtered field itself to get the real residual
@@ -583,12 +583,12 @@ contains
        else
           call invcol2(ta%x, coef%B, n)
        end if
-       call gs%op(ta, GS_OP_ADD)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(ta%x_d, coef%mult_d, n)
-       else
-          call col2(ta%x, coef%mult, n)
-       end if
+      !  call gs%op(ta, GS_OP_ADD)
+      !  if (NEKO_BCKND_DEVICE .eq. 1) then
+      !     call device_col2(ta%x_d, coef%mult_d, n)
+      !  else
+      !     call col2(ta%x, coef%mult, n)
+      !  end if
        call field_sub2(R_s_i, ta, n)
        
        ! multiply 2 and the filtered field itself to get the real residual
