@@ -496,9 +496,9 @@ contains
    
     ! multiply 2 and the filtered field itself to get the real residual
     call field_col2(R_vel, fu)
-    call field_cmult(R_vel, 2.0_rp)
     
     call field_copy(RE_viscosity_vel, R_vel)
+    call field_cmult(RE_viscosity_vel, 2.0_rp)
     call field_absval(RE_viscosity_vel)
 
     ! Correct E_vel to be fu^2
