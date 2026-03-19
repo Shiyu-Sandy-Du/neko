@@ -400,7 +400,7 @@ contains
     type(field_t), pointer :: B_elem
     integer :: B_elem_index
 
-    real(kind=rp) :: tol
+    real(kind=rp) :: tol2
 
     integer :: temp_index
     integer :: filt_field_index
@@ -498,11 +498,11 @@ contains
     call field_col2(R_vel, fu)
     
     call field_copy(RE_viscosity_vel, R_vel)
-    call field_cmult(RE_viscosity_vel, 2.0_rp)
     call field_absval(RE_viscosity_vel)
 
     ! Correct E_vel to be fu^2
     call field_col3(E_true, E_vel, E_vel)
+    call field_cmult(E_true, 0.5_rp)
 
     call dottnsr_3d(E_avg_field%x, E_true%x, &
          coef%B, coef%Xh%lx, coef%msh%nelv)
@@ -513,22 +513,23 @@ contains
     call field_add3(E_var, E_true, E_avg_field)
     call field_absval(E_var)
 
+    call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
+    call field_col2(RE_viscosity_vel, ta)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       tol2 = this%tol_coef * device_glmax(ta%x_d,  n) * &
+              this%tol_coef * device_glmax(ta%x_d,  n)
+    else
+       tol2 = this%tol_coef * glmax(ta%x,  n) * &
+              this%tol_coef * glmax(ta%x,  n)
+    end if 
+
+    call field_col2(ta, ta)
+    call field_cadd(ta, tol2)
+    call field_invcol2(RE_viscosity_vel, ta)
+
     call field_cmult(RE_viscosity_vel, &
          this%c_R)
-
-    call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       tol = this%tol_coef * device_glmax(E_var%x_d,  n) * this%tol_coef * device_glmax(E_var%x_d,  n)
-    else
-       tol = this%tol_coef * glmax(E_var%x,  n) * this%tol_coef * glmax(E_var%x,  n)
-    end if 
-    call field_col2(RE_viscosity_vel, ta)
-    call field_col2(ta, ta)
-    call field_cadd(ta, tol)
-   !  call field_sqrt(ta)
-    call field_invcol2(RE_viscosity_vel, ta)
-   !  call field_invcol2_nonzero(RE_viscosity_vel, ta, tol)
-
     call field_col2(RE_viscosity_vel, this%h2)
     call field_pwmin2(RE_viscosity_vel, rev_cap)
 
@@ -595,11 +596,11 @@ contains
        call field_col2(R_s_i, fu)
 
        call field_copy(RE_viscosity_i, R_s_i)
-       call field_cmult(RE_viscosity_i, 2.0_rp)
        call field_absval(RE_viscosity_i)
 
        ! Correct E_vel to be fs^2
        call field_col3(E_true, E_s_i, E_s_i)
+       call field_cmult(E_true, 0.5_rp)
 
        call dottnsr_3d(E_avg_field%x, E_true%x, &
             coef%B, coef%Xh%lx, coef%msh%nelv)
@@ -610,22 +611,25 @@ contains
        call field_add3(E_var, E_true, E_avg_field)
        call field_absval(E_var)
 
-       call field_cmult(RE_viscosity_i, &
-            this%c_R)
+
 
        call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          tol = this%tol_coef * device_glmax(E_var%x_d, n) * this%tol_coef * device_glmax(E_var%x_d, n)
-       else
-          tol = this%tol_coef * glmax(E_var%x, n) * this%tol_coef * glmax(E_var%x, n)
-       end if 
        call field_col2(RE_viscosity_i, ta)
-       call field_col2(ta, ta)
-       call field_cadd(ta, tol)
-      !  call field_sqrt(ta)
-       call field_invcol2(RE_viscosity_i, ta)
-      !  call field_invcol2_nonzero(RE_viscosity_i, ta, tol)
 
+       if (NEKO_BCKND_DEVICE .eq. 1) then
+          tol2 = this%tol_coef * device_glmax(ta%x_d, n) * &
+                 this%tol_coef * device_glmax(ta%x_d, n)
+       else
+          tol2 = this%tol_coef * glmax(ta%x, n) * &
+                 this%tol_coef * glmax(ta%x, n)
+       end if 
+
+       call field_col2(ta, ta)
+       call field_cadd(ta, tol2)
+       call field_invcol2(RE_viscosity_i, ta)
+
+       call field_cmult(RE_viscosity_i, &
+            this%c_R)
        call field_col2(RE_viscosity_i, this%h2)
        call field_pwmin2(RE_viscosity_i, rev_cap)
 
