@@ -61,7 +61,8 @@ module residual_energy_viscosity
   use field_math, only : field_col3, field_copy, field_absval, field_rzero, &
                          field_cmult, field_sub2, field_col2, field_cadd, &
                          field_invcol2, field_sqrt, field_add2, field_addcol3, &
-                         field_invcol2_nonzero, field_add3, field_pwmin2
+                         field_invcol2_nonzero, field_add3, field_pwmin2, &
+                         field_add3s2
   use math, only : NEKO_EPS, invcol2, col2, glsum, glsc2, glmax, glmin
   use device_math, only : device_invcol2, device_col2, device_glsum, &
                           device_glsc2, device_glmax, device_glmin
@@ -80,6 +81,8 @@ module residual_energy_viscosity
      type(field_t) :: h_k 
      !> A low pass filter for the field
      type(elementwise_filter_t) :: filter
+     type(elementwise_filter_t) :: filter_alphaR
+     real(kind=rp) :: t_avg_coef
      logical :: if_filter = .false.
      !> X velocity component.
      type(field_t), pointer :: u
@@ -153,6 +156,10 @@ contains
     call json_get_or_default(json, "tol_coef", this%tol_coef, 1e-2_rp)
     call json_get_or_default(json, "c_max", this%c_max, 0.5_rp)
 
+
+    call json_get_or_default(json, "t_average_coefficient", &
+         this%t_avg_coef, 0.0_rp)
+
     call this%init_common(json, case)
   end subroutine RE_viscosity_init_from_json
 
@@ -195,6 +202,14 @@ contains
        this%filter%transfer(this%coef%dof%xh%lx) = 0.0_rp 
        call this%filter%build_1d()
     end if
+
+    call this%filter_alphaR%init(json, this%coef)
+    call json_get_or_default(json, "smooth_order", e, 0)
+    do k = 1, e
+       ! filter out a few highest order modes
+       this%filter_alphaR%transfer(this%coef%dof%xh%lx + 1 - k) = 0.0_rp
+    end do
+    call this%filter_alphaR%build_1d()
 
     select type (f1 => case%fluid)
     type is (fluid_pnpn_t)
@@ -384,7 +399,7 @@ contains
   subroutine RE_viscosity_compute(this, time)
     class(residual_energy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    type(field_t), pointer :: ta ! temporal array
+    type(field_t), pointer :: ta, RE_viscosity_curr ! temporal array
     type(field_t), pointer :: fu
     
     ! Arrays for scaling
@@ -402,14 +417,16 @@ contains
 
     real(kind=rp) :: tol2
 
-    integer :: temp_index
+    integer :: temp_index(2)
     integer :: filt_field_index
 
     integer :: i, j, n
     real(kind=rp) :: scaling_factor
     
     ! create the work array and the upper bound
-    call neko_scratch_registry%request_field(ta, temp_index, .false.)
+    call neko_scratch_registry%request_field(ta, temp_index(1), .false.)
+    call neko_scratch_registry%request_field(RE_viscosity_curr, &
+                                             temp_index(2), .false.)
 
     ! create the work array for filtered field
     call neko_scratch_registry%request_field(fu, filt_field_index, .false.)
@@ -497,8 +514,8 @@ contains
     ! multiply 2 and the filtered field itself to get the real residual
     call field_col2(R_vel, fu)
     
-    call field_copy(RE_viscosity_vel, R_vel)
-    call field_absval(RE_viscosity_vel)
+    call field_copy(RE_viscosity_curr, R_vel)
+    call field_absval(RE_viscosity_curr)
 
     ! Correct E_vel to be fu^2
     call field_col3(E_true, E_vel, E_vel)
@@ -514,7 +531,7 @@ contains
     call field_absval(E_var)
 
     call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
-    call field_col2(RE_viscosity_vel, ta)
+    call field_col2(RE_viscosity_curr, ta)
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        tol2 = this%tol_coef * device_glmax(ta%x_d,  n) * &
@@ -526,18 +543,32 @@ contains
 
     call field_col2(ta, ta)
     call field_cadd(ta, tol2)
-    call field_invcol2(RE_viscosity_vel, ta)
+    call field_invcol2(RE_viscosity_curr, ta)
 
-    call field_cmult(RE_viscosity_vel, &
+    call field_cmult(RE_viscosity_curr, &
          this%c_R)
-    call field_col2(RE_viscosity_vel, this%h2)
-    call field_pwmin2(RE_viscosity_vel, rev_cap)
+    call field_col2(RE_viscosity_curr, this%h2)
+    call field_pwmin2(RE_viscosity_curr, rev_cap)
 
-    call gs%op(RE_viscosity_vel, GS_OP_ADD)
+    ! filter the RE viscosity
+    call field_copy(ta, RE_viscosity_curr)
+    call this%filter_alphaR%apply(RE_viscosity_curr, ta)
+    call field_absval(RE_viscosity_curr)
+
+    call gs%op(RE_viscosity_curr, GS_OP_ADD)
     if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_col2(RE_viscosity_vel%x_d, coef%mult_d, n)
+       call device_col2(RE_viscosity_curr%x_d, coef%mult_d, n)
     else
-       call col2(RE_viscosity_vel%x, coef%mult, n)
+       call col2(RE_viscosity_curr%x, coef%mult, n)
+    end if
+    
+    if (time%tstep .eq. 1) then
+       call field_copy(RE_viscosity_vel, RE_viscosity_curr)       
+    else
+
+       call field_add3s2(RE_viscosity_vel, &
+            RE_viscosity_vel, RE_viscosity_curr, &
+            this%t_avg_coef, 1.0_rp - this%t_avg_coef)
     end if
 
    end associate
@@ -595,8 +626,8 @@ contains
        ! multiply 2 and the filtered field itself to get the real residual
        call field_col2(R_s_i, fu)
 
-       call field_copy(RE_viscosity_i, R_s_i)
-       call field_absval(RE_viscosity_i)
+       call field_copy(RE_viscosity_curr, R_s_i)
+       call field_absval(RE_viscosity_curr)
 
        ! Correct E_vel to be fs^2
        call field_col3(E_true, E_s_i, E_s_i)
@@ -614,7 +645,7 @@ contains
 
 
        call maxnorm_3d(ta%x, E_var%x, coef%Xh%lx, coef%msh%nelv)
-       call field_col2(RE_viscosity_i, ta)
+       call field_col2(RE_viscosity_curr, ta)
 
        if (NEKO_BCKND_DEVICE .eq. 1) then
           tol2 = this%tol_coef * device_glmax(ta%x_d, n) * &
@@ -626,18 +657,31 @@ contains
 
        call field_col2(ta, ta)
        call field_cadd(ta, tol2)
-       call field_invcol2(RE_viscosity_i, ta)
+       call field_invcol2(RE_viscosity_curr, ta)
 
-       call field_cmult(RE_viscosity_i, &
+       call field_cmult(RE_viscosity_curr, &
             this%c_R)
-       call field_col2(RE_viscosity_i, this%h2)
-       call field_pwmin2(RE_viscosity_i, rev_cap)
+       call field_col2(RE_viscosity_curr, this%h2)
+       call field_pwmin2(RE_viscosity_curr, rev_cap)
 
-       call gs%op(RE_viscosity_i, GS_OP_ADD)
+       ! filter the RE viscosity
+       call field_copy(ta, RE_viscosity_curr)
+       call this%filter_alphaR%apply(RE_viscosity_curr, ta)
+       call field_absval(RE_viscosity_curr)
+
+       call gs%op(RE_viscosity_curr, GS_OP_ADD)
        if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_col2(RE_viscosity_i%x_d, coef%mult_d, n)
+          call device_col2(RE_viscosity_curr%x_d, coef%mult_d, n)
        else
-          call col2(RE_viscosity_i%x, coef%mult, n)
+          call col2(RE_viscosity_curr%x, coef%mult, n)
+       end if
+
+       if (time%tstep .eq. 1) then
+          call field_copy(RE_viscosity_i, RE_viscosity_curr)
+       else
+          call field_add3s2(RE_viscosity_i, &
+               RE_viscosity_i, RE_viscosity_curr, &
+               this%t_avg_coef, 1.0_rp - this%t_avg_coef)
        end if
 
        end associate
