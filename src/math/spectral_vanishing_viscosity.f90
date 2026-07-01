@@ -157,8 +157,13 @@ contains
        end do
     else
        do i = 1, this%coef%Xh%lx
-          this%filter%transfer(i) = ((i - 1.0_rp) / (this%coef%Xh%lx - 1.0_rp)) &
-                                 ** ((this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+          ! The SVV kernel is applied on both sides of the weak operator,
+          ! Q_hat^T G Q_hat. Use the square root of the requested transfer
+          ! function so that the resulting modal damping retains the power
+          ! specified by power_coef.
+          this%filter%transfer(i) = ((i - 1.0_rp) / &
+               (this%coef%Xh%lx - 1.0_rp)) ** &
+               (0.5_rp * (this%coef%Xh%lx - 1.0_rp) * this%power_coef)
           this%filter%transfer(i) = 1.0_rp - this%filter%transfer(i)
        end do
     end if
