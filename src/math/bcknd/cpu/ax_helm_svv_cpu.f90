@@ -137,50 +137,40 @@ contains
     integer :: e, i, j, k, l
 
     do e = 1, n
-       if (index(svv_direction, "r") > 0) then
-          do j = 1, lx * lx
+       ! Reference-space derivatives, D u.
+       do j = 1, lx * lx
+          do i = 1, lx
+             tmp = 0.0_rp
+             do k = 1, lx
+                tmp = tmp + Dx(i,k) * u(k,j,1,e)
+             end do
+             wur(i,j,1) = tmp
+          end do
+       end do
+
+       do k = 1, lx
+          do j = 1, lx
              do i = 1, lx
                 tmp = 0.0_rp
-                do k = 1, lx
-                   tmp = tmp + Dx(i,k) * u(k,j,1,e)
-                end do
-                wur(i,j,1) = tmp
-             end do
-          end do
-       else
-          wur(:,:,:) = 0.0_rp
-       end if
-
-       if (index(svv_direction, "s") > 0) then
-          do k = 1, lx
-             do j = 1, lx
-                do i = 1, lx
-                   tmp = 0.0_rp
-                   do l = 1, lx
-                      tmp = tmp + Dy(j,l) * u(i,l,k,e)
-                   end do
-                   wus(i,j,k) = tmp
-                end do
-             end do
-          end do
-       else
-          wus(:,:,:) = 0.0_rp
-       end if
-
-       if (index(svv_direction, "t") > 0) then
-          do k = 1, lx
-             do i = 1, lx*lx
-                tmp = 0.0_rp
                 do l = 1, lx
-                   tmp = tmp + Dz(k,l) * u(i,1,l,e)
+                   tmp = tmp + Dy(j,l) * u(i,l,k,e)
                 end do
-                wut(i,1,k) = tmp
+                wus(i,j,k) = tmp
              end do
           end do
-       else
-          wut(:,:,:) = 0.0_rp
-       end if
+       end do
 
+       do k = 1, lx
+          do i = 1, lx*lx
+             tmp = 0.0_rp
+             do l = 1, lx
+                tmp = tmp + Dz(k,l) * u(i,1,l,e)
+             end do
+             wut(i,1,k) = tmp
+          end do
+       end do
+
+       ! Physical gradient for the ordinary, unfiltered Helmholtz term.
        do i = 1, lx*lx*lx
           u1(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
                      + dsdx(i,1,1,e) * wus(i,1,1) &
@@ -193,107 +183,115 @@ contains
                      + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
-       ! spatial convolution for spectral vanishing (low pass filter (LPF))
-       select case(svv_direction)
-       case ("rst")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, svv_Qt)
-       case ("rs")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, ident)
-       case ("rt")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, svv_Qt)
-       case ("st")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, svv_Qt)
-       case ("r")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, ident)
-       case ("s")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, ident)
-       case ("t")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, ident, svv_Qt)
-       end select
+       ! Apply the one-dimensional high-pass convolution independently to
+       ! each reference derivative: Q_hat D u.
+       if (index(svv_direction, "r") > 0) then
+          call tnsr3d_el(u1_svv, lx, wur, lx, svv_Q, ident, ident)
+          u1_svv = wur - u1_svv
+       else
+          u1_svv = 0.0_rp
+       end if
+       if (index(svv_direction, "s") > 0) then
+          call tnsr3d_el(u2_svv, lx, wus, lx, ident, svv_Qt, ident)
+          u2_svv = wus - u2_svv
+       else
+          u2_svv = 0.0_rp
+       end if
+       if (index(svv_direction, "t") > 0) then
+          call tnsr3d_el(u3_svv, lx, wut, lx, ident, ident, svv_Qt)
+          u3_svv = wut - u3_svv
+       else
+          u3_svv = 0.0_rp
+       end if
 
+       ! Standard Helmholtz flux, D^T G D u.
        do i = 1, lx*lx*lx
-          ! high pass filter from the LPF result
-          u1_svv(i,1,1) =  u1(i,1,1) - u1_svv(i,1,1)
-          u2_svv(i,1,1) =  u2(i,1,1) - u2_svv(i,1,1)
-          u3_svv(i,1,1) =  u3(i,1,1) - u3_svv(i,1,1)
-
-          ! multiply the viscosity
-          ur_h = (svv_h1(i,1,1,e) * u1_svv(i,1,1) + &
-                        h1(i,1,1,e) * u1(i,1,1)) * weights3(i,1,1)
-          us_h = (svv_h1(i,1,1,e) * u2_svv(i,1,1) + &
-                        h1(i,1,1,e) * u2(i,1,1)) * weights3(i,1,1)
-          ut_h = (svv_h1(i,1,1,e) * u3_svv(i,1,1) + &
-                        h1(i,1,1,e) * u3(i,1,1)) * weights3(i,1,1)
-          ! utilize wur, wus, wut as work arrays again
-          if (index(svv_direction, "r") > 0) then
-             wur(i,1,1) = drdx(i,1,1,e) * ur_h &
-                        + drdy(i,1,1,e) * us_h &
-                        + drdz(i,1,1,e) * ut_h
-          end if
-          if (index(svv_direction, "s") > 0) then
-             wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
-                        + dsdy(i,1,1,e) * us_h &
-                        + dsdz(i,1,1,e) * ut_h
-          end if
-          if (index(svv_direction, "t") > 0) then
-             wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
-                        + dtdy(i,1,1,e) * us_h &
-                        + dtdz(i,1,1,e) * ut_h
-          end if
+          ur_h = h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
+          us_h = h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
+          ut_h = h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
+          wur(i,1,1) = drdx(i,1,1,e) * ur_h &
+                     + drdy(i,1,1,e) * us_h &
+                     + drdz(i,1,1,e) * ut_h
+          wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
+                     + dsdy(i,1,1,e) * us_h &
+                     + dsdz(i,1,1,e) * ut_h
+          wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
+                     + dtdy(i,1,1,e) * us_h &
+                     + dtdz(i,1,1,e) * ut_h
        end do
 
-       w(:,:,:,e) = 0.0_rp
+       ! Map Q_hat D u to physical space, multiply by the SVV viscosity,
+       ! and pull the flux back to reference space.
+       do i = 1, lx*lx*lx
+          u1(i,1,1) = (drdx(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdx(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdx(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+          u2(i,1,1) = (drdy(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdy(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdy(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+          u3(i,1,1) = (drdz(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdz(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdz(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+
+          ur_h = svv_h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
+          us_h = svv_h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
+          ut_h = svv_h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
+          u1_svv(i,1,1) = drdx(i,1,1,e) * ur_h &
+                        + drdy(i,1,1,e) * us_h &
+                        + drdz(i,1,1,e) * ut_h
+          u2_svv(i,1,1) = dsdx(i,1,1,e) * ur_h &
+                        + dsdy(i,1,1,e) * us_h &
+                        + dsdz(i,1,1,e) * ut_h
+          u3_svv(i,1,1) = dtdx(i,1,1,e) * ur_h &
+                        + dtdy(i,1,1,e) * us_h &
+                        + dtdz(i,1,1,e) * ut_h
+       end do
+
+       ! Test-function-side convolution, Q_hat^T G Q_hat D u.
        if (index(svv_direction, "r") > 0) then
-          do j = 1, lx*lx
+          call tnsr3d_el(u1, lx, u1_svv, lx, svv_Qt, ident, ident)
+          wur = wur + u1_svv - u1
+       end if
+       if (index(svv_direction, "s") > 0) then
+          call tnsr3d_el(u2, lx, u2_svv, lx, ident, svv_Q, ident)
+          wus = wus + u2_svv - u2
+       end if
+       if (index(svv_direction, "t") > 0) then
+          call tnsr3d_el(u3, lx, u3_svv, lx, ident, ident, svv_Q)
+          wut = wut + u3_svv - u3
+       end if
+
+       do j = 1, lx*lx
+          do i = 1, lx
+             tmp = 0.0_rp
+             do k = 1, lx
+                tmp = tmp + Dxt(i,k) * wur(k,j,1)
+             end do
+             w(i,j,1,e) = tmp
+          end do
+       end do
+
+       do k = 1, lx
+          do j = 1, lx
              do i = 1, lx
                 tmp = 0.0_rp
-                do k = 1, lx
-                   tmp = tmp + Dxt(i,k) * wur(k,j,1)
-                end do
-                w(i,j,1,e) = tmp
-             end do
-          end do
-       end if
-
-       if (index(svv_direction, "s") > 0) then
-          do k = 1, lx
-             do j = 1, lx
-                do i = 1, lx
-                   tmp = 0.0_rp
-                   do l = 1, lx
-                      tmp = tmp + Dyt(j,l) * wus(i,l,k)
-                   end do
-                   w(i,j,k,e) = w(i,j,k,e) + tmp
-                end do
-             end do
-          end do
-       end if
-
-       if (index(svv_direction, "t") > 0) then
-          do k = 1, lx
-             do i = 1, lx*lx
-                tmp = 0.0_rp
                 do l = 1, lx
-                   tmp = tmp + Dzt(k,l) * wut(i,1,l)
+                   tmp = tmp + Dyt(j,l) * wus(i,l,k)
                 end do
-                w(i,1,k,e) = w(i,1,k,e) + tmp
+                w(i,j,k,e) = w(i,j,k,e) + tmp
              end do
           end do
-       end if
+       end do
+
+       do k = 1, lx
+          do i = 1, lx*lx
+             tmp = 0.0_rp
+             do l = 1, lx
+                tmp = tmp + Dzt(k,l) * wut(i,1,l)
+             end do
+             w(i,1,k,e) = w(i,1,k,e) + tmp
+          end do
+       end do
 
     end do
   end subroutine ax_helm_svv_lx
