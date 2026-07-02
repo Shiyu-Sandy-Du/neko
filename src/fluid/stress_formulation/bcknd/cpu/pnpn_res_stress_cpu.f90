@@ -138,8 +138,7 @@ contains
     ! Add the contribution from SVV if it is there
     if (present(svv)) then
        ! Take the divergence of the SVV stresses
-       call stress_svv_apply(wa1, wa2, wa3, &
-                             work1, work2, work3, ta1, ta2, ta3, &
+       call stress_svv_apply(work1, work2, work3, ta1, ta2, ta3, &
                              s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
        
     end if
@@ -151,6 +150,14 @@ contains
             - ((wa2%x(i,1,1,1) / rho%x(i,1,1,1)) * c_Xh%B(i,1,1,1))
        ta3%x(i,1,1,1) = f_z%x(i,1,1,1) / rho%x(i,1,1,1) &
             - ((wa3%x(i,1,1,1) / rho%x(i,1,1,1)) * c_Xh%B(i,1,1,1))
+       if (present(svv)) then
+          ta1%x(i,1,1,1) = ta1%x(i,1,1,1) &
+               - work1%x(i,1,1,1) / rho%x(i,1,1,1)
+          ta2%x(i,1,1,1) = ta2%x(i,1,1,1) &
+               - work2%x(i,1,1,1) / rho%x(i,1,1,1)
+          ta3%x(i,1,1,1) = ta3%x(i,1,1,1) &
+               - work3%x(i,1,1,1) / rho%x(i,1,1,1)
+       end if
     end do
 
     call rotate_cyc(ta1%x, ta2%x, ta3%x, 1, c_Xh)
@@ -253,10 +260,8 @@ contains
 
   end subroutine pnpn_vel_res_stress_cpu_compute
 
-  subroutine stress_svv_apply(wa1, wa2, wa3, &
-                              work1, work2, work3, ta1, ta2, ta3, &
+  subroutine stress_svv_apply(work1, work2, work3, ta1, ta2, ta3, &
                               s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-    type(field_t), pointer, intent(inout) :: wa1, wa2, wa3
     type(field_t), pointer, intent(inout) :: work1, work2, work3, ta1, ta2, ta3
     type(field_t), pointer, intent(inout) :: s11, s22, s33, s12, s13, s23
     type(svv_t), intent(inout) :: svv
@@ -273,8 +278,9 @@ contains
     call svv%hpf(ta2, s13)
     call svv%hpf(ta3, s23)
 
-    ! Multiply by 2 and the svv coefficient
-    ! and take the divergence to get svv stresses and using Sij as work array
+    ! Multiply by the SVV coefficient and take the weak divergence.
+    ! On return, work1, work2 and work3 hold the three mass-weighted
+    ! divergence components, including the factor of two.
     call col2(work1%x, svv%h1, n)
     call col2(work2%x, svv%h1, n)
     call col2(work3%x, svv%h1, n)
@@ -287,21 +293,21 @@ contains
     call cdtp(s33%x, ta2%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
     call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa1%x, s11%x, n)
+    call copy(work1%x, s11%x, n)
 
     call cdtp(s11%x, ta1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
     call cdtp(s22%x, work2%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
     call cdtp(s33%x, ta3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
     call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa2%x, s11%x, n)
+    call copy(work2%x, s11%x, n)
 
     call cdtp(s11%x, ta2%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
     call cdtp(s22%x, ta3%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
     call cdtp(s33%x, work3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
     call add4(s11%x, s11%x, s22%x, s33%x, n)
     call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa3%x, s11%x, n)
+    call copy(work3%x, s11%x, n)
   end subroutine stress_svv_apply 
 
 end module pnpn_res_stress_cpu
