@@ -472,7 +472,7 @@ contains
        direction, transpose, lx)
     integer, intent(in) :: lx
     real(kind=rp), intent(out) :: output(lx, lx, lx)
-    real(kind=rp), intent(in) :: input(lx, lx, lx)
+    real(kind=rp), intent(inout) :: input(lx, lx, lx)
     real(kind=rp), intent(inout) :: Q(lx, lx), Qt(lx, lx)
     real(kind=rp), intent(inout) :: ident(lx, lx)
     character(len=*), intent(in) :: active_directions
