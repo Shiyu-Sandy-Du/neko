@@ -290,6 +290,7 @@ neko_fortran_SOURCES = \
 	math/bcknd/cpu/ax_helm_svv_cpu.f90\
 	math/bcknd/cpu/ax_helm_sym_svv_cpu.f90\
   math/bcknd/cpu/ax_helm_svv_full_cpu.f90\
+	math/bcknd/cpu/ax_helm_sym_svv_full_cpu.f90\
 	math/bcknd/sx/ax_helm_sx.f90\
 	math/bcknd/xsmm/ax_helm_xsmm.F90\
 	math/bcknd/device/ax_helm_device.F90\

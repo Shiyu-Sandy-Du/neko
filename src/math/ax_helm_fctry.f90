@@ -46,6 +46,7 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_sym_svv_cpu, only : ax_helm_sym_svv_cpu_t
   use ax_helm_svv_device, only : ax_helm_svv_device_t
   use ax_helm_svv_full_cpu, only : ax_helm_svv_full_cpu_t
+  use ax_helm_sym_svv_full_cpu, only : ax_helm_sym_svv_full_cpu_t
   use ax_helm_svv_full_device, only : ax_helm_svv_full_device_t
   use spectral_vanishing_viscosity, only : svv_t
   use utils, only : neko_error
@@ -80,13 +81,13 @@ contains
 
     if (full_formulation) then
        if (svv_enabled) then
-          if (svv%formulation .eq. "symmetric") then
-             call neko_error("The symmetric SVV formulation does not " // &
-                  "support the full stress formulation")
-          end if
           if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
              call neko_error("svv is only available on the CPU and device")
           else if (NEKO_BCKND_DEVICE .eq. 1) then
+             if (svv%formulation .eq. "symmetric") then
+                call neko_error("The symmetric SVV formulation is only " // &
+                     "available on the CPU backend")
+             end if
              allocate(ax_helm_svv_full_device_t::object)
              select type (f => object)
              type is (ax_helm_svv_full_device_t)
@@ -111,13 +112,19 @@ contains
                 call device_alloc(f%s13_svv_d, s)
                 call device_alloc(f%s23_svv_d, s)
              end select
-         else
-            allocate(ax_helm_svv_full_cpu_t::object)
-            select type (f => object)
-            type is (ax_helm_svv_full_cpu_t)
-               f%svv => svv
-            end select
-         end if
+          else if (svv%formulation .eq. "symmetric") then
+             allocate(ax_helm_sym_svv_full_cpu_t::object)
+             select type (f => object)
+             type is (ax_helm_sym_svv_full_cpu_t)
+                f%svv => svv
+             end select
+          else
+             allocate(ax_helm_svv_full_cpu_t::object)
+             select type (f => object)
+             type is (ax_helm_svv_full_cpu_t)
+                f%svv => svv
+             end select
+          end if
        else
           if (NEKO_BCKND_SX .eq. 1 .or. NEKO_BCKND_XSMM .eq. 1) then
              call neko_error("Full stress formulation is only available &
