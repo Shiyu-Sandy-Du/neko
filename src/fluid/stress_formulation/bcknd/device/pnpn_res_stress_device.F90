@@ -326,7 +326,7 @@ contains
 
   subroutine pnpn_prs_res_stress_device_compute(p, p_res, u, v, w, u_e, v_e,&
        w_e, f_x, f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd,&
-       dt, mu, rho, event, svv)
+       dt, mu, rho, event)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -341,7 +341,6 @@ contains
     type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
-    type(svv_t), intent(inout), optional :: svv
     real(kind=rp) :: dtbd
     integer :: n, nelv, lxyz, gdim
     integer :: i, e
@@ -398,61 +397,25 @@ contains
     call dudxyz(ta2%x, mu%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
     call dudxyz(ta3%x, mu%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
 
-    if (present(svv)) then
 #ifdef HAVE_HIP
-       call pnpn_prs_stress_res_svv_part1_1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                s11%x_d, s22%x_d, s33%x_d, &
-                                                s12%x_d, s13%x_d, s23%x_d, &
-                                                f_x%x_d, f_y%x_d, f_z%x_d, n)
+    call pnpn_prs_stress_res_part1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
+         wa1%x_d, wa2%x_d, wa3%x_d, &
+         s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
+         f_x%x_d, f_y%x_d, f_z%x_d, &
+         c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #elif HAVE_CUDA
-       call pnpn_prs_stress_res_svv_part1_1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                 wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                 s11%x_d, s22%x_d, s33%x_d, &
-                                                 s12%x_d, s13%x_d, s23%x_d, &
-                                                 f_x%x_d, f_y%x_d, f_z%x_d, n)
+    call pnpn_prs_stress_res_part1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
+         wa1%x_d, wa2%x_d, wa3%x_d, &
+         s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
+         f_x%x_d, f_y%x_d, f_z%x_d, &
+         c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
-#endif    
-       call stress_svv_apply_device(wa1, wa2, wa3, &
-                             work1, work2, ta1, ta2, ta3, &
-                             s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-#ifdef HAVE_HIP
-       call pnpn_prs_stress_res_svv_part1_4_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                f_x%x_d, f_y%x_d, f_z%x_d, &
-                                                c_Xh%B_d, rho%x_d, n)
-#elif HAVE_CUDA
-       call pnpn_prs_stress_res_svv_part1_4_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                 wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                 f_x%x_d, f_y%x_d, f_z%x_d, &
-                                                 c_Xh%B_d, rho%x_d, n)
-#elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
+    call pnpn_prs_stress_res_part1_opencl(ta1%x_d, ta2%x_d, ta3%x_d, &
+         wa1%x_d, wa2%x_d, wa3%x_d, &
+         s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
+         f_x%x_d, f_y%x_d, f_z%x_d, &
+         c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #endif
-
-    else
-
-#ifdef HAVE_HIP
-       call pnpn_prs_stress_res_part1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
-            wa1%x_d, wa2%x_d, wa3%x_d, &
-            s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
-            f_x%x_d, f_y%x_d, f_z%x_d, &
-            c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
-#elif HAVE_CUDA
-       call pnpn_prs_stress_res_part1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
-            wa1%x_d, wa2%x_d, wa3%x_d, &
-            s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
-            f_x%x_d, f_y%x_d, f_z%x_d, &
-            c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
-#elif HAVE_OPENCL
-       call pnpn_prs_stress_res_part1_opencl(ta1%x_d, ta2%x_d, ta3%x_d, &
-            wa1%x_d, wa2%x_d, wa3%x_d, &
-            s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
-            f_x%x_d, f_y%x_d, f_z%x_d, &
-            c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
-#endif
-    end if
 
     call rotate_cyc(ta1%x, ta2%x, ta3%x, 1, c_Xh)
     call gs_Xh%op(ta1, GS_OP_ADD)

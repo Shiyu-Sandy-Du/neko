@@ -11,8 +11,7 @@ module pnpn_res_stress_cpu
   use mesh, only : mesh_t
   use num_types, only : rp
   use space, only : space_t
-  use math, only : rzero, vdot3, cmult, sub2, col2, copy, invers2, cmult2, add4
-  use spectral_vanishing_viscosity, only : svv_t
+  use math, only : rzero, vdot3, cmult, sub2, col2, copy, invers2, cmult2
   use, intrinsic :: iso_c_binding, only : c_ptr
   implicit none
   private
@@ -35,7 +34,7 @@ contains
 
   subroutine pnpn_prs_res_stress_cpu_compute(p, p_res, u, v, w, u_e, v_e, w_e,&
        f_x, f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd, dt,&
-       mu, rho, event, svv)
+       mu, rho, event)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -50,7 +49,6 @@ contains
     type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
-    type(svv_t), intent(inout), optional :: svv
     real(kind=rp) :: dtbd
     integer :: n, nelv, lxyz
     integer :: i, e
@@ -135,15 +133,6 @@ contains
     call sub2(wa2%x, work2%x, n)
     call sub2(wa3%x, work3%x, n)
     
-    ! Add the contribution from SVV if it is there
-    if (present(svv)) then
-       ! Take the divergence of the SVV stresses
-       call stress_svv_apply(wa1, wa2, wa3, &
-                             work1, work2, work3, ta1, ta2, ta3, &
-                             s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-       
-    end if
-
     do concurrent (i = 1:n)
        ta1%x(i,1,1,1) = f_x%x(i,1,1,1) / rho%x(i,1,1,1) &
             - ((wa1%x(i,1,1,1) / rho%x(i,1,1,1)) * c_Xh%B(i,1,1,1))
@@ -252,56 +241,5 @@ contains
     call neko_scratch_registry%relinquish_field(temp_indices)
 
   end subroutine pnpn_vel_res_stress_cpu_compute
-
-  subroutine stress_svv_apply(wa1, wa2, wa3, &
-                              work1, work2, work3, ta1, ta2, ta3, &
-                              s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-    type(field_t), pointer, intent(inout) :: wa1, wa2, wa3
-    type(field_t), pointer, intent(inout) :: work1, work2, work3, ta1, ta2, ta3
-    type(field_t), pointer, intent(inout) :: s11, s22, s33, s12, s13, s23
-    type(svv_t), intent(inout) :: svv
-    type(coef_t), intent(in) :: c_Xh
-    integer, intent(in) :: n
-
-    ! HPF on Sij
-    ! work123 is filtered sij, i=j
-    ! ta123 is three off diagonal components
-    call svv%hpf(work1, s11)
-    call svv%hpf(work2, s22)
-    call svv%hpf(work3, s33)
-    call svv%hpf(ta1, s12)
-    call svv%hpf(ta2, s13)
-    call svv%hpf(ta3, s23)
-
-    ! Multiply by 2 and the svv coefficient
-    ! and take the divergence to get svv stresses and using Sij as work array
-    call col2(work1%x, svv%h1, n)
-    call col2(work2%x, svv%h1, n)
-    call col2(work3%x, svv%h1, n)
-    call col2(ta1%x, svv%h1, n)
-    call col2(ta2%x, svv%h1, n)
-    call col2(ta3%x, svv%h1, n)
-
-    call cdtp(s11%x, work1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(s22%x, ta1%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(s33%x, ta2%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-    call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa1%x, s11%x, n)
-
-    call cdtp(s11%x, ta1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(s22%x, work2%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(s33%x, ta3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-    call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa2%x, s11%x, n)
-
-    call cdtp(s11%x, ta2%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(s22%x, ta3%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(s33%x, work3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-    call add4(s11%x, s11%x, s22%x, s33%x, n)
-    call cmult(s11%x, 2.0_rp, n)
-    call sub2(wa3%x, s11%x, n)
-  end subroutine stress_svv_apply 
 
 end module pnpn_res_stress_cpu
