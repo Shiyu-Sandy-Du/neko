@@ -133,8 +133,27 @@ contains
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
+    real(kind=rp) :: filter_r(lx, lx)
+    real(kind=rp) :: filter_s(lx, lx)
+    real(kind=rp) :: filter_t(lx, lx)
     real(kind=rp) :: tmp
     integer :: e, i, j, k, l
+
+    if (index(svv_direction, "r") > 0) then
+       filter_r = svv_Q
+    else
+       filter_r = ident
+    end if
+    if (index(svv_direction, "s") > 0) then
+       filter_s = svv_Qt
+    else
+       filter_s = ident
+    end if
+    if (index(svv_direction, "t") > 0) then
+       filter_t = svv_Qt
+    else
+       filter_t = ident
+    end if
 
     do e = 1, n
        do j = 1, lx * lx
@@ -181,37 +200,10 @@ contains
                      + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
-       ! spatial convolution for spectral vanishing (low pass filter (LPF))
-       select case(svv_direction)
-       case ("rst")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, svv_Qt)
-       case ("rs")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, ident)
-       case ("rt")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, svv_Qt)
-       case ("st")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, svv_Qt)
-       case ("r")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, ident)
-       case ("s")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, ident)
-       case ("t")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, ident, svv_Qt)
-       end select
+       ! Spatial convolution for spectral vanishing (low-pass filter).
+       call tnsr3d_el(u1_svv, lx, u1, lx, filter_r, filter_s, filter_t)
+       call tnsr3d_el(u2_svv, lx, u2, lx, filter_r, filter_s, filter_t)
+       call tnsr3d_el(u3_svv, lx, u3, lx, filter_r, filter_s, filter_t)
 
        do i = 1, lx*lx*lx
           ! high pass filter from the LPF result
