@@ -55,6 +55,8 @@ module spectral_vanishing_viscosity
        "rst", &
        "rs", "rt", "st", &
        "r", "s", "t"]
+  character(len=20) :: KNOWN_FORMULATIONS(2) = [character(len=10) :: &
+       "asymmetric", "symmetric"]
 
   !> Implements the spectral vanishing viscosity.
   type, public :: svv_t
@@ -62,6 +64,8 @@ module spectral_vanishing_viscosity
     type(elementwise_filter_t) :: filter
     !> filtering direction
     character(len=:), allocatable:: direction
+    !> SVV operator formulation
+    character(len=:), allocatable :: formulation
     !> Power coefficient for the SVV kernel
     real(kind=rp) :: power_coef
     !> coef
@@ -91,6 +95,8 @@ contains
     type(field_t), intent(in) :: rho
     real(kind=rp) :: nu_val
     character(len=:), allocatable :: nu_type, nue_field_name_tmp, direction
+    character(len=:), allocatable :: formulation
+    real(kind=rp) :: exponent_factor
     integer :: i
 
     this%coef => coef
@@ -117,6 +123,14 @@ contains
         this%direction .ne. "t") then
        call neko_type_error("The direction of the SVV ", &
             this%direction, KNOWN_DIRECTIONS)
+    end if
+
+    call json_get_or_default(json, "svv.formulation", formulation, "asymmetric")
+    this%formulation = trim(formulation)
+    if (this%formulation .ne. "asymmetric" .and. &
+        this%formulation .ne. "symmetric") then
+       call neko_type_error("The SVV formulation ", &
+            this%formulation, KNOWN_FORMULATIONS)
     end if
 
     call json_get(json, "svv.power_coefficient", this%power_coef)
@@ -156,14 +170,16 @@ contains
           this%filter%transfer(i) = 0.0_rp
        end do
     else
+       if (this%formulation .eq. "symmetric") then
+          exponent_factor = 0.5_rp
+       else
+          exponent_factor = 1.0_rp
+       end if
        do i = 1, this%coef%Xh%lx
-          ! The SVV kernel is applied on both sides of the weak operator,
-          ! Q_hat^T G Q_hat. Use the square root of the requested transfer
-          ! function so that the resulting modal damping retains the power
-          ! specified by power_coef.
           this%filter%transfer(i) = ((i - 1.0_rp) / &
-               (this%coef%Xh%lx - 1.0_rp)) ** &
-               (0.5_rp * (this%coef%Xh%lx - 1.0_rp) * this%power_coef)
+                                 (this%coef%Xh%lx - 1.0_rp)) &
+                                 ** (exponent_factor * &
+                                 (this%coef%Xh%lx - 1.0_rp) * this%power_coef)
           this%filter%transfer(i) = 1.0_rp - this%filter%transfer(i)
        end do
     end if

@@ -1,4 +1,4 @@
-! Copyright (c) 2025, The Neko Authors
+! Copyright (c) 2025-2026, The Neko Authors
 ! All rights reserved.
 !
 ! Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 ! ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ! POSSIBILITY OF SUCH DAMAGE.
 !
-module ax_helm_svv_cpu
+module ax_helm_sym_svv_cpu
   use ax_helm_svv, only : ax_helm_svv_t
   use num_types, only : rp
   use coefs, only : coef_t
@@ -43,11 +43,11 @@ module ax_helm_svv_cpu
   private
 
   !> CPU matrix-vector product for a Helmholtz problem.
-  type, public, extends(ax_helm_svv_t) :: ax_helm_svv_cpu_t
+  type, public, extends(ax_helm_svv_t) :: ax_helm_sym_svv_cpu_t
    contains
      !> Compute the product.
-     procedure, pass(this) :: compute => ax_helm_svv_compute
-  end type ax_helm_svv_cpu_t
+     procedure, pass(this) :: compute => ax_helm_sym_svv_compute
+  end type ax_helm_sym_svv_cpu_t
 
 contains
 
@@ -59,8 +59,8 @@ contains
   !! @param Xh Function space \f$ X_h \f$.
   !! @note Since this is a performance-crtical routine, it is implemented in
   !! several kernels corresponding to different polynmial orders.
-  subroutine ax_helm_svv_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_svv_cpu_t), intent(inout) :: this
+  subroutine ax_helm_sym_svv_compute(this, w, u, coef, msh, Xh)
+    class(ax_helm_sym_svv_cpu_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef
@@ -68,7 +68,8 @@ contains
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     integer :: i
 
-    call ax_helm_svv_lx(w, u, Xh%dx, Xh%dy, Xh%dz, Xh%dxt, Xh%dyt, Xh%dzt, &
+    call ax_helm_sym_svv_lx(w, u, Xh%dx, Xh%dy, Xh%dz, &
+            Xh%dxt, Xh%dyt, Xh%dzt, &
             coef%h1, coef%drdx, coef%drdy, coef%drdz, coef%dsdx, coef%dsdy, &
             coef%dsdz, coef%dtdx, coef%dtdy, coef%dtdz, &
             coef%jacinv, Xh%w3, this%svv%h1, this%svv%filter%fh, &
@@ -78,7 +79,7 @@ contains
     if (coef%ifh2) call addcol4 (w,coef%h2,coef%B,u,coef%dof%size())
 
 
-  end subroutine ax_helm_svv_compute
+  end subroutine ax_helm_sym_svv_compute
 
   !> Generic CPU kernel for the Helmholz matrix-vector product.
   !! @param w Result.
@@ -92,7 +93,7 @@ contains
   !! @param G11 Geometric factor.
   !! @param n Number of elements.
   !! @param lx Polynomial order.
-  subroutine ax_helm_svv_lx(w, u, Dx, Dy, Dz, Dxt, Dyt, Dzt, &
+  subroutine ax_helm_sym_svv_lx(w, u, Dx, Dy, Dz, Dxt, Dyt, Dzt, &
        h1, drdx, drdy, drdz, dsdx, dsdy, dsdz, dtdx, dtdy, dtdz, &
        jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, ident, n, lx)
     integer, intent(in) :: n, lx
@@ -137,6 +138,7 @@ contains
     integer :: e, i, j, k, l
 
     do e = 1, n
+       ! Reference-space derivatives, D u.
        do j = 1, lx * lx
           do i = 1, lx
              tmp = 0.0_rp
@@ -169,6 +171,7 @@ contains
           end do
        end do
 
+       ! Physical gradient for the ordinary, unfiltered Helmholtz term.
        do i = 1, lx*lx*lx
           u1(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
                      + dsdx(i,1,1,e) * wus(i,1,1) &
@@ -181,52 +184,32 @@ contains
                      + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
        end do
 
-       ! spatial convolution for spectral vanishing (low pass filter (LPF))
-       select case(svv_direction)
-       case ("rst")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, svv_Qt)
-       case ("rs")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, svv_Qt, ident)
-       case ("rt")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, svv_Qt)
-       case ("st")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, svv_Qt)
-       case ("r")
-          call tnsr3d_el(u1_svv, lx, u1, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, svv_Q, ident, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, svv_Q, ident, ident)
-       case ("s")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, svv_Qt, ident)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, svv_Qt, ident)
-       case ("t")
-          call tnsr3d_el(u1_svv, lx, u1, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u2_svv, lx, u2, lx, ident, ident, svv_Qt)
-          call tnsr3d_el(u3_svv, lx, u3, lx, ident, ident, svv_Qt)
-       end select
+       ! Apply the one-dimensional high-pass convolution independently to
+       ! each reference derivative: Q_hat D u.
+       if (index(svv_direction, "r") > 0) then
+          call tnsr3d_el(u1_svv, lx, wur, lx, svv_Q, ident, ident)
+          u1_svv = wur - u1_svv
+       else
+          u1_svv = 0.0_rp
+       end if
+       if (index(svv_direction, "s") > 0) then
+          call tnsr3d_el(u2_svv, lx, wus, lx, ident, svv_Qt, ident)
+          u2_svv = wus - u2_svv
+       else
+          u2_svv = 0.0_rp
+       end if
+       if (index(svv_direction, "t") > 0) then
+          call tnsr3d_el(u3_svv, lx, wut, lx, ident, ident, svv_Qt)
+          u3_svv = wut - u3_svv
+       else
+          u3_svv = 0.0_rp
+       end if
 
+       ! Standard Helmholtz flux, D^T G D u.
        do i = 1, lx*lx*lx
-          ! high pass filter from the LPF result
-          u1_svv(i,1,1) =  u1(i,1,1) - u1_svv(i,1,1)
-          u2_svv(i,1,1) =  u2(i,1,1) - u2_svv(i,1,1)
-          u3_svv(i,1,1) =  u3(i,1,1) - u3_svv(i,1,1)
-
-          ! multiply the viscosity
-          ur_h = (svv_h1(i,1,1,e) * u1_svv(i,1,1) + &
-                        h1(i,1,1,e) * u1(i,1,1)) * weights3(i,1,1)
-          us_h = (svv_h1(i,1,1,e) * u2_svv(i,1,1) + &
-                        h1(i,1,1,e) * u2(i,1,1)) * weights3(i,1,1)
-          ut_h = (svv_h1(i,1,1,e) * u3_svv(i,1,1) + &
-                        h1(i,1,1,e) * u3(i,1,1)) * weights3(i,1,1)
-          ! utilize wur, wus, wut as work arrays again
+          ur_h = h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
+          us_h = h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
+          ut_h = h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
           wur(i,1,1) = drdx(i,1,1,e) * ur_h &
                      + drdy(i,1,1,e) * us_h &
                      + drdz(i,1,1,e) * ut_h
@@ -237,6 +220,47 @@ contains
                      + dtdy(i,1,1,e) * us_h &
                      + dtdz(i,1,1,e) * ut_h
        end do
+
+       ! Map Q_hat D u to physical space, multiply by the SVV viscosity,
+       ! and pull the flux back to reference space.
+       do i = 1, lx*lx*lx
+          u1(i,1,1) = (drdx(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdx(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdx(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+          u2(i,1,1) = (drdy(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdy(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdy(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+          u3(i,1,1) = (drdz(i,1,1,e) * u1_svv(i,1,1) &
+                     + dsdz(i,1,1,e) * u2_svv(i,1,1) &
+                     + dtdz(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
+
+          ur_h = svv_h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
+          us_h = svv_h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
+          ut_h = svv_h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
+          u1_svv(i,1,1) = drdx(i,1,1,e) * ur_h &
+                        + drdy(i,1,1,e) * us_h &
+                        + drdz(i,1,1,e) * ut_h
+          u2_svv(i,1,1) = dsdx(i,1,1,e) * ur_h &
+                        + dsdy(i,1,1,e) * us_h &
+                        + dsdz(i,1,1,e) * ut_h
+          u3_svv(i,1,1) = dtdx(i,1,1,e) * ur_h &
+                        + dtdy(i,1,1,e) * us_h &
+                        + dtdz(i,1,1,e) * ut_h
+       end do
+
+       ! Test-function-side convolution, Q_hat^T G Q_hat D u.
+       if (index(svv_direction, "r") > 0) then
+          call tnsr3d_el(u1, lx, u1_svv, lx, svv_Qt, ident, ident)
+          wur = wur + u1_svv - u1
+       end if
+       if (index(svv_direction, "s") > 0) then
+          call tnsr3d_el(u2, lx, u2_svv, lx, ident, svv_Q, ident)
+          wus = wus + u2_svv - u2
+       end if
+       if (index(svv_direction, "t") > 0) then
+          call tnsr3d_el(u3, lx, u3_svv, lx, ident, ident, svv_Q)
+          wut = wut + u3_svv - u3
+       end if
 
        do j = 1, lx*lx
           do i = 1, lx
@@ -271,6 +295,6 @@ contains
        end do
 
     end do
-  end subroutine ax_helm_svv_lx
+  end subroutine ax_helm_sym_svv_lx
 
-end module ax_helm_svv_cpu
+end module ax_helm_sym_svv_cpu
