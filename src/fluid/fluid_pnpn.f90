@@ -165,6 +165,15 @@ module fluid_pnpn
      type(field_t) :: abx1, aby1, abz1
      type(field_t) :: abx2, aby2, abz2
 
+     !> Sum of pressure solver iterations over all pressure solves.
+     integer :: pressure_iterations = 0
+     !> Number of pressure solves included in the iteration statistics.
+     integer :: pressure_solves = 0
+     !> Sum of momentum solver iterations over all momentum solves.
+     integer :: momentum_iterations = 0
+     !> Number of momentum solves included in the iteration statistics.
+     integer :: momentum_solves = 0
+
      ! Advection terms for the oifs method
      type(field_t) :: advx, advy, advz
 
@@ -557,6 +566,26 @@ contains
 
   subroutine fluid_pnpn_free(this)
     class(fluid_pnpn_t), intent(inout) :: this
+    character(len=LOG_SIZE) :: log_buf
+
+    if (this%pressure_solves .gt. 0 .or. this%momentum_solves .gt. 0) then
+       call neko_log%section('Solver iteration statistics')
+       if (this%pressure_solves .gt. 0) then
+          write(log_buf, '(A,F10.2)') 'Average pressure iterations: ', &
+               real(this%pressure_iterations, rp) / this%pressure_solves
+          call neko_log%message(log_buf)
+       end if
+       if (this%momentum_solves .gt. 0) then
+          write(log_buf, '(A,F10.2)') 'Average momentum iterations: ', &
+               real(this%momentum_iterations, rp) / this%momentum_solves
+          call neko_log%message(log_buf)
+       end if
+       call neko_log%end_section()
+    end if
+    this%pressure_iterations = 0
+    this%pressure_solves = 0
+    this%momentum_iterations = 0
+    this%momentum_solves = 0
 
     !Deallocate velocity and pressure fields
     call this%scheme_free()
@@ -853,11 +882,21 @@ contains
       call profiler_end_region("Velocity_solve", 4)
       if (this%full_stress_formulation) then
          ksp_results(2)%name = 'Momentum'
+         this%momentum_iterations = this%momentum_iterations + &
+              ksp_results(2)%iter
+         this%momentum_solves = this%momentum_solves + 1
       else
          ksp_results(2)%name = 'X-Velocity'
          ksp_results(3)%name = 'Y-Velocity'
          ksp_results(4)%name = 'Z-Velocity'
+         this%momentum_iterations = this%momentum_iterations + &
+              sum(ksp_results(2:4)%iter)
+         this%momentum_solves = this%momentum_solves + 3
       end if
+
+      this%pressure_iterations = this%pressure_iterations + &
+           ksp_results(1)%iter
+      this%pressure_solves = this%pressure_solves + 1
 
       call this%proj_vel%post_solving(du%x, dv%x, dw%x, Ax_vel, c_Xh, &
            this%bclst_du, this%bclst_dv, this%bclst_dw, gs_Xh, n, tstep, &
