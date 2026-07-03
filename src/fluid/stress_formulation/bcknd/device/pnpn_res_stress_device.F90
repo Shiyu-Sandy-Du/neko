@@ -1,7 +1,6 @@
 !> Residuals in the Pn-Pn formulation (device version)
 module pnpn_res_stress_device
   use gather_scatter, only : gs_t, GS_OP_ADD
-  use utils, only : neko_error
   use operators, only : dudxyz, cdtp, curl, opgrad, strain_rate, rotate_cyc
   use field, only : field_t
   use ax_product, only : ax_t
@@ -15,8 +14,7 @@ module pnpn_res_stress_device
   use, intrinsic :: iso_c_binding, only : c_ptr, c_int
   use device_mathops, only : device_opcolv
   use device_math, only : device_rzero, device_cmult, &
-       device_col2, device_copy, device_invcol1, device_add4, device_sub2
-  use spectral_vanishing_viscosity, only : svv_t
+       device_col2, device_copy, device_invcol1, device_sub2
   implicit none
   private
 
@@ -35,66 +33,6 @@ module pnpn_res_stress_device
   end type pnpn_vel_res_stress_device_t
 
 #ifdef HAVE_HIP
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_1_hip(ta1_d, ta2_d, ta3_d, &
-          wa1_d, wa2_d, wa3_d, s11_d, s22_d, s33_d, &
-          s12_d, s13_d, s23_d, f_u_d, f_v_d, f_w_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_1_hip')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: s11_d, s22_d, s33_d, s12_d, s13_d, s23_d
-       type(c_ptr), value :: f_u_d, f_v_d, f_w_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_1_hip
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_2_hip( &
-          work1_d, work2_d, work3_d, ta1_d, ta2_d, ta3_d, svv_h1_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_2_hip')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: work1_d, work2_d, work3_d
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_2_hip
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_3_hip(wa1_d, wa2_d, wa3_d, &
-          a11_d, a12_d, a13_d, a21_d, a22_d, a23_d, a31_d, a32_d, a33_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_3_hip')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: a11_d, a12_d, a13_d
-       type(c_ptr), value :: a21_d, a22_d, a23_d
-       type(c_ptr), value :: a31_d, a32_d, a33_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_3_hip
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_4_hip(ta1_d, ta2_d, ta3_d, &
-          wa1_d, wa2_d, wa3_d, f_u_d, f_v_d, f_w_d, B_d, rho_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_4_hip')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: f_u_d, f_v_d, f_w_d
-       type(c_ptr), value :: B_d, rho_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_4_hip
-  end interface
-
   interface
      subroutine pnpn_prs_stress_res_part1_hip(ta1_d, ta2_d, ta3_d, &
           wa1_d, wa2_d, wa3_d, s11_d, s22_d, s33_d, &
@@ -150,66 +88,6 @@ module pnpn_res_stress_device
      end subroutine pnpn_vel_res_update_hip
   end interface
 #elif HAVE_CUDA
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_1_cuda(ta1_d, ta2_d, ta3_d, &
-          wa1_d, wa2_d, wa3_d, s11_d, s22_d, s33_d, &
-          s12_d, s13_d, s23_d, f_u_d, f_v_d, f_w_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_1_cuda')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: s11_d, s22_d, s33_d, s12_d, s13_d, s23_d
-       type(c_ptr), value :: f_u_d, f_v_d, f_w_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_1_cuda
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_2_cuda( &
-          work1_d, work2_d, work3_d, ta1_d, ta2_d, ta3_d, svv_h1_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_2_cuda')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: work1_d, work2_d, work3_d
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_2_cuda
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_3_cuda(wa1_d, wa2_d, wa3_d, &
-          a11_d, a12_d, a13_d, a21_d, a22_d, a23_d, a31_d, a32_d, a33_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_3_cuda')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: a11_d, a12_d, a13_d
-       type(c_ptr), value :: a21_d, a22_d, a23_d
-       type(c_ptr), value :: a31_d, a32_d, a33_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_3_cuda
-  end interface
-
-  interface
-     subroutine pnpn_prs_stress_res_svv_part1_4_cuda(ta1_d, ta2_d, ta3_d, &
-          wa1_d, wa2_d, wa3_d, f_u_d, f_v_d, f_w_d, B_d, rho_d, n) &
-          bind(c, name = 'pnpn_prs_stress_res_svv_part1_4_cuda')
-       use, intrinsic :: iso_c_binding
-       import c_rp
-       implicit none
-       type(c_ptr), value :: ta1_d, ta2_d, ta3_d
-       type(c_ptr), value :: wa1_d, wa2_d, wa3_d
-       type(c_ptr), value :: f_u_d, f_v_d, f_w_d
-       type(c_ptr), value :: B_d, rho_d
-       integer(c_int) :: n
-     end subroutine pnpn_prs_stress_res_svv_part1_4_cuda
-  end interface
-
   interface
      subroutine pnpn_prs_stress_res_part1_cuda(ta1_d, ta2_d, ta3_d, &
           wa1_d, wa2_d, wa3_d, s11_d, s22_d, s33_d, &
@@ -326,7 +204,7 @@ contains
 
   subroutine pnpn_prs_res_stress_device_compute(p, p_res, u, v, w, u_e, v_e,&
        w_e, f_x, f_y, f_z, c_Xh, gs_Xh, bc_prs_surface, bc_sym_surface, Ax, bd,&
-       dt, mu, rho, event, svv)
+       dt, mu, rho, event)
     type(field_t), intent(inout) :: p, u, v, w
     type(field_t), intent(in) :: u_e, v_e, w_e
     type(field_t), intent(inout) :: p_res
@@ -341,7 +219,6 @@ contains
     type(field_t), intent(in) :: mu
     type(field_t), intent(in) :: rho
     type(c_ptr), intent(inout) :: event
-    type(svv_t), intent(inout), optional :: svv
     real(kind=rp) :: dtbd
     integer :: n, nelv, lxyz, gdim
     integer :: i, e
@@ -398,61 +275,25 @@ contains
     call dudxyz(ta2%x, mu%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
     call dudxyz(ta3%x, mu%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
 
-    if (present(svv)) then
 #ifdef HAVE_HIP
-       call pnpn_prs_stress_res_svv_part1_1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                s11%x_d, s22%x_d, s33%x_d, &
-                                                s12%x_d, s13%x_d, s23%x_d, &
-                                                f_x%x_d, f_y%x_d, f_z%x_d, n)
-#elif HAVE_CUDA
-       call pnpn_prs_stress_res_svv_part1_1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                 wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                 s11%x_d, s22%x_d, s33%x_d, &
-                                                 s12%x_d, s13%x_d, s23%x_d, &
-                                                 f_x%x_d, f_y%x_d, f_z%x_d, n)
-#elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
-#endif    
-       call stress_svv_apply_device(wa1, wa2, wa3, &
-                             work1, work2, ta1, ta2, ta3, &
-                             s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-#ifdef HAVE_HIP
-       call pnpn_prs_stress_res_svv_part1_4_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                f_x%x_d, f_y%x_d, f_z%x_d, &
-                                                c_Xh%B_d, rho%x_d, n)
-#elif HAVE_CUDA
-       call pnpn_prs_stress_res_svv_part1_4_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
-                                                 wa1%x_d, wa2%x_d, wa3%x_d, &
-                                                 f_x%x_d, f_y%x_d, f_z%x_d, &
-                                                 c_Xh%B_d, rho%x_d, n)
-#elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
-#endif
-
-    else
-
-#ifdef HAVE_HIP
-       call pnpn_prs_stress_res_part1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
+    call pnpn_prs_stress_res_part1_hip(ta1%x_d, ta2%x_d, ta3%x_d, &
             wa1%x_d, wa2%x_d, wa3%x_d, &
             s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
             f_x%x_d, f_y%x_d, f_z%x_d, &
             c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #elif HAVE_CUDA
-       call pnpn_prs_stress_res_part1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
+    call pnpn_prs_stress_res_part1_cuda(ta1%x_d, ta2%x_d, ta3%x_d, &
             wa1%x_d, wa2%x_d, wa3%x_d, &
             s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
             f_x%x_d, f_y%x_d, f_z%x_d, &
             c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #elif HAVE_OPENCL
-       call pnpn_prs_stress_res_part1_opencl(ta1%x_d, ta2%x_d, ta3%x_d, &
+    call pnpn_prs_stress_res_part1_opencl(ta1%x_d, ta2%x_d, ta3%x_d, &
             wa1%x_d, wa2%x_d, wa3%x_d, &
             s11%x_d, s22%x_d, s33%x_d, s12%x_d, s13%x_d, s23%x_d, &
             f_x%x_d, f_y%x_d, f_z%x_d, &
             c_Xh%B_d, c_Xh%h1_d, rho%x_d, n)
 #endif
-    end if
 
     call rotate_cyc(ta1%x, ta2%x, ta3%x, 1, c_Xh)
     call gs_Xh%op(ta1, GS_OP_ADD)
@@ -564,81 +405,5 @@ contains
     call neko_scratch_registry%relinquish_field(temp_indices)
 
   end subroutine pnpn_vel_res_stress_device_compute
-
-    subroutine stress_svv_apply_device(wa1, wa2, wa3, &
-                              work1, work2, ta1, ta2, ta3, &
-                              s11, s22, s33, s12, s13, s23, svv, c_Xh, n)
-    type(field_t), pointer, intent(inout) :: wa1, wa2, wa3
-    type(field_t), pointer, intent(inout) :: work1, work2, ta1, ta2, ta3
-    type(field_t), pointer, intent(inout) :: s11, s22, s33, s12, s13, s23
-    type(svv_t), intent(inout) :: svv
-    type(coef_t), intent(in) :: c_Xh
-    integer, intent(in) :: n
-    integer :: temp_indices_svv(10)
-    type(field_t), pointer :: work3, a11, a12, a13, a21, a22, a23, a31, a32, a33
-    
-    ! Work arrays
-    call neko_scratch_registry%request_field(a11, temp_indices_svv(1), .false.)
-    call neko_scratch_registry%request_field(a12, temp_indices_svv(2), .false.)
-    call neko_scratch_registry%request_field(a13, temp_indices_svv(3), .false.)
-    call neko_scratch_registry%request_field(a21, temp_indices_svv(4), .false.)
-    call neko_scratch_registry%request_field(a22, temp_indices_svv(5), .false.)
-    call neko_scratch_registry%request_field(a23, temp_indices_svv(6), .false.)
-    call neko_scratch_registry%request_field(a31, temp_indices_svv(7), .false.)
-    call neko_scratch_registry%request_field(a32, temp_indices_svv(8), .false.)
-    call neko_scratch_registry%request_field(a33, temp_indices_svv(9), .false.)
-    call neko_scratch_registry%request_field(work3, &
-                                             temp_indices_svv(10), .false.)
-
-    ! HPF on Sij
-    call svv%hpf(work1, s11)
-    call svv%hpf(work2, s22)
-    call svv%hpf(work3, s33)
-    call svv%hpf(ta1, s12)
-    call svv%hpf(ta2, s13)
-    call svv%hpf(ta3, s23)
-
-    ! Multiply by 2 and the svv coefficient
-    ! and take the divergence to get svv stresses and using Sij as work array
-#ifdef HAVE_HIP
-    call pnpn_prs_stress_res_svv_part1_2_hip(work1%x_d, work2%x_d, work3%x_d, &
-                                             ta1%x_d, ta2%x_d, ta3%x_d, &
-                                             svv%h1_d, n)
-#elif HAVE_CUDA
-    call pnpn_prs_stress_res_svv_part1_2_cuda(work1%x_d, work2%x_d, work3%x_d, &
-                                              ta1%x_d, ta2%x_d, ta3%x_d, &
-                                              svv%h1_d, n)
-#elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
-#endif
-
-    call cdtp(a11%x, work1%x, c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(a12%x, ta1%x,   c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(a13%x, ta2%x,   c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-    call cdtp(a21%x, ta1%x,   c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(a22%x, work2%x, c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(a23%x, ta3%x,   c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-    call cdtp(a31%x, ta2%x,   c_Xh%drdx, c_Xh%dsdx, c_Xh%dtdx, c_Xh)
-    call cdtp(a32%x, ta3%x,   c_Xh%drdy, c_Xh%dsdy, c_Xh%dtdy, c_Xh)
-    call cdtp(a33%x, work3%x, c_Xh%drdz, c_Xh%dsdz, c_Xh%dtdz, c_Xh)
-#ifdef HAVE_HIP
-    call pnpn_prs_stress_res_svv_part1_3_hip(wa1%x_d, wa2%x_d, wa3%x_d, &
-                                             a11%x_d, a12%x_d, a13%x_d, &
-                                             a21%x_d, a22%x_d, a23%x_d, &
-                                             a31%x_d, a32%x_d, a33%x_d, &
-                                             n)
-#elif HAVE_CUDA
-    call pnpn_prs_stress_res_svv_part1_3_cuda(wa1%x_d, wa2%x_d, wa3%x_d, &
-                                              a11%x_d, a12%x_d, a13%x_d, &
-                                              a21%x_d, a22%x_d, a23%x_d, &
-                                              a31%x_d, a32%x_d, a33%x_d, &
-                                              n)
-#elif HAVE_OPENCL
-       call neko_error("pnpn prs residual does not support svv on OpenCL")
-#endif
-
-    call neko_scratch_registry%relinquish_field(temp_indices_svv)
-
-  end subroutine stress_svv_apply_device
 
 end module pnpn_res_stress_device
