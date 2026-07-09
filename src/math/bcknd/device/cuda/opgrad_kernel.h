@@ -199,5 +199,56 @@ opgrad_kernel_kstep(T * __restrict__ ux,
   }
 }
 
+template< typename T >
+__global__ void opgrad_kernel_global(T * __restrict__ ux,
+                                     T * __restrict__ uy,
+                                     T * __restrict__ uz,
+                                     const T * __restrict__ u,
+                                     const T * __restrict__ dx,
+                                     const T * __restrict__ dy,
+                                     const T * __restrict__ dz,
+                                     const T * __restrict__ drdx,
+                                     const T * __restrict__ dsdx,
+                                     const T * __restrict__ dtdx,
+                                     const T * __restrict__ drdy,
+                                     const T * __restrict__ dsdy,
+                                     const T * __restrict__ dtdy,
+                                     const T * __restrict__ drdz,
+                                     const T * __restrict__ dsdz,
+                                     const T * __restrict__ dtdz,
+                                     const T * __restrict__ w3,
+                                     const int lx,
+                                     const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+
+  for (int p = idx; p < n; p += str) {
+    const int e = p / lxyz;
+    const int ijk = p - e * lxyz;
+    const int jk = ijk / lx;
+    const int i = ijk - jk * lx;
+    const int k = jk / lx;
+    const int j = jk - k * lx;
+    const int ele = e * lxyz;
+
+    T rtmp = 0.0;
+    T stmp = 0.0;
+    T ttmp = 0.0;
+
+    for (int l = 0; l < lx; l++) {
+      rtmp += dx[i + l * lx] * u[l + j * lx + k * lxy + ele];
+      stmp += dy[j + l * lx] * u[i + l * lx + k * lxy + ele];
+      ttmp += dz[k + l * lx] * u[i + j * lx + l * lxy + ele];
+    }
+
+    const T W3 = w3[ijk];
+    ux[p] = W3 * (drdx[p] * rtmp + dsdx[p] * stmp + dtdx[p] * ttmp);
+    uy[p] = W3 * (drdy[p] * rtmp + dsdy[p] * stmp + dtdy[p] * ttmp);
+    uz[p] = W3 * (drdz[p] * rtmp + dsdz[p] * stmp + dtdz[p] * ttmp);
+  }
+}
 
 #endif // __MATH_OPGRAD_KERNEL_H__

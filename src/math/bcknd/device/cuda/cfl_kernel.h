@@ -181,5 +181,69 @@ __global__ void cfl_kernel(const T dt,
     cfl_h[blockIdx.x] = cfl_tmp;
 }
 
+template< typename T >
+__global__ void cfl_kernel_lx(const T dt,
+			      const T * __restrict__ u,
+			      const T * __restrict__ v,
+			      const T * __restrict__ w,
+			      const T * __restrict__ drdx,
+			      const T * __restrict__ dsdx,
+			      const T * __restrict__ dtdx,
+			      const T * __restrict__ drdy,
+			      const T * __restrict__ dsdy,
+			      const T * __restrict__ dtdy,
+			      const T * __restrict__ drdz,
+			      const T * __restrict__ dsdz,
+			      const T * __restrict__ dtdz,
+			      const T * __restrict__ dr_inv,
+			      const T * __restrict__ ds_inv,
+			      const T * __restrict__ dt_inv,
+			      const T * __restrict__ jacinv,
+			      T * __restrict__ cfl_h,
+			      const int lx) {
+
+  const int e = blockIdx.x;
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+  const int ele = e * lxyz;
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int wid = threadIdx.x / warpSize;
+
+  __shared__ T shared[32];
+
+  T cfl_tmp = 0.0;
+  for (int ijk = threadIdx.x; ijk < lxyz; ijk += blockDim.x) {
+    const int jk = ijk / lx;
+    const int i = ijk - jk * lx;
+    const int k = jk / lx;
+    const int j = jk - k * lx;
+    const int idx = ijk + ele;
+
+    const T cflr = fabs(dt * ((u[idx] * drdx[idx]
+                               + v[idx] * drdy[idx]
+                               + w[idx] * drdz[idx]) * jacinv[idx]) * dr_inv[i]);
+    const T cfls = fabs(dt * ((u[idx] * dsdx[idx]
+                               + v[idx] * dsdy[idx]
+                               + w[idx] * dsdz[idx]) * jacinv[idx]) * ds_inv[j]);
+    const T cflt = fabs(dt * ((u[idx] * dtdx[idx]
+                               + v[idx] * dtdy[idx]
+                               + w[idx] * dtdz[idx]) * jacinv[idx]) * dt_inv[k]);
+
+    cfl_tmp = fmax(cflr + cfls + cflt, cfl_tmp);
+  }
+
+  cfl_tmp = cfl_reduce_warp<T>(cfl_tmp);
+  if (lane == 0)
+    shared[wid] = cfl_tmp;
+  __syncthreads();
+
+  cfl_tmp = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
+  if (wid == 0)
+    cfl_tmp = cfl_reduce_warp<T>(cfl_tmp);
+
+  if (threadIdx.x == 0)
+    cfl_h[blockIdx.x] = cfl_tmp;
+}
+
 
 #endif // __MATH_CFL_KERNEL_H__

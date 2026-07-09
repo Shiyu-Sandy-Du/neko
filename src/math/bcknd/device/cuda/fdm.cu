@@ -42,6 +42,8 @@ extern "C" {
   void cuda_fdm_do_fast(void *e, void *r, void *s, void *d, int *nl, int *nel, cudaStream_t stream) {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(*nel, 1, 1);
+    static real *work = NULL;
+    static size_t work_size = 0;
 
 #define CASE(NL)                                                                 \
     case NL:                                                                     \
@@ -49,6 +51,25 @@ extern "C" {
       <<<nblcks, nthrds, 0, stream>>>((real *) e, (real *) r,                    \
                                       (real *) s,(real *) d);                    \
     CUDA_CHECK(cudaGetLastError());                                              \
+    break;
+
+#define CASE_GLOBAL(NL)                                                          \
+    case NL:                                                                     \
+    {                                                                            \
+    const size_t required_size =                                                 \
+      (size_t) (*nel) * (size_t) NL * (size_t) NL * (size_t) NL * sizeof(real);  \
+    if (work_size < required_size) {                                             \
+      if (work != NULL) {                                                        \
+        CUDA_CHECK(cudaFree(work));                                              \
+      }                                                                          \
+      CUDA_CHECK(cudaMalloc((void **) &work, required_size));                    \
+      work_size = required_size;                                                 \
+    }                                                                            \
+    fdm_do_fast_kernel_global<real,NL>                                           \
+      <<<nblcks, nthrds, 0, stream>>>((real *) e, (real *) r,                    \
+                                      (real *) s,(real *) d, work);              \
+    CUDA_CHECK(cudaGetLastError());                                              \
+    }                                                                            \
     break;
 
     switch(*nl) {
@@ -65,6 +86,12 @@ extern "C" {
        CASE(12);
        CASE(13);
        CASE(14);
+       CASE_GLOBAL(15);
+       CASE_GLOBAL(16);
+       CASE_GLOBAL(17);
+       CASE_GLOBAL(18);
+       CASE_GLOBAL(19);
+       CASE_GLOBAL(35);
      default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *nl);

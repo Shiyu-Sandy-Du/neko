@@ -520,6 +520,184 @@ __global__ void __launch_bounds__(LX*LX,3)
 }
 
 template< typename T >
+__device__ __forceinline__ void ax_helm_stress_flux_global(
+                              T &ur, T &us, T &ut,
+                              T &vr, T &vs, T &vt,
+                              T &wr, T &ws, T &wt,
+                              const T * __restrict__ u,
+                              const T * __restrict__ v,
+                              const T * __restrict__ w,
+                              const T * __restrict__ dx,
+                              const T * __restrict__ dy,
+                              const T * __restrict__ dz,
+                              const T * __restrict__ h1,
+                              const T * __restrict__ drdx,
+                              const T * __restrict__ drdy,
+                              const T * __restrict__ drdz,
+                              const T * __restrict__ dsdx,
+                              const T * __restrict__ dsdy,
+                              const T * __restrict__ dsdz,
+                              const T * __restrict__ dtdx,
+                              const T * __restrict__ dtdy,
+                              const T * __restrict__ dtdz,
+                              const T * __restrict__ jacinv,
+                              const T * __restrict__ weight3,
+                              const int i,
+                              const int j,
+                              const int k,
+                              const int e,
+                              const int lx) {
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+  const int ele = e * lxyz;
+  const int ijk = i + j * lx + k * lxy;
+
+  T urtmp = 0.0;
+  T ustmp = 0.0;
+  T uttmp = 0.0;
+  T vrtmp = 0.0;
+  T vstmp = 0.0;
+  T vttmp = 0.0;
+  T wrtmp = 0.0;
+  T wstmp = 0.0;
+  T wttmp = 0.0;
+
+  for (int l = 0; l < lx; l++) {
+    urtmp += dx[i + l * lx] * u[l + j * lx + k * lxy + ele];
+    ustmp += dy[j + l * lx] * u[i + l * lx + k * lxy + ele];
+    uttmp += dz[k + l * lx] * u[i + j * lx + l * lxy + ele];
+
+    vrtmp += dx[i + l * lx] * v[l + j * lx + k * lxy + ele];
+    vstmp += dy[j + l * lx] * v[i + l * lx + k * lxy + ele];
+    vttmp += dz[k + l * lx] * v[i + j * lx + l * lxy + ele];
+
+    wrtmp += dx[i + l * lx] * w[l + j * lx + k * lxy + ele];
+    wstmp += dy[j + l * lx] * w[i + l * lx + k * lxy + ele];
+    wttmp += dz[k + l * lx] * w[i + j * lx + l * lxy + ele];
+  }
+
+  const int p = ijk + ele;
+  const T drdx_local = drdx[p];
+  const T drdy_local = drdy[p];
+  const T drdz_local = drdz[p];
+  const T dsdx_local = dsdx[p];
+  const T dsdy_local = dsdy[p];
+  const T dsdz_local = dsdz[p];
+  const T dtdx_local = dtdx[p];
+  const T dtdy_local = dtdy[p];
+  const T dtdz_local = dtdz[p];
+  const T dj = h1[p] * weight3[ijk] * jacinv[p];
+
+  const T u1 = urtmp * drdx_local + ustmp * dsdx_local + uttmp * dtdx_local;
+  const T u2 = urtmp * drdy_local + ustmp * dsdy_local + uttmp * dtdy_local;
+  const T u3 = urtmp * drdz_local + ustmp * dsdz_local + uttmp * dtdz_local;
+
+  const T v1 = vrtmp * drdx_local + vstmp * dsdx_local + vttmp * dtdx_local;
+  const T v2 = vrtmp * drdy_local + vstmp * dsdy_local + vttmp * dtdy_local;
+  const T v3 = vrtmp * drdz_local + vstmp * dsdz_local + vttmp * dtdz_local;
+
+  const T w1 = wrtmp * drdx_local + wstmp * dsdx_local + wttmp * dtdx_local;
+  const T w2 = wrtmp * drdy_local + wstmp * dsdy_local + wttmp * dtdy_local;
+  const T w3 = wrtmp * drdz_local + wstmp * dsdz_local + wttmp * dtdz_local;
+
+  const T s11 = dj * (u1 + u1);
+  const T s22 = dj * (v2 + v2);
+  const T s33 = dj * (w3 + w3);
+  const T s12 = dj * (u2 + v1);
+  const T s13 = dj * (u3 + w1);
+  const T s23 = dj * (v3 + w2);
+
+  ur = drdx_local * s11 + drdy_local * s12 + drdz_local * s13;
+  us = dsdx_local * s11 + dsdy_local * s12 + dsdz_local * s13;
+  ut = dtdx_local * s11 + dtdy_local * s12 + dtdz_local * s13;
+
+  vr = drdx_local * s12 + drdy_local * s22 + drdz_local * s23;
+  vs = dsdx_local * s12 + dsdy_local * s22 + dsdz_local * s23;
+  vt = dtdx_local * s12 + dtdy_local * s22 + dtdz_local * s23;
+
+  wr = drdx_local * s13 + drdy_local * s23 + drdz_local * s33;
+  ws = dsdx_local * s13 + dsdy_local * s23 + dsdz_local * s33;
+  wt = dtdx_local * s13 + dtdy_local * s23 + dtdz_local * s33;
+}
+
+template< typename T >
+__global__ void ax_helm_stress_kernel_vector_global(
+                              T * __restrict__ au,
+                              T * __restrict__ av,
+                              T * __restrict__ aw,
+                              const T * __restrict__ u,
+                              const T * __restrict__ v,
+                              const T * __restrict__ w,
+                              const T * __restrict__ dx,
+                              const T * __restrict__ dy,
+                              const T * __restrict__ dz,
+                              const T * __restrict__ h1,
+                              const T * __restrict__ drdx,
+                              const T * __restrict__ drdy,
+                              const T * __restrict__ drdz,
+                              const T * __restrict__ dsdx,
+                              const T * __restrict__ dsdy,
+                              const T * __restrict__ dsdz,
+                              const T * __restrict__ dtdx,
+                              const T * __restrict__ dtdy,
+                              const T * __restrict__ dtdz,
+                              const T * __restrict__ jacinv,
+                              const T * __restrict__ weight3,
+                              const int lx,
+                              const int n) {
+  const int p = blockIdx.x * blockDim.x + threadIdx.x;
+  if (p >= n) {
+    return;
+  }
+
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+  const int e = p / lxyz;
+  const int ijk = p - e * lxyz;
+  const int k = ijk / lxy;
+  const int ij = ijk - k * lxy;
+  const int j = ij / lx;
+  const int i = ij - j * lx;
+
+  T aup = 0.0;
+  T avp = 0.0;
+  T awp = 0.0;
+  for (int l = 0; l < lx; l++) {
+    T ur, us, ut, vr, vs, vt, wr, ws, wt;
+    ax_helm_stress_flux_global(ur, us, ut, vr, vs, vt, wr, ws, wt,
+                               u, v, w, dx, dy, dz, h1,
+                               drdx, drdy, drdz, dsdx, dsdy, dsdz,
+                               dtdx, dtdy, dtdz, jacinv, weight3,
+                               l, j, k, e, lx);
+    aup += dx[l + i * lx] * ur;
+    avp += dx[l + i * lx] * vr;
+    awp += dx[l + i * lx] * wr;
+
+    ax_helm_stress_flux_global(ur, us, ut, vr, vs, vt, wr, ws, wt,
+                               u, v, w, dx, dy, dz, h1,
+                               drdx, drdy, drdz, dsdx, dsdy, dsdz,
+                               dtdx, dtdy, dtdz, jacinv, weight3,
+                               i, l, k, e, lx);
+    aup += dy[l + j * lx] * us;
+    avp += dy[l + j * lx] * vs;
+    awp += dy[l + j * lx] * ws;
+
+    ax_helm_stress_flux_global(ur, us, ut, vr, vs, vt, wr, ws, wt,
+                               u, v, w, dx, dy, dz, h1,
+                               drdx, drdy, drdz, dsdx, dsdy, dsdz,
+                               dtdx, dtdy, dtdz, jacinv, weight3,
+                               i, j, l, e, lx);
+    aup += dz[l + k * lx] * ut;
+    avp += dz[l + k * lx] * vt;
+    awp += dz[l + k * lx] * wt;
+  }
+
+  au[p] = aup;
+  av[p] = avp;
+  aw[p] = awp;
+}
+
+template< typename T >
 __global__ void ax_helm_stress_kernel_vector_part2(T * __restrict__ au,
                                             T * __restrict__ av,
                                             T * __restrict__ aw,

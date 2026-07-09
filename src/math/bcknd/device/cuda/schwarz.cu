@@ -48,6 +48,9 @@ extern "C" {
     
     const dim3 nthrds((*nx-2)*(*nx-2), 1, 1);
     const dim3 nblcks((*nel), 1, 1);
+    const int n = (*nel) * (*nx - 2) * (*nx - 2);
+    const dim3 nthrds_global(1024, 1, 1);
+    const dim3 nblcks_global((n + 1024 - 1) / 1024, 1, 1);
       
 #define CASE(NX)                                                       \
     case NX:                                                           \
@@ -56,6 +59,25 @@ extern "C" {
                          (real *) arr2, *l2, *f2 );                    \
     CUDA_CHECK(cudaGetLastError());                                    \
         break;
+
+#define CASE_GLOBAL(NX)                                                 \
+    case NX:                                                           \
+      schwarz_extrude_kernel_global<real>                              \
+        <<<nblcks_global, nthrds_global, 0, stream>>>((real *) arr1,   \
+                           *l1, *f1, (real *) arr2, *l2, *f2, *nx,     \
+                           *nel, 0);                                   \
+      CUDA_CHECK(cudaGetLastError());                                  \
+      schwarz_extrude_kernel_global<real>                              \
+        <<<nblcks_global, nthrds_global, 0, stream>>>((real *) arr1,   \
+                           *l1, *f1, (real *) arr2, *l2, *f2, *nx,     \
+                           *nel, 1);                                   \
+      CUDA_CHECK(cudaGetLastError());                                  \
+      schwarz_extrude_kernel_global<real>                              \
+        <<<nblcks_global, nthrds_global, 0, stream>>>((real *) arr1,   \
+                           *l1, *f1, (real *) arr2, *l2, *f2, *nx,     \
+                           *nel, 2);                                   \
+      CUDA_CHECK(cudaGetLastError());                                  \
+      break;
 
     switch(*nx) {
       CASE(3);
@@ -70,6 +92,12 @@ extern "C" {
       CASE(12);
       CASE(13);
       CASE(14);
+      CASE(15);
+      CASE(16);
+      CASE(17);
+      CASE(18);
+      CASE(19);
+      CASE_GLOBAL(35);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *nx);

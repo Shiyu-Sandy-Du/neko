@@ -170,5 +170,53 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 }
 
+template< typename T >
+__global__ void cdtp_kernel_global(T * __restrict__ dtx,
+                                   const T * __restrict__ x,
+                                   const T * __restrict__ dr,
+                                   const T * __restrict__ ds,
+                                   const T * __restrict__ dt,
+                                   const T * __restrict__ dxt,
+                                   const T * __restrict__ dyt,
+                                   const T * __restrict__ dzt,
+                                   const T * __restrict__ w3,
+                                   const int lx,
+                                   const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+
+  for (int p = idx; p < n; p += str) {
+    const int e = p / lxyz;
+    const int ijk = p - e * lxyz;
+    const int jk = ijk / lx;
+    const int i = ijk - jk * lx;
+    const int k = jk / lx;
+    const int j = jk - k * lx;
+    const int ele = e * lxyz;
+
+    T rtmp = 0.0;
+    T stmp = 0.0;
+    T ttmp = 0.0;
+
+    for (int l = 0; l < lx; l++) {
+      const int r_idx = l + j * lx + k * lxy;
+      const int s_idx = i + l * lx + k * lxy;
+      const int t_idx = i + j * lx + l * lxy;
+
+      const T rtar = x[r_idx + ele] * w3[r_idx] * dr[r_idx + ele];
+      const T stas = x[s_idx + ele] * w3[s_idx] * ds[s_idx + ele];
+      const T ttat = x[t_idx + ele] * w3[t_idx] * dt[t_idx + ele];
+
+      rtmp += dxt[i + l * lx] * rtar;
+      stmp += dyt[j + l * lx] * stas;
+      ttmp += dzt[k + l * lx] * ttat;
+    }
+
+    dtx[p] = rtmp + stmp + ttmp;
+  }
+}
 
 #endif // __MATH_CDTP_KERNEL_H__

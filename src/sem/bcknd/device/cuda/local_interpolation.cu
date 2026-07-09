@@ -433,6 +433,8 @@ extern "C" {
       RST_CASE(14);
       RST_CASE(15);
       RST_CASE(16);
+      RST_CASE(17);
+      RST_CASE(33);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

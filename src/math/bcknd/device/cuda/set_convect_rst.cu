@@ -63,7 +63,7 @@ extern "C" {
                    void *drdz, void *dsdz, void *dtdz,
                    void *w3, int *nel, int *lx) {
 
-    static int autotune[17] = { 0 };
+    static int autotune[34] = { 0 };
 
     const dim3 nthrds_1d(1024, 1, 1);
     const dim3 nthrds_kstep((*lx), (*lx), 1);
@@ -124,6 +124,10 @@ extern "C" {
       CASE(14);
       CASE(15);
       CASE(16);
+      CASE(17);
+      case 33:
+        CASE_1D(33);
+        break;
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
@@ -211,4 +215,3 @@ int tune_set_convect_rst(void *cr, void *cs, void *ct,
   log_end_section();
   return retval;
 }
-

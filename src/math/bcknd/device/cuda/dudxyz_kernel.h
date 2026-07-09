@@ -176,4 +176,45 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 }
 
+template< typename T >
+__global__ void dudxyz_kernel_global(T * __restrict__ du,
+                                     const T * __restrict__ u,
+                                     const T * __restrict__ dr,
+                                     const T * __restrict__ ds,
+                                     const T * __restrict__ dt,
+                                     const T * __restrict__ dx,
+                                     const T * __restrict__ dy,
+                                     const T * __restrict__ dz,
+                                     const T * __restrict__ jacinv,
+                                     const int lx,
+                                     const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+
+  for (int p = idx; p < n; p += str) {
+    const int e = p / lxyz;
+    const int ijk = p - e * lxyz;
+    const int jk = ijk / lx;
+    const int i = ijk - jk * lx;
+    const int k = jk / lx;
+    const int j = jk - k * lx;
+    const int ele = e * lxyz;
+
+    T rtmp = 0.0;
+    T stmp = 0.0;
+    T ttmp = 0.0;
+
+    for (int l = 0; l < lx; l++) {
+      rtmp += dx[i + l * lx] * u[l + j * lx + k * lxy + ele];
+      stmp += dy[j + l * lx] * u[i + l * lx + k * lxy + ele];
+      ttmp += dz[k + l * lx] * u[i + j * lx + l * lxy + ele];
+    }
+
+    du[p] = jacinv[p] * ((rtmp * dr[p]) + (stmp * ds[p]) + (ttmp * dt[p]));
+  }
+}
+
 #endif // __MATH_DUDXYZ_KERNEL_H__

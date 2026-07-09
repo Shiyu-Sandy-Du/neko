@@ -101,6 +101,19 @@ extern "C" {
       CUDA_CHECK(cudaGetLastError());                                           \
       break
 
+#define CASE_LX(LX)                                                             \
+    case LX:                                                                    \
+      cfl_kernel_lx<real>                                                       \
+        <<<nblcks, nthrds, 0, stream>>>                                         \
+        (*dt, (real *) u, (real *) v, (real *) w,                               \
+         (real *) drdx, (real *) dsdx, (real *) dtdx,                           \
+         (real *) drdy, (real *) dsdy, (real *) dtdy,                           \
+         (real *) drdz, (real *) dsdz, (real *) dtdz,                           \
+         (real *) dr_inv, (real *) ds_inv, (real *) dt_inv,                     \
+         (real *) jacinv, (real *) cfl_d, LX);                                  \
+      CUDA_CHECK(cudaGetLastError());                                           \
+      break
+
     switch(*lx) {
       CASE(2);
       CASE(3);
@@ -111,6 +124,14 @@ extern "C" {
       CASE(8);
       CASE(9);
       CASE(10);
+      CASE(11);
+      CASE_LX(12);
+      CASE_LX(13);
+      CASE_LX(14);
+      CASE_LX(15);
+      CASE_LX(16);
+      CASE_LX(17);
+      CASE_LX(33);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

@@ -85,6 +85,58 @@ __global__ void schwarz_extrude_kernel(T * a1,
   a1[idx1] = f1*a1[idx1] + f2*a2[idx2];
 }
 
+template< typename T>
+__global__ void schwarz_extrude_kernel_global(T * a1,
+                                              const int l1,
+                                              const T f1,
+                                              T * a2,
+                                              const int l2,
+                                              const T f2,
+                                              const int nx,
+                                              const int nel,
+                                              const int dim) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int nface = (nx - 2) * (nx - 2);
+  const int n = nel * nface;
+  if (idx >= n) {
+    return;
+  }
+
+  const int e = idx / nface;
+  const int face_idx = idx - e * nface;
+  const int x = face_idx % (nx - 2) + 1;
+  const int y = face_idx / (nx - 2) + 1;
+  const int el = e * nx * nx * nx;
+  int idx1, idx2;
+
+  if (dim == 0) {
+    idx1 = l1 + x * nx + y * nx * nx + el;
+    idx2 = l2 + x * nx + y * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+
+    idx1 = (nx - 1 - l1) + x * nx + y * nx * nx + el;
+    idx2 = (nx - 1 - l2) + x * nx + y * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+  } else if (dim == 1) {
+    idx1 = x + l1 * nx + y * nx * nx + el;
+    idx2 = x + l2 * nx + y * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+
+    idx1 = x + (nx - 1 - l1) * nx + y * nx * nx + el;
+    idx2 = x + (nx - 1 - l2) * nx + y * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+  } else {
+    idx1 = x + y * nx + l1 * nx * nx + el;
+    idx2 = x + y * nx + l2 * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+
+    idx1 = x + y * nx + (nx - 1 - l1) * nx * nx + el;
+    idx2 = x + y * nx + (nx - 1 - l2) * nx * nx + el;
+    a1[idx1] = f1 * a1[idx1] + f2 * a2[idx2];
+  }
+}
+
 
 /**
  * Device kernel for schwarz extrude

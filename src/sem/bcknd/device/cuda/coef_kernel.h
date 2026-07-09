@@ -100,6 +100,45 @@ __global__ void coef_generate_geo_kernel(T * __restrict__ G11,
   }
 }
 
+template< typename T >
+__global__ void coef_generate_geo_kernel_global(T * __restrict__ G11,
+                                                T * __restrict__ G12,
+                                                T * __restrict__ G13,
+                                                T * __restrict__ G22,
+                                                T * __restrict__ G23,
+                                                T * __restrict__ G33,
+                                                const T * __restrict__ drdx,
+                                                const T * __restrict__ drdy,
+                                                const T * __restrict__ drdz,
+                                                const T * __restrict__ dsdx,
+                                                const T * __restrict__ dsdy,
+                                                const T * __restrict__ dsdz,
+                                                const T * __restrict__ dtdx,
+                                                const T * __restrict__ dtdy,
+                                                const T * __restrict__ dtdz,
+                                                const T * __restrict__ jacinv,
+                                                const T * __restrict__ w3,
+                                                const int lx,
+                                                const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  const int lxyz = lx * lx * lx;
+
+  for (int i = idx; i < n; i += str) {
+    const int local_idx = i - (i / lxyz) * lxyz;
+    const T jw = jacinv[i] * w3[local_idx];
+
+    G11[i] = (drdx[i] * drdx[i] + drdy[i] * drdy[i] + drdz[i] * drdz[i]) * jw;
+    G22[i] = (dsdx[i] * dsdx[i] + dsdy[i] * dsdy[i] + dsdz[i] * dsdz[i]) * jw;
+    G33[i] = (dtdx[i] * dtdx[i] + dtdy[i] * dtdy[i] + dtdz[i] * dtdz[i]) * jw;
+
+    G12[i] = (drdx[i] * dsdx[i] + drdy[i] * dsdy[i] + drdz[i] * dsdz[i]) * jw;
+    G13[i] = (drdx[i] * dtdx[i] + drdy[i] * dtdy[i] + drdz[i] * dtdz[i]) * jw;
+    G23[i] = (dsdx[i] * dtdx[i] + dsdy[i] * dtdy[i] + dsdz[i] * dtdz[i]) * jw;
+  }
+}
+
 /**
  * Device kernel for coef dxyz
  */
@@ -227,6 +266,80 @@ __global__ void coef_generate_dxyz_kernel(T * __restrict__ dxdr,
       dzds[ijk + e * LX * LX * LX] = stmp;
       dzdt[ijk + e * LX * LX * LX] = ttmp;
     }
+  }
+}
+
+template< typename T >
+__global__ void coef_generate_dxyz_kernel_global(T * __restrict__ dxdr,
+                                                 T * __restrict__ dydr,
+                                                 T * __restrict__ dzdr,
+                                                 T * __restrict__ dxds,
+                                                 T * __restrict__ dyds,
+                                                 T * __restrict__ dzds,
+                                                 T * __restrict__ dxdt,
+                                                 T * __restrict__ dydt,
+                                                 T * __restrict__ dzdt,
+                                                 const T * __restrict__ dx,
+                                                 const T * __restrict__ dy,
+                                                 const T * __restrict__ dz,
+                                                 const T * __restrict__ x,
+                                                 const T * __restrict__ y,
+                                                 const T * __restrict__ z,
+                                                 const int lx,
+                                                 const int n) {
+
+  const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int str = blockDim.x * gridDim.x;
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+
+  for (int p = idx; p < n; p += str) {
+    const int e = p / lxyz;
+    const int ijk = p - e * lxyz;
+    const int jk = ijk / lx;
+    const int i = ijk - jk * lx;
+    const int k = jk / lx;
+    const int j = jk - k * lx;
+    const int ele = e * lxyz;
+
+    T xrtmp = 0.0;
+    T xstmp = 0.0;
+    T xttmp = 0.0;
+    T yrtmp = 0.0;
+    T ystmp = 0.0;
+    T yttmp = 0.0;
+    T zrtmp = 0.0;
+    T zstmp = 0.0;
+    T zttmp = 0.0;
+
+    for (int l = 0; l < lx; l++) {
+      const T dr = dx[i + l * lx];
+      const T ds = dy[j + l * lx];
+      const T dt = dz[k + l * lx];
+      const int r_idx = l + j * lx + k * lxy + ele;
+      const int s_idx = i + l * lx + k * lxy + ele;
+      const int t_idx = i + j * lx + l * lxy + ele;
+
+      xrtmp += dr * x[r_idx];
+      xstmp += ds * x[s_idx];
+      xttmp += dt * x[t_idx];
+      yrtmp += dr * y[r_idx];
+      ystmp += ds * y[s_idx];
+      yttmp += dt * y[t_idx];
+      zrtmp += dr * z[r_idx];
+      zstmp += ds * z[s_idx];
+      zttmp += dt * z[t_idx];
+    }
+
+    dxdr[p] = xrtmp;
+    dxds[p] = xstmp;
+    dxdt[p] = xttmp;
+    dydr[p] = yrtmp;
+    dyds[p] = ystmp;
+    dydt[p] = yttmp;
+    dzdr[p] = zrtmp;
+    dzds[p] = zstmp;
+    dzdt[p] = zttmp;
   }
 }
 

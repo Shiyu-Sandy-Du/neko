@@ -60,6 +60,9 @@ extern "C" {
 
     const dim3 nthrds((*lx), (*lx), 1);
     const dim3 nblcks((*nelv), 1, 1);
+    const dim3 nthrds_1d(1024, 1, 1);
+    const int n = (*nelv) * (*lx) * (*lx) * (*lx);
+    const dim3 nblcks_global((n + 1024 - 1) / 1024, 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
 
 #define CASE_VECTOR_KSTEP(LX)                                                            \
@@ -83,6 +86,20 @@ extern "C" {
                                      (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
                                      (real *) jacinv, (real *) w3);                      \
     CUDA_CHECK(cudaGetLastError());
+
+#define CASE_VECTOR_GLOBAL(LX)                                                           \
+    case LX:                                                                             \
+      ax_helm_stress_kernel_vector_global<real>                                          \
+      <<<nblcks_global, nthrds_1d, 0, stream>>>((real *) au, (real *) av,                \
+                                     (real *) aw, (real *) u, (real *) v,                \
+                                     (real *) w, (real *) dx, (real *) dy,               \
+                                     (real *) dz, (real *) h1, (real *) drdx,            \
+                                     (real *) drdy, (real *) drdz, (real *) dsdx,        \
+                                     (real *) dsdy, (real *) dsdz, (real *) dtdx,        \
+                                     (real *) dtdy, (real *) dtdz, (real *) jacinv,      \
+                                     (real *) w3, *lx, n);                               \
+      CUDA_CHECK(cudaGetLastError());                                                    \
+      break
 
 #define CASE_VECTOR(LX)                                                         \
     case LX:                                                                    \
@@ -110,6 +127,8 @@ extern "C" {
       CASE_VECTOR(14);
       CASE_VECTOR(15);
       CASE_VECTOR_PADDED(16);
+      CASE_VECTOR(17);
+      CASE_VECTOR_GLOBAL(33);
       default:
         {
           fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

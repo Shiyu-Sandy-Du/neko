@@ -51,6 +51,9 @@ extern "C" {
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(*nel, 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+    static real *work1 = NULL;
+    static real *work2 = NULL;
+    static size_t work_size = 0;
 
     int n = max(*nu,*nv);
 #define CASE(N)                                                              \
@@ -62,9 +65,29 @@ extern "C" {
     CUDA_CHECK(cudaGetLastError());                                          \
     break
 
-#define CASE_LARGE(N)                                                        \
+#define CASE_GLOBAL(N)                                                       \
+    case N: {                                                                \
+    const size_t required_size =                                             \
+      (size_t) (*nel) * (size_t) N * (size_t) N * (size_t) N * sizeof(real); \
+    if (work_size < required_size) {                                         \
+      if (work1 != NULL) CUDA_CHECK(cudaFree(work1));                        \
+      if (work2 != NULL) CUDA_CHECK(cudaFree(work2));                        \
+      CUDA_CHECK(cudaMalloc((void **) &work1, required_size));               \
+      CUDA_CHECK(cudaMalloc((void **) &work2, required_size));               \
+      work_size = required_size;                                             \
+    }                                                                        \
+    tnsr3d_kernel_global<real>                                               \
+      <<<nblcks, nthrds, 0, stream>>>((real *) v, *nv,                       \
+                                      (real *) u, *nu,                       \
+                                      (real *) A, (real *) Bt, (real *) Ct,  \
+                                      work1, work2);                         \
+    CUDA_CHECK(cudaGetLastError());                                          \
+    }                                                                        \
+    break
+
+#define CASE_DIRECT(N)                                                       \
     case N:                                                                  \
-    tnsr3d_kernel_large<real, N>                                             \
+    tnsr3d_kernel_direct<real>                                               \
       <<<nblcks, nthrds, 0, stream>>>((real *) v, *nv,                       \
                                       (real *) u, *nu,                       \
                                       (real *) A, (real *) Bt, (real *) Ct); \
@@ -85,8 +108,12 @@ extern "C" {
       CASE(12);
       CASE(13);
       CASE(14);
-      CASE_LARGE(15);
-      CASE_LARGE(16);
+      CASE_GLOBAL(15);
+      CASE_GLOBAL(16);
+      CASE_GLOBAL(17);
+      CASE_GLOBAL(25);
+      CASE_GLOBAL(33);
+      CASE_GLOBAL(49);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", n);
@@ -113,6 +140,16 @@ extern "C" {
     CUDA_CHECK(cudaGetLastError());                                          \
     break
 
+#define CASE2_DIRECT(N)                                                       \
+    case N:                                                                   \
+    tnsr3d_el_kernel_direct<real>                                             \
+      <<<nblcks, nthrds, 0, stream>>>((real *) v, *nv,                        \
+                                      (real *) u, *nu,                        \
+                                      (real *) A, (real *) Bt, (real *) Ct,   \
+                                      (int *) elements, *n_points);           \
+    CUDA_CHECK(cudaGetLastError());                                           \
+    break
+
     switch(n) {
       CASE2(2);
       CASE2(3);
@@ -127,6 +164,8 @@ extern "C" {
       CASE2(12);
       CASE2(13);
       CASE2(14);
+      CASE2_DIRECT(25);
+      CASE2_DIRECT(49);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", n);

@@ -136,6 +136,108 @@ __global__ void fdm_do_fast_kernel(T  * __restrict__ e,
 
 }
 
+template< typename T, const int NL >
+__global__ void fdm_do_fast_kernel_global(T  * __restrict__ e,
+                                          T * __restrict__ r,
+                                          T * __restrict__ s,
+                                          T * __restrict__ d,
+                                          T * __restrict__ work) {
+  const int idx = threadIdx.x;
+  const int str = blockDim.x;
+  const int el = blockIdx.x;
+  const int el_offset = el * NL * NL * NL;
+  const int s_offset = el * NL * NL * 3 * 2;
+
+  const T *A1 = s + NL * NL + s_offset;
+  const T *B1 = s + 2 * NL * NL + s_offset;
+  const T *C1 = s + 4 * NL * NL + s_offset;
+  const T *A2 = s + s_offset;
+  const T *B2 = s + 3 * NL * NL + s_offset;
+  const T *C2 = s + 5 * NL * NL + s_offset;
+
+  for (int ii = idx; ii < NL * NL * NL; ii += str) {
+    T tmp = 0.0;
+    const int j = ii / NL;
+    const int i = ii - j * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += A1[i + l * NL] * r[l + NL * j + el_offset];
+    }
+    work[ii + el_offset] = tmp;
+  }
+  __syncthreads();
+
+  for (int ijk = idx; ijk < NL * NL * NL; ijk += str) {
+    const int jk = ijk / NL;
+    const int i = ijk - jk * NL;
+    const int k = jk / NL;
+    const int j = jk - k * NL;
+    T tmp = 0.0;
+    const int ik2 = i + k * NL * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += B1[l + j * NL] * work[l * NL + ik2 + el_offset];
+    }
+    e[ijk + el_offset] = tmp;
+  }
+  __syncthreads();
+
+  for (int ijk = idx; ijk < NL * NL * NL; ijk += str) {
+    const int jk = ijk / NL;
+    const int i = ijk - jk * NL;
+    const int k = jk / NL;
+    const int j = jk - k * NL;
+    T tmp = 0.0;
+    const int ij2 = i + j * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += C1[l + k * NL] * e[ij2 + l * NL * NL + el_offset];
+    }
+    r[ijk + el_offset] = tmp * d[ijk + el_offset];
+  }
+  __syncthreads();
+
+  for (int ii = idx; ii < NL * NL * NL; ii += str) {
+    T tmp = 0.0;
+    const int j = ii / NL;
+    const int i = ii - j * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += A2[i + l * NL] * r[l + NL * j + el_offset];
+    }
+    work[ii + el_offset] = tmp;
+  }
+  __syncthreads();
+
+  for (int ijk = idx; ijk < NL * NL * NL; ijk += str) {
+    const int jk = ijk / NL;
+    const int i = ijk - jk * NL;
+    const int k = jk / NL;
+    const int j = jk - k * NL;
+    T tmp = 0.0;
+    const int ik2 = i + k * NL * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += B2[l + j * NL] * work[l * NL + ik2 + el_offset];
+    }
+    e[ijk + el_offset] = tmp;
+  }
+  __syncthreads();
+
+  for (int ijk = idx; ijk < NL * NL * NL; ijk += str) {
+    const int jk = ijk / NL;
+    const int i = ijk - jk * NL;
+    const int k = jk / NL;
+    const int j = jk - k * NL;
+    T tmp = 0.0;
+    const int ij2 = i + j * NL;
+    for (int l = 0; l < NL; l++) {
+      tmp += C2[l + k * NL] * e[ij2 + l * NL * NL + el_offset];
+    }
+    work[ijk + el_offset] = tmp;
+  }
+  __syncthreads();
+
+  for (int ijk = idx; ijk < NL * NL * NL; ijk += str) {
+    e[ijk + el_offset] = work[ijk + el_offset];
+  }
+}
+
 
 
 #endif // __MATH_FDM_KERNEL_H__

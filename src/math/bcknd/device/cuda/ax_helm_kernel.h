@@ -243,6 +243,105 @@ __global__ void ax_helm_kernel_kstep(T * __restrict__ w,
   }
 }
 
+template< typename T >
+__device__ __forceinline__ void ax_helm_flux_global(T &ur, T &us, T &ut,
+                                                    const T * __restrict__ u,
+                                                    const T * __restrict__ dx,
+                                                    const T * __restrict__ dy,
+                                                    const T * __restrict__ dz,
+                                                    const T * __restrict__ h1,
+                                                    const T * __restrict__ g11,
+                                                    const T * __restrict__ g22,
+                                                    const T * __restrict__ g33,
+                                                    const T * __restrict__ g12,
+                                                    const T * __restrict__ g13,
+                                                    const T * __restrict__ g23,
+                                                    const int i,
+                                                    const int j,
+                                                    const int k,
+                                                    const int e,
+                                                    const int lx) {
+  const int lxyz = lx * lx * lx;
+  const int ele = e * lxyz;
+  const int ijk = i + j * lx + k * lx * lx;
+  T rtmp = 0.0;
+  T stmp = 0.0;
+  T ttmp = 0.0;
+
+  for (int l = 0; l < lx; l++) {
+    rtmp += dx[i + l * lx] * u[l + j * lx + k * lx * lx + ele];
+    stmp += dy[j + l * lx] * u[i + l * lx + k * lx * lx + ele];
+    ttmp += dz[k + l * lx] * u[i + j * lx + l * lx * lx + ele];
+  }
+
+  const int p = ijk + ele;
+  const T G00 = g11[p];
+  const T G11 = g22[p];
+  const T G22 = g33[p];
+  const T G01 = g12[p];
+  const T G02 = g13[p];
+  const T G12 = g23[p];
+  const T H1 = h1[p];
+
+  ur = H1 * (G00 * rtmp + G01 * stmp + G02 * ttmp);
+  us = H1 * (G01 * rtmp + G11 * stmp + G12 * ttmp);
+  ut = H1 * (G02 * rtmp + G12 * stmp + G22 * ttmp);
+}
+
+template< typename T >
+__global__ void ax_helm_kernel_global(T * __restrict__ w,
+                                      const T * __restrict__ u,
+                                      const T * __restrict__ dx,
+                                      const T * __restrict__ dy,
+                                      const T * __restrict__ dz,
+                                      const T * __restrict__ dxt,
+                                      const T * __restrict__ dyt,
+                                      const T * __restrict__ dzt,
+                                      const T * __restrict__ h1,
+                                      const T * __restrict__ g11,
+                                      const T * __restrict__ g22,
+                                      const T * __restrict__ g33,
+                                      const T * __restrict__ g12,
+                                      const T * __restrict__ g13,
+                                      const T * __restrict__ g23,
+                                      const int lx,
+                                      const int n) {
+  const int p = blockIdx.x * blockDim.x + threadIdx.x;
+  if (p >= n) {
+    return;
+  }
+
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+  const int e = p / lxyz;
+  const int ijk = p - e * lxyz;
+  const int k = ijk / lxy;
+  const int ij = ijk - k * lxy;
+  const int j = ij / lx;
+  const int i = ij - j * lx;
+
+  T wp = 0.0;
+  for (int l = 0; l < lx; l++) {
+    T ur, us, ut;
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        l, j, k, e, lx);
+    wp += dxt[i + l * lx] * ur;
+
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, l, k, e, lx);
+    wp += dyt[j + l * lx] * us;
+
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, j, l, e, lx);
+    wp += dzt[k + l * lx] * ut;
+  }
+
+  w[p] = wp;
+}
+
 /**
  * Device kernel for axhelm with padding in shared memory to
  * remove bank conflicts when LX is a power of 2
@@ -716,6 +815,89 @@ __global__ void ax_helm_kernel_vector_kstep_padded(T * __restrict__ au,
    av[ij + k*LX*LX + ele] = rvw[k];
    aw[ij + k*LX*LX + ele] = rww[k];
   }
+}
+
+template< typename T >
+__global__ void ax_helm_kernel_vector_global(T * __restrict__ au,
+                                             T * __restrict__ av,
+                                             T * __restrict__ aw,
+                                             const T * __restrict__ u,
+                                             const T * __restrict__ v,
+                                             const T * __restrict__ w,
+                                             const T * __restrict__ dx,
+                                             const T * __restrict__ dy,
+                                             const T * __restrict__ dz,
+                                             const T * __restrict__ h1,
+                                             const T * __restrict__ g11,
+                                             const T * __restrict__ g22,
+                                             const T * __restrict__ g33,
+                                             const T * __restrict__ g12,
+                                             const T * __restrict__ g13,
+                                             const T * __restrict__ g23,
+                                             const int lx,
+                                             const int n) {
+  const int p = blockIdx.x * blockDim.x + threadIdx.x;
+  if (p >= n) {
+    return;
+  }
+
+  const int lxy = lx * lx;
+  const int lxyz = lxy * lx;
+  const int e = p / lxyz;
+  const int ijk = p - e * lxyz;
+  const int k = ijk / lxy;
+  const int ij = ijk - k * lxy;
+  const int j = ij / lx;
+  const int i = ij - j * lx;
+
+  T aup = 0.0;
+  T avp = 0.0;
+  T awp = 0.0;
+  for (int l = 0; l < lx; l++) {
+    T ur, us, ut;
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        l, j, k, e, lx);
+    aup += dx[l + i * lx] * ur;
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, l, k, e, lx);
+    aup += dy[l + j * lx] * us;
+    ax_helm_flux_global(ur, us, ut, u, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, j, l, e, lx);
+    aup += dz[l + k * lx] * ut;
+
+    ax_helm_flux_global(ur, us, ut, v, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        l, j, k, e, lx);
+    avp += dx[l + i * lx] * ur;
+    ax_helm_flux_global(ur, us, ut, v, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, l, k, e, lx);
+    avp += dy[l + j * lx] * us;
+    ax_helm_flux_global(ur, us, ut, v, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, j, l, e, lx);
+    avp += dz[l + k * lx] * ut;
+
+    ax_helm_flux_global(ur, us, ut, w, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        l, j, k, e, lx);
+    awp += dx[l + i * lx] * ur;
+    ax_helm_flux_global(ur, us, ut, w, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, l, k, e, lx);
+    awp += dy[l + j * lx] * us;
+    ax_helm_flux_global(ur, us, ut, w, dx, dy, dz, h1,
+                        g11, g22, g33, g12, g13, g23,
+                        i, j, l, e, lx);
+    awp += dz[l + k * lx] * ut;
+  }
+
+  au[p] = aup;
+  av[p] = avp;
+  aw[p] = awp;
 }
 
 template< typename T >

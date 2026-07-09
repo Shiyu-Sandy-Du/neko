@@ -59,7 +59,7 @@ extern "C" {
                   void *dx, void *dy, void *dz,
                   int *nel, int *lx) {
 
-    static int autotune[17] = { 0 };
+    static int autotune[18] = { 0 };
 
     const dim3 nthrds_1d(1024, 1, 1);
     const dim3 nthrds_kstep((*lx), (*lx), 1);
@@ -128,6 +128,7 @@ extern "C" {
         CASE_LARGE(14);
         CASE_LARGE(15);
         CASE_LARGE(16);
+        CASE_LARGE(17);
       default:
         {
           fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

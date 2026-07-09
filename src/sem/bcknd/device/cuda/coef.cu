@@ -52,6 +52,8 @@ extern "C" {
 
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks((*nel), 1, 1);
+    const int n = (*nel) * (*lx) * (*lx) * (*lx);
+    const dim3 nblcks_global((n + 1024 - 1) / 1024, 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
 
 #define GEO_CASE(LX)                                                            \
@@ -64,6 +66,19 @@ extern "C" {
          (real *) dsdx, (real *) dsdy, (real *) dsdz,                           \
          (real *) dtdx, (real *) dtdy, (real *) dtdz,                           \
          (real *) jacinv, (real *) w3, *gdim);                                  \
+      CUDA_CHECK(cudaGetLastError());                                           \
+      break
+
+#define GEO_CASE_GLOBAL(LX)                                                     \
+    case LX:                                                                    \
+      coef_generate_geo_kernel_global<real>                                     \
+        <<<nblcks_global, nthrds, 0, stream>>>                                  \
+        ((real *) G11, (real *) G12, (real *) G13,                              \
+         (real *) G22, (real *) G23, (real *) G33,                              \
+         (real *) drdx, (real *) drdy, (real *) drdz,                           \
+         (real *) dsdx, (real *) dsdy, (real *) dsdz,                           \
+         (real *) dtdx, (real *) dtdy, (real *) dtdz,                           \
+         (real *) jacinv, (real *) w3, *lx, n);                                 \
       CUDA_CHECK(cudaGetLastError());                                           \
       break
 
@@ -83,6 +98,8 @@ extern "C" {
       GEO_CASE(14);
       GEO_CASE(15);
       GEO_CASE(16);
+      GEO_CASE(17);
+      GEO_CASE_GLOBAL(33);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
@@ -123,6 +140,18 @@ extern "C" {
       CUDA_CHECK(cudaGetLastError());					       \
       break
 
+#define DXYZDRST_CASE_GLOBAL(LX)                                               \
+    case LX:								       \
+      coef_generate_dxyz_kernel_global<real>                                   \
+        <<<nblcks_drst, nthrds, 0, stream>>>                                   \
+        ((real *) dxdr, (real *) dydr, (real *) dzdr,                          \
+         (real *) dxds, (real *) dyds, (real *) dzds,                          \
+         (real *) dxdt, (real *) dydt, (real *) dzdt,                          \
+         (real *) dx, (real *) dy, (real *) dz,                                \
+         (real *) x, (real *) y, (real *) z, *lx, n);                          \
+      CUDA_CHECK(cudaGetLastError());					       \
+      break
+
     switch(*lx) {
       DXYZDRST_CASE(2);
       DXYZDRST_CASE(3);
@@ -139,6 +168,8 @@ extern "C" {
       DXYZDRST_CASE(14);
       DXYZDRST_CASE(15);
       DXYZDRST_CASE(16);
+      DXYZDRST_CASE(17);
+      DXYZDRST_CASE_GLOBAL(33);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
@@ -222,6 +253,8 @@ extern "C" {
       AREA_CASE(14);
       AREA_CASE(15);
       AREA_CASE(16);
+      AREA_CASE(17);
+      AREA_CASE(33);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);

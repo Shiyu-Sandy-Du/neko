@@ -63,11 +63,13 @@ extern "C" {
                    void *drdz, void *dsdz, void *dtdz,
                    void *w3, int *nel, int *lx) {
 
-    static int autotune[17] = { 0 };
+    static int autotune[18] = { 0 };
 
     const dim3 nthrds_1d(1024, 1, 1);
     const dim3 nthrds_kstep((*lx), (*lx), 1);
     const dim3 nblcks((*nel), 1, 1);
+    const int n = (*nel) * (*lx) * (*lx) * (*lx);
+    const dim3 nblcks_global((n + 1024 - 1) / 1024, 1, 1);
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
 
 #define CASE_1D(LX)                                                             \
@@ -108,6 +110,24 @@ extern "C" {
       }                                                                         \
       break
 
+#define CASE_KSTEP_ONLY(LX)                                                     \
+    case LX:                                                                    \
+      CASE_KSTEP(LX);                                                           \
+      break
+
+#define CASE_GLOBAL(LX)                                                         \
+    case LX:                                                                    \
+      opgrad_kernel_global<real>                                                \
+        <<<nblcks_global, nthrds_1d, 0, stream>>>                               \
+      ((real *) ux, (real *) uy, (real *) uz, (real *) u,                       \
+       (real *) dx, (real *) dy, (real *) dz,                                   \
+       (real *) drdx, (real *) dsdx, (real *) dtdx,                             \
+       (real *) drdy, (real *) dsdy, (real *) dtdy,                             \
+       (real *) drdz, (real *) dsdz, (real *) dtdz,                             \
+       (real *) w3, *lx, n);                                                    \
+      CUDA_CHECK(cudaGetLastError());                                           \
+      break
+
     switch(*lx) {
       CASE(2);
       CASE(3);
@@ -124,6 +144,10 @@ extern "C" {
       CASE(14);
       CASE(15);
       CASE(16);
+      CASE(17);
+      CASE_KSTEP_ONLY(25);
+      CASE_GLOBAL(33);
+      CASE_GLOBAL(49);
     default:
       {
         fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
