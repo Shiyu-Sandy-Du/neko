@@ -124,9 +124,9 @@ contains
          reg_coeff_name, "entropy_viscosity")
     call this%init_base(case%fluid%dm_Xh, case%fluid%c_Xh, trim(reg_coeff_name))
 
-    call json_get_or_default(json, 'c_avisc_low', this%c_avisc_low, 1.0_rp)
+    call json_get_or_default(json, 'c_avisc_low', this%c_avisc_low, 0.5_rp)
     call json_get_or_default(json, 'c_avisc_entropy', &
-         this%c_avisc_entropy, 1.0_rp)
+         this%c_avisc_entropy, 0.5_rp)
 
     call this%entropy_residual%init(this%dof, 'entropy_residual')
 
