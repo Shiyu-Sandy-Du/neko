@@ -68,7 +68,8 @@ contains
     call json_get(json, "reg_coeff_name", &
          this%reg_coeff_name)
 
-    call neko_registry%add_field(dof, this%reg_coeff_name)
+    call neko_registry%add_field(dof, this%reg_coeff_name, &
+         ignore_existing = .true.)
     this%reg_coeff => neko_registry%get_field(this%reg_coeff_name)
 
   end subroutine artificial_viscosity_init_from_json
