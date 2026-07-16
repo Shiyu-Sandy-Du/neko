@@ -32,7 +32,8 @@
 !
 module entropy_viscosity
   use num_types, only : rp
-  use regularization, only : regularization_t
+  use case, only : case_t
+  use artificial_viscosity_model, only : avm_t
   use json_module, only : json_file
   use json_utils, only : json_get_or_default
   use field, only : field_t
@@ -40,10 +41,11 @@ module entropy_viscosity
   use field_series, only : field_series_t
   use coefs, only : coef_t
   use dofmap, only : dofmap_t
+  use gather_scatter, only : gs_t
   use time_state, only : time_state_t
   use bdf_time_scheme, only : bdf_time_scheme_t
   use operators, only : div
-  use math, only : glmax, absval
+  use math, only : glmax, absval, col2
   use scratch_registry, only : neko_scratch_registry
   use mesh, only : mesh_t
   use space, only : space_t
@@ -51,7 +53,13 @@ module entropy_viscosity
   use gs_ops, only : GS_OP_ADD
   use neko_config, only : NEKO_BCKND_DEVICE
   use device, only : device_memcpy, HOST_TO_DEVICE, DEVICE_TO_HOST
-  use device_math, only : device_col3, device_absval, device_glsum
+  use device_math, only : device_col3, device_absval, device_glsum, device_col2
+  use compressible_ops_cpu, only : &
+       compressible_ops_cpu_compute_entropy, &
+       compressible_ops_cpu_compute_max_wave_speed
+  use compressible_ops_device, only : &
+       compressible_ops_device_compute_entropy, &
+       compressible_ops_device_compute_max_wave_speed
   use entropy_viscosity_cpu, only : entropy_viscosity_compute_residual_cpu, &
        entropy_viscosity_compute_viscosity_cpu, &
        entropy_viscosity_apply_element_max_cpu, &
@@ -63,19 +71,23 @@ module entropy_viscosity
        entropy_viscosity_apply_element_max_device, &
        entropy_viscosity_clamp_to_low_order_device, &
        entropy_viscosity_smooth_divide_device
+  use fluid_scheme_compressible, only : fluid_scheme_compressible_t
   implicit none
   private
 
-  type, public, extends(regularization_t) :: entropy_viscosity_t
+  type, public, extends(avm_t) :: entropy_viscosity_t
      real(kind=rp) :: c_avisc_entropy
      real(kind=rp) :: c_avisc_low
      type(field_t) :: entropy_residual
      type(field_series_t) :: S_lag
+     real(kind=rp) :: gamma
      type(field_t), pointer :: S => null()
+     type(field_t), pointer :: p => null()
+     type(field_t), pointer :: rho => null()
      type(field_t), pointer :: u => null()
      type(field_t), pointer :: v => null()
      type(field_t), pointer :: w => null()
-     type(field_t), pointer :: h => null()
+     type(field_t) :: h
      type(field_t), pointer :: max_wave_speed => null()
      type(mesh_t), pointer :: msh => null()
      type(space_t), pointer :: Xh => null()
@@ -83,8 +95,13 @@ module entropy_viscosity
    contains
      procedure, pass(this) :: init => entropy_viscosity_init
      procedure, pass(this) :: free => entropy_viscosity_free
-     procedure, pass(this) :: compute => entropy_viscosity_compute
+     procedure, pass(this) :: preprocess => entropy_viscosity_preprocess
+     procedure, pass(this) :: compute => entropy_viscosity_update_lag
+     procedure, pass(this) :: compute_h => entropy_viscosity_compute_h
+     procedure, pass(this) :: set_fields => entropy_viscosity_set_fields
      procedure, pass(this) :: update_lag => entropy_viscosity_update_lag
+     procedure, pass(this), private :: update_entropy_fields => &
+          entropy_viscosity_update_entropy_fields
      procedure, pass(this), private :: compute_residual => &
           entropy_viscosity_compute_residual
      procedure, pass(this), private :: compute_viscosity => &
@@ -97,34 +114,34 @@ module entropy_viscosity
           entropy_viscosity_low_order
   end type entropy_viscosity_t
 
-  public :: entropy_viscosity_set_fields
-
 contains
 
-  subroutine entropy_viscosity_init(this, json, coef, dof, reg_coeff)
+  subroutine entropy_viscosity_init(this, case, json)
     class(entropy_viscosity_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
-    type(coef_t), intent(in), target :: coef
-    type(dofmap_t), intent(in), target :: dof
-    type(field_t), intent(in), target :: reg_coeff
+    class(case_t), intent(inout), target :: case
+    character(len=:), allocatable :: reg_coeff_name
 
-    call this%init_base(json, coef, dof, reg_coeff)
+    call this%free()
+    call json_get_or_default(json, 'field_name', &
+         reg_coeff_name, "entropy_viscosity")
+    call this%init_base(case%fluid%dm_Xh, case%fluid%c_Xh, trim(reg_coeff_name))
 
     call json_get_or_default(json, 'c_avisc_low', this%c_avisc_low, 1.0_rp)
     call json_get_or_default(json, 'c_avisc_entropy', &
          this%c_avisc_entropy, 1.0_rp)
 
-    call this%entropy_residual%init(dof, 'entropy_residual')
+    call this%entropy_residual%init(this%dof, 'entropy_residual')
 
-    nullify(this%S)
-    nullify(this%u)
-    nullify(this%v)
-    nullify(this%w)
-    nullify(this%h)
-    nullify(this%max_wave_speed)
-    nullify(this%msh)
-    nullify(this%Xh)
-    nullify(this%gs)
+    select type (fluid => case%fluid)
+    class is (fluid_scheme_compressible_t)
+       call this%set_fields(fluid%S, fluid%p, fluid%rho, fluid%u, fluid%v, &
+            fluid%w, fluid%max_wave_speed, fluid%msh, fluid%Xh, fluid%gs_Xh, &
+            fluid%gamma)
+    end select
+
+    call this%h%init(this%dof, 'h')
+    call this%compute_h()
 
   end subroutine entropy_viscosity_init
 
@@ -134,12 +151,14 @@ contains
     call this%free_base()
     call this%entropy_residual%free()
     call this%S_lag%free()
+    call this%h%free()
 
     nullify(this%S)
+    nullify(this%p)
+    nullify(this%rho)
     nullify(this%u)
     nullify(this%v)
     nullify(this%w)
-    nullify(this%h)
     nullify(this%max_wave_speed)
     nullify(this%msh)
     nullify(this%Xh)
@@ -147,16 +166,15 @@ contains
 
   end subroutine entropy_viscosity_free
 
-  subroutine entropy_viscosity_compute(this, time, tstep, dt)
+  subroutine entropy_viscosity_preprocess(this, time)
     class(entropy_viscosity_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    integer, intent(in) :: tstep
-    real(kind=rp), intent(in) :: dt
 
-    call this%compute_residual(tstep, dt, time%dtlag)
-    call this%compute_viscosity(tstep)
+    call this%update_entropy_fields()
+    call this%compute_residual(time%tstep, time%dt, time%dtlag)
+    call this%compute_viscosity(time%tstep)
 
-  end subroutine entropy_viscosity_compute
+  end subroutine entropy_viscosity_preprocess
 
   subroutine entropy_viscosity_compute_residual(this, tstep, dt, dt_lag)
     class(entropy_viscosity_t), intent(inout) :: this
@@ -348,31 +366,58 @@ contains
 
   end subroutine entropy_viscosity_apply_element_max
 
-  subroutine entropy_viscosity_set_fields(this, S, u, v, w, h, max_wave_speed, &
-       msh, Xh, gs)
+  subroutine entropy_viscosity_set_fields(this, S, p, rho, u, v, w, &
+       max_wave_speed, msh, Xh, gs, gamma)
     class(entropy_viscosity_t), intent(inout) :: this
     type(field_t), target, intent(inout) :: S
-    type(field_t), target, intent(in) :: u, v, w, h, max_wave_speed
+    type(field_t), target, intent(in) :: p, rho
+    type(field_t), target, intent(in) :: u, v, w, max_wave_speed
     type(mesh_t), target, intent(in) :: msh
     type(space_t), target, intent(in) :: Xh
     type(gs_t), target, intent(in) :: gs
+    real(kind=rp), intent(in) :: gamma
 
     this%S => S
+    this%p => p
+    this%rho => rho
     this%u => u
     this%v => v
     this%w => w
-    this%h => h
     this%max_wave_speed => max_wave_speed
     this%msh => msh
     this%Xh => Xh
     this%gs => gs
+    this%gamma = gamma
 
     call this%S_lag%init(S, 3)
 
   end subroutine entropy_viscosity_set_fields
 
-  subroutine entropy_viscosity_update_lag(this)
+  subroutine entropy_viscosity_update_entropy_fields(this)
     class(entropy_viscosity_t), intent(inout) :: this
+    integer :: n
+
+    n = this%dof%size()
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call compressible_ops_device_compute_entropy(this%S, this%p, &
+            this%rho, this%gamma, n)
+       call compressible_ops_device_compute_max_wave_speed( &
+            this%max_wave_speed, this%u, this%v, this%w, this%gamma, &
+            this%p, this%rho, n)
+    else
+       call compressible_ops_cpu_compute_entropy(this%S%x, this%p%x, &
+            this%rho%x, this%gamma, n)
+       call compressible_ops_cpu_compute_max_wave_speed( &
+            this%max_wave_speed%x, this%u%x, this%v%x, this%w%x, &
+            this%gamma, this%p%x, this%rho%x, n)
+    end if
+
+  end subroutine entropy_viscosity_update_entropy_fields
+
+  subroutine entropy_viscosity_update_lag(this, time)
+    class(entropy_viscosity_t), intent(inout) :: this
+    type(time_state_t), intent(in) :: time
 
     call this%S_lag%update()
 
@@ -423,5 +468,74 @@ contains
     visc = this%c_avisc_low * this%h%x(i,1,1,1) * this%max_wave_speed%x(i,1,1,1)
 
   end function entropy_viscosity_low_order
+
+
+  !> Copied from les_model_compute_delta in les_model.f90
+  !> TODO: move to a separate module
+  !> Compute characteristic mesh size h
+  !> @param this The fluid scheme object
+  subroutine entropy_viscosity_compute_h(this)
+    class(entropy_viscosity_t), intent(inout) :: this
+    integer :: e, i, j, k
+    integer :: im, ip, jm, jp, km, kp
+    real(kind=rp) :: di, dj, dk, ndim_inv
+    integer :: lx_half, ly_half, lz_half
+
+    lx_half = this%coef%Xh%lx / 2
+    ly_half = this%coef%Xh%ly / 2
+    lz_half = this%coef%Xh%lz / 2
+
+    do concurrent (e = 1:this%coef%msh%nelv)
+       do concurrent (k = 1:this%coef%Xh%lz, &
+            j = 1:this%coef%Xh%ly, i = 1:this%coef%Xh%lx)
+          km = max(1, k-1)
+          kp = min(this%coef%Xh%lz, k+1)
+
+          jm = max(1, j-1)
+          jp = min(this%coef%Xh%ly, j+1)
+
+          im = max(1, i-1)
+          ip = min(this%coef%Xh%lx, i+1)
+
+          di = (this%coef%dof%x(ip, j, k, e) - &
+               this%coef%dof%x(im, j, k, e))**2 &
+               + (this%coef%dof%y(ip, j, k, e) - &
+               this%coef%dof%y(im, j, k, e))**2 &
+               + (this%coef%dof%z(ip, j, k, e) - &
+               this%coef%dof%z(im, j, k, e))**2
+
+          dj = (this%coef%dof%x(i, jp, k, e) - &
+               this%coef%dof%x(i, jm, k, e))**2 &
+               + (this%coef%dof%y(i, jp, k, e) - &
+               this%coef%dof%y(i, jm, k, e))**2 &
+               + (this%coef%dof%z(i, jp, k, e) - &
+               this%coef%dof%z(i, jm, k, e))**2
+
+          dk = (this%coef%dof%x(i, j, kp, e) - &
+               this%coef%dof%x(i, j, km, e))**2 &
+               + (this%coef%dof%y(i, j, kp, e) - &
+               this%coef%dof%y(i, j, km, e))**2 &
+               + (this%coef%dof%z(i, j, kp, e) - &
+               this%coef%dof%z(i, j, km, e))**2
+
+          di = sqrt(di) / (ip - im)
+          dj = sqrt(dj) / (jp - jm)
+          dk = sqrt(dk) / (kp - km)
+          this%h%x(i,j,k,e) = (di * dj * dk)**(1.0_rp / 3.0_rp)
+
+       end do
+    end do
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(this%h%x, this%h%x_d, this%h%dof%size(),&
+            HOST_TO_DEVICE, sync = .false.)
+       call this%gs%op(this%h, GS_OP_ADD)
+       call device_col2(this%h%x_d, this%coef%mult_d, this%h%dof%size())
+    else
+       call this%gs%op(this%h, GS_OP_ADD)
+       call col2(this%h%x, this%coef%mult, this%h%dof%size())
+    end if
+
+  end subroutine entropy_viscosity_compute_h
 
 end module entropy_viscosity

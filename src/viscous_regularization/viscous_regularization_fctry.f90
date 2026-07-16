@@ -30,21 +30,20 @@
 ! ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 ! POSSIBILITY OF SUCH DAMAGE.
 !
-submodule(regularization) regularization_fctry
-  use entropy_viscosity, only : entropy_viscosity_t
+submodule(viscous_regularization) viscous_regularization_fctry
+  use artificial_viscosity, only : artificial_viscosity_t
   use utils, only : neko_error
   implicit none
 
 contains
 
-  module subroutine regularization_factory(object, type_name, json, &
-       coef, dof, reg_coeff)
-    class(regularization_t), allocatable, intent(inout) :: object
+  module subroutine viscous_regularization_factory(object, type_name, json, &
+       coef, dof)
+    class(viscous_regularization_t), allocatable, intent(inout) :: object
     character(len=*), intent(in) :: type_name
     type(json_file), intent(inout) :: json
     type(coef_t), intent(in), target :: coef
     type(dofmap_t), intent(in), target :: dof
-    type(field_t), intent(in), target :: reg_coeff
 
     if (allocated(object)) then
        call object%free()
@@ -52,14 +51,15 @@ contains
     end if
 
     select case (trim(type_name))
-    case ('entropy', 'entropy_viscosity')
-       allocate(entropy_viscosity_t::object)
+    case ('artificial_viscosity')
+       allocate(artificial_viscosity_t::object)
     case default
-       call neko_error('Unknown regularization type: ' // trim(type_name))
+       call neko_error('Unknown viscous_regularization type: ' &
+            // trim(type_name))
     end select
 
-    call object%init(json, coef, dof, reg_coeff)
+    call object%init(json, coef, dof)
 
-  end subroutine regularization_factory
+  end subroutine viscous_regularization_factory
 
-end submodule regularization_fctry
+end submodule viscous_regularization_fctry
