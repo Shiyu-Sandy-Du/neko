@@ -78,8 +78,7 @@ module entropy_viscosity
      type(field_t) :: entropy_residual
      type(field_series_t) :: S_lag
      real(kind=rp) :: gamma
-     type(field_t) :: S
-     type(field_t), pointer :: S_output => null()
+     type(field_t), pointer :: S => null()
      type(field_t), pointer :: p => null()
      type(field_t), pointer :: rho => null()
      type(field_t), pointer :: u => null()
@@ -138,10 +137,9 @@ contains
             fluid%gamma)
     end select
 
-    call this%S%init(this%dof, 'entropy_viscosity_S')
     call neko_registry%add_field(this%dof, 'S')
-    this%S_output => neko_registry%get_field('S')
-    call this%S_output%init(this%dof, 'S')
+    this%S => neko_registry%get_field('S')
+    call this%S%init(this%dof, 'S')
     call this%S_lag%init(this%S, 3)
 
     call this%h%init(this%dof, 'h')
@@ -155,13 +153,12 @@ contains
     call this%free_base()
     call this%entropy_residual%free()
     call this%S_lag%free()
-    call this%S%free()
-    if (associated(this%S_output)) then
-       call this%S_output%free()
+    if (associated(this%S)) then
+       call this%S%free()
     end if
     call this%h%free()
 
-    nullify(this%S_output)
+    nullify(this%S)
     nullify(this%p)
     nullify(this%rho)
     nullify(this%u)
@@ -416,10 +413,6 @@ contains
     else
        call compressible_ops_cpu_compute_entropy(this%S%x, this%p%x, &
             this%rho%x, this%gamma, n)
-    end if
-
-    if (associated(this%S_output)) then
-       call field_copy(this%S_output, this%S, n)
     end if
 
   end subroutine entropy_viscosity_update_entropy_fields
