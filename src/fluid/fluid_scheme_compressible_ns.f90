@@ -310,12 +310,6 @@ contains
          t => time%t, tstep => time%tstep, dt => time%dt, &
          rk_scheme => this%rk_scheme)
 
-      !> Compute entropy S = 1/(gamma-1) * rho * (log(p) - gamma * log(rho))
-      call this%compute_entropy()
-
-      !> Update maximum wave speed for CFL computation
-      call this%compute_max_wave_speed()
-
       !> Update artificial viscosity
       if (allocated(this%viscous_regularization)) then
          call this%viscous_regularization%update(this%artificial_visc)
@@ -385,6 +379,9 @@ contains
          end do
          !$omp end parallel do simd
       end if
+
+      !> Update maximum wave speed for CFL computation
+      call this%compute_max_wave_speed()
 
       do i = 1, this%bcs_vel%size()
          b => this%bcs_vel%get(i)
