@@ -25,7 +25,7 @@ krylov/bcknd/device/hip/gmres_aux.lo : krylov/bcknd/device/hip/gmres_aux.hip kry
 gs/bcknd/device/hip/gs.lo : gs/bcknd/device/hip/gs.hip gs/bcknd/device/hip/gs_kernels.h
 bc/bcknd/device/hip/dirichlet.lo : bc/bcknd/device/hip/dirichlet.hip bc/bcknd/device/hip/dirichlet_kernel.h
 bc/bcknd/device/hip/inflow.lo : bc/bcknd/device/hip/inflow.hip bc/bcknd/device/hip/inflow_kernel.h
-bc/bcknd/device/hip/no_slip_wall.lo : bc/bcknd/device/hip/no_slip_wall.hip bc/bcknd/device/hip/no_slip_wall_kernel.h
+bc/bcknd/device/hip/zero_dirichlet.lo : bc/bcknd/device/hip/zero_dirichlet.hip bc/bcknd/device/hip/zero_dirichlet_kernel.h
 bc/bcknd/device/hip/symmetry.lo : bc/bcknd/device/hip/symmetry.hip bc/bcknd/device/hip/symmetry_kernel.h
 bc/bcknd/device/hip/facet_normal.lo : bc/bcknd/device/hip/facet_normal.hip bc/bcknd/device/hip/facet_normal_kernel.h
 bc/bcknd/device/hip/inhom_dirichlet.lo : bc/bcknd/device/hip/inhom_dirichlet.hip bc/bcknd/device/hip/inhom_dirichlet_kernel.h
@@ -33,15 +33,17 @@ bc/bcknd/device/hip/dong_outflow.lo : bc/bcknd/device/hip/dong_outflow.hip bc/bc
 bc/bcknd/device/hip/neumann.lo : bc/bcknd/device/hip/neumann.hip bc/bcknd/device/hip/neumann_kernel.h
 common/bcknd/device/hip/rhs_maker.lo : common/bcknd/device/hip/rhs_maker.hip common/bcknd/device/hip/sumab_kernel.h common/bcknd/device/hip/makeext_kernel.h common/bcknd/device/hip/makebdf_kernel.h common/bcknd/device/hip/makeoifs_kernel.h
 common/bcknd/device/hip/projection.lo : common/bcknd/device/hip/projection.hip common/bcknd/device/hip/projection_kernel.h
-common/bcknd/device/hip/gradient_jump_penalty.lo : common/bcknd/device/hip/gradient_jump_penalty.hip common/bcknd/device/hip/gradient_jump_penalty_kernel.h
+source_terms/bcknd/device/hip/gradient_jump_penalty.lo : source_terms/bcknd/device/hip/gradient_jump_penalty.hip source_terms/bcknd/device/hip/gradient_jump_penalty_kernel.h
 fluid/bcknd/device/hip/pnpn_res.lo : fluid/bcknd/device/hip/pnpn_res.hip fluid/bcknd/device/hip/vel_res_update_kernel.h fluid/bcknd/device/hip/prs_res_kernel.h
 fluid/bcknd/device/hip/euler_res.lo : fluid/bcknd/device/hip/euler_res.hip fluid/bcknd/device/hip/euler_res_kernel.h
 fluid/bcknd/device/hip/compressible_ops_compute_max_wave_speed.lo : fluid/bcknd/device/hip/compressible_ops_compute_max_wave_speed.hip fluid/bcknd/device/hip/compressible_ops_kernel.h
 fluid/bcknd/device/hip/compressible_ops_compute_entropy.lo : fluid/bcknd/device/hip/compressible_ops_compute_entropy.hip fluid/bcknd/device/hip/compressible_ops_kernel.h
 fluid/bcknd/device/hip/compressible_ops_update.lo : fluid/bcknd/device/hip/compressible_ops_update.hip fluid/bcknd/device/hip/compressible_ops_kernel.h
 fluid/regularization/bcknd/device/hip/entropy_viscosity.lo : fluid/regularization/bcknd/device/hip/entropy_viscosity.hip fluid/regularization/bcknd/device/hip/entropy_viscosity_kernel.h
+fluid/stress_formulation/bcknd/device/hip/pnpn_stress_res.lo : fluid/stress_formulation/bcknd/device/hip/pnpn_stress_res.hip fluid/stress_formulation/bcknd/device/hip/prs_stress_res_kernel.h
 scalar/bcknd/device/hip/scalar_residual.lo : scalar/bcknd/device/hip/scalar_residual.hip scalar/bcknd/device/hip/scalar_residual_update_kernel.h
 sem/bcknd/device/hip/coef.lo : sem/bcknd/device/hip/coef.hip sem/bcknd/device/hip/coef_kernel.h
+sem/bcknd/device/hip/local_interpolation.lo : sem/bcknd/device/hip/local_interpolation.hip
 les/bcknd/device/hip/dynamic_smagorinsky_nut.lo : les/bcknd/device/hip/dynamic_smagorinsky_nut.hip les/bcknd/device/hip/dynamic_smagorinsky_nut_kernel.h
 les/bcknd/device/hip/smagorinsky_nut.lo : les/bcknd/device/hip/smagorinsky_nut.hip les/bcknd/device/hip/smagorinsky_nut_kernel.h
 les/bcknd/device/hip/vreman_nut.lo : les/bcknd/device/hip/vreman_nut.hip les/bcknd/device/hip/vreman_nut_kernel.h
@@ -50,7 +52,7 @@ les/bcknd/device/hip/wale_nut.lo : les/bcknd/device/hip/wale_nut.hip les/bcknd/d
 les/bcknd/device/hip/deardorff_nut.lo : les/bcknd/device/hip/deardorff_nut.hip les/bcknd/device/hip/deardorff_nut_kernel.h
 multigrid/bcknd/device/hip/amg_cheby.lo : multigrid/bcknd/device/hip/amg_cheby.hip
 krylov/bcknd/device/hip/cheby_aux.lo : krylov/bcknd/device/hip/cheby_aux.hip
-comm/bcknd/device/cuda/nvshmem.lo : comm/bcknd/device/cuda/nvshmem.cu comm/comm.h
+comm/bcknd/device/cuda/comm_nvshmem.lo : comm/bcknd/device/cuda/comm_nvshmem.cu comm/comm.h
 device/cuda/check.lo : device/cuda/check.cu device/cuda/check.h
 math/bcknd/device/cuda/math.lo : math/bcknd/device/cuda/math.cu math/bcknd/device/cuda/math_kernel.h
 math/bcknd/device/cuda/mathops.lo : math/bcknd/device/cuda/mathops.cu math/bcknd/device/cuda/mathops_kernel.h
@@ -79,7 +81,7 @@ gs/bcknd/device/cuda/gs.lo : gs/bcknd/device/cuda/gs.cu gs/bcknd/device/cuda/gs_
 gs/bcknd/device/cuda/gs_nvshmem.lo : gs/bcknd/device/cuda/gs_nvshmem.cu gs/bcknd/device/cuda/gs_kernels.h gs/bcknd/device/cuda/gs_nvshmem_kernels.h
 bc/bcknd/device/cuda/dirichlet.lo : bc/bcknd/device/cuda/dirichlet.cu bc/bcknd/device/cuda/dirichlet_kernel.h
 bc/bcknd/device/cuda/inflow.lo : bc/bcknd/device/cuda/inflow.cu bc/bcknd/device/cuda/inflow_kernel.h
-bc/bcknd/device/cuda/no_slip_wall.lo : bc/bcknd/device/cuda/no_slip_wall.cu bc/bcknd/device/cuda/no_slip_wall_kernel.h
+bc/bcknd/device/cuda/zero_dirichlet.lo : bc/bcknd/device/cuda/zero_dirichlet.cu bc/bcknd/device/cuda/zero_dirichlet_kernel.h
 bc/bcknd/device/cuda/symmetry.lo : bc/bcknd/device/cuda/symmetry.cu bc/bcknd/device/cuda/symmetry_kernel.h
 bc/bcknd/device/cuda/facet_normal.lo : bc/bcknd/device/cuda/facet_normal.cu bc/bcknd/device/cuda/facet_normal_kernel.h
 bc/bcknd/device/cuda/neumann.lo : bc/bcknd/device/cuda/neumann.cu bc/bcknd/device/cuda/neumann_kernel.h
@@ -91,12 +93,14 @@ fluid/bcknd/device/cuda/pnpn_res.lo : fluid/bcknd/device/cuda/pnpn_res.cu fluid/
 fluid/bcknd/device/cuda/euler_res.lo : fluid/bcknd/device/cuda/euler_res.cu fluid/bcknd/device/cuda/euler_res_kernel.h
 fluid/bcknd/device/cuda/compressible_ops_compute_max_wave_speed.lo : fluid/bcknd/device/cuda/compressible_ops_compute_max_wave_speed.cu fluid/bcknd/device/cuda/compressible_ops_kernel.h
 fluid/bcknd/device/cuda/compressible_ops_compute_entropy.lo : fluid/bcknd/device/cuda/compressible_ops_compute_entropy.cu fluid/bcknd/device/cuda/compressible_ops_kernel.h
+fluid/bcknd/device/cuda/opr_compute_entropy.lo : fluid/bcknd/device/cuda/opr_compute_entropy.cu math/bcknd/device/cuda/mathops_kernel.h
 fluid/bcknd/device/cuda/compressible_ops_update.lo : fluid/bcknd/device/cuda/compressible_ops_update.cu fluid/bcknd/device/cuda/compressible_ops_kernel.h
 fluid/regularization/bcknd/device/cuda/entropy_viscosity.lo : fluid/regularization/bcknd/device/cuda/entropy_viscosity.cu fluid/regularization/bcknd/device/cuda/entropy_viscosity_kernel.h
 fluid/stress_formulation/bcknd/device/cuda/pnpn_stress_res.lo : fluid/stress_formulation/bcknd/device/cuda/pnpn_stress_res.cu fluid/stress_formulation/bcknd/device/cuda/prs_stress_res_kernel.h
-common/bcknd/device/cuda/gradient_jump_penalty.lo : common/bcknd/device/cuda/gradient_jump_penalty.cu common/bcknd/device/cuda/gradient_jump_penalty_kernel.h
+source_terms/bcknd/device/cuda/gradient_jump_penalty.lo : source_terms/bcknd/device/cuda/gradient_jump_penalty.cu source_terms/bcknd/device/cuda/gradient_jump_penalty_kernel.h
 scalar/bcknd/device/cuda/scalar_residual.lo : scalar/bcknd/device/cuda/scalar_residual.cu scalar/bcknd/device/cuda/scalar_residual_update_kernel.h
 sem/bcknd/device/cuda/coef.lo : sem/bcknd/device/cuda/coef.cu sem/bcknd/device/cuda/coef_kernel.h
+sem/bcknd/device/cuda/local_interpolation.lo : sem/bcknd/device/cuda/local_interpolation.cu
 les/bcknd/device/cuda/dynamic_smagorinsky_nut.lo : les/bcknd/device/cuda/dynamic_smagorinsky_nut.cu les/bcknd/device/cuda/dynamic_smagorinsky_nut_kernel.h
 les/bcknd/device/cuda/smagorinsky_nut.lo : les/bcknd/device/cuda/smagorinsky_nut.cu les/bcknd/device/cuda/smagorinsky_nut_kernel.h
 les/bcknd/device/cuda/vreman_nut.lo : les/bcknd/device/cuda/vreman_nut.cu les/bcknd/device/cuda/vreman_nut_kernel.h
@@ -124,7 +128,6 @@ krylov/bcknd/device/opencl/pc_jacobi.lo : krylov/bcknd/device/opencl/pc_jacobi.c
 gs/bcknd/device/opencl/gs.lo : gs/bcknd/device/opencl/gs.c gs/bcknd/device/opencl/gs_kernels.cl.h
 bc/bcknd/device/opencl/dirichlet.lo : bc/bcknd/device/opencl/dirichlet.c bc/bcknd/device/opencl/dirichlet_kernel.cl.h
 bc/bcknd/device/opencl/inflow.lo : bc/bcknd/device/opencl/inflow.c bc/bcknd/device/opencl/inflow_kernel.cl.h
-bc/bcknd/device/opencl/no_slip_wall.lo : bc/bcknd/device/opencl/no_slip_wall.c bc/bcknd/device/opencl/no_slip_wall_kernel.cl.h
 bc/bcknd/device/opencl/symmetry.lo : bc/bcknd/device/opencl/symmetry.c bc/bcknd/device/opencl/symmetry_kernel.cl.h
 bc/bcknd/device/opencl/facet_normal.lo : bc/bcknd/device/opencl/facet_normal.c bc/bcknd/device/opencl/facet_normal_kernel.cl.h bc/bcknd/device/opencl/bc_utils.h
 bc/bcknd/device/opencl/neumann.lo : bc/bcknd/device/opencl/neumann.c bc/bcknd/device/opencl/neumann_kernel.cl.h bc/bcknd/device/opencl/bc_utils.h
@@ -145,10 +148,10 @@ sem/bcknd/device/opencl/local_interpolation.lo : sem/bcknd/device/opencl/local_i
 filter/bcknd/device/cuda/mappings.lo : filter/bcknd/device/cuda/mappings.cu filter/bcknd/device/cuda/mapping_kernels.h
 filter/bcknd/device/hip/mappings.lo : filter/bcknd/device/hip/mappings.hip filter/bcknd/device/hip/mapping_kernels.h
 filter/bcknd/device/opencl/mappings.lo : filter/bcknd/device/opencl/mappings.c filter/bcknd/device/opencl/mapping_kernels.cl.h
-wall_models/bcknd/device/cuda/wall_models.lo : wall_models/bcknd/device/cuda/wall_models.cu wall_models/bcknd/device/cuda/wall_model_kernels.h
+wall_models/bcknd/device/cuda/wall_model.lo : wall_models/bcknd/device/cuda/wall_model.cu wall_models/bcknd/device/cuda/wall_model_kernel.h
 wall_models/bcknd/device/cuda/spalding.lo : wall_models/bcknd/device/cuda/spalding.cu wall_models/bcknd/device/cuda/spalding_kernel.h
 wall_models/bcknd/device/cuda/rough_log_law.lo : wall_models/bcknd/device/cuda/rough_log_law.cu wall_models/bcknd/device/cuda/rough_log_law_kernel.h
-wall_models/bcknd/device/hip/wall_models.lo : wall_models/bcknd/device/hip/wall_models.hip wall_models/bcknd/device/hip/wall_model_kernels.h
+wall_models/bcknd/device/hip/wall_model.lo : wall_models/bcknd/device/hip/wall_model.hip wall_models/bcknd/device/hip/wall_model_kernel.h
 wall_models/bcknd/device/hip/spalding.lo : wall_models/bcknd/device/hip/spalding.hip wall_models/bcknd/device/hip/spalding_kernel.h
 wall_models/bcknd/device/hip/rough_log_law.lo : wall_models/bcknd/device/hip/rough_log_law.hip wall_models/bcknd/device/hip/rough_log_law_kernel.h
 multigrid/bcknd/device/cuda/amg_cheby.lo : multigrid/bcknd/device/cuda/amg_cheby.cu
