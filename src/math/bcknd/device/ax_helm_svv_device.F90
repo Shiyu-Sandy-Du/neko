@@ -98,7 +98,7 @@ contains
   !! @param msh Mesh.
   !! @param Xh Function space.
   subroutine ax_helm_svv_device_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_svv_device_t), intent(inout) :: this
+    class(ax_helm_svv_device_t), intent(in) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

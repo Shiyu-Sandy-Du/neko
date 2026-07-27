@@ -64,7 +64,7 @@ contains
   !! @param Xh Function space \f$ X_h \f$.
   subroutine ax_helm_sym_svv_full_compute_vector(this, au, av, aw, u, v, w, coef, msh,&
                                          Xh)
-    class(ax_helm_sym_svv_full_cpu_t), intent(inout) :: this
+    class(ax_helm_sym_svv_full_cpu_t), intent(in) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef

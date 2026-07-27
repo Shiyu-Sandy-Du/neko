@@ -174,7 +174,7 @@ module ax_helm_device
 contains
 
   subroutine ax_helm_device_compute(this, w, u, coef, msh, Xh)
-    class(ax_helm_device_t), intent(inout) :: this
+    class(ax_helm_device_t), intent(in) :: this
     type(mesh_t), intent(in) :: msh
     type(space_t), intent(in) :: Xh
     type(coef_t), intent(in) :: coef
@@ -213,7 +213,7 @@ contains
 
   subroutine ax_helm_device_compute_vector(this, au, av, aw, &
        u, v, w, coef, msh, Xh)
-    class(ax_helm_device_t), intent(inout) :: this
+    class(ax_helm_device_t), intent(in) :: this
     type(space_t), intent(in) :: Xh
     type(mesh_t), intent(in) :: msh
     type(coef_t), intent(in) :: coef
