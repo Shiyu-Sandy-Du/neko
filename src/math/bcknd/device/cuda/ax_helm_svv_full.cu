@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2025, The Neko Authors
+ Copyright (c) 2025-2026, The Neko Authors
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -32,176 +32,73 @@
  POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <device/device_config.h>
 #include <device/cuda/check.h>
 #include "ax_helm_svv_full_kernel.h"
 
 extern "C" {
-  #include <common/neko_log.h>
+
+/** Fortran wrapper for the fused asymmetric full-stress CUDA operator. */
+void cuda_ax_helm_svv_full(
+    void *au, void *av, void *aw, void *u, void *v, void *w,
+    void *dx, void *dy, void *dz, void *h1,
+    void *drdx, void *drdy, void *drdz,
+    void *dsdx, void *dsdy, void *dsdz,
+    void *dtdx, void *dtdy, void *dtdz,
+    void *jacinv, void *w3, void *h1_svv,
+    void *filter_r, void *filter_s, void *filter_t,
+    int *nelv, int *lx) {
+
+  const dim3 threads(*lx, *lx, 1);
+  const dim3 blocks(*nelv, 1, 1);
+  const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+  const size_t shared_size =
+      2 * (*lx) * (*lx) * (*lx) * sizeof(real);
+  static bool shared_configured[17] = {false};
+
+#define CASE(LX)                                                               \
+  case LX:                                                                     \
+    if (!shared_configured[LX]) {                                               \
+      CUDA_CHECK(cudaFuncSetAttribute(                                         \
+          ax_helm_svv_full_kernel<real, LX>,                                   \
+          cudaFuncAttributeMaxDynamicSharedMemorySize, shared_size));          \
+      shared_configured[LX] = true;                                             \
+    }                                                                           \
+    ax_helm_svv_full_kernel<real, LX>                                          \
+        <<<blocks, threads, shared_size, stream>>>(                            \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) dx, (real *) dy, (real *) dz, (real *) h1,                   \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3, (real *) h1_svv,                        \
+        (real *) filter_r, (real *) filter_s, (real *) filter_t);             \
+    CUDA_CHECK(cudaGetLastError());                                            \
+    break
+
+  switch (*lx) {
+    CASE(2);
+    CASE(3);
+    CASE(4);
+    CASE(5);
+    CASE(6);
+    CASE(7);
+    CASE(8);
+    CASE(9);
+    CASE(10);
+    CASE(11);
+    CASE(12);
+    CASE(13);
+    CASE(14);
+    CASE(15);
+    CASE(16);
+    default:
+      fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
+      exit(1);
+  }
 }
-
-extern "C" {
-
-  /**
-   * Fortran wrapper for device CUDA Ax_svv_full version, part 1
-   */
-  void cuda_ax_helm_svv_full_vector_part1(void *s11, void *s22, void *s33,
-                              void *s12, void *s13, void *s23,
-                              void *u, void *v, void *w,
-                              void *dx, void *dy, void *dz,
-                              void *drdx, void *drdy, void *drdz,
-                              void *dsdx, void *dsdy, void *dsdz,
-                              void *dtdx, void *dtdy, void *dtdz,
-                              void *jacinv, int *nelv, int *lx) {
-
-    const dim3 nthrds((*lx), (*lx), 1);
-    const dim3 nblcks((*nelv), 1, 1);
-    const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
-
-#define CASE_part1_KSTEP(LX)                                                             \
-    ax_helm_svv_full_part1_kernel_vector_kstep<real, LX>                                 \
-    <<<nblcks, nthrds, 0, stream>>> ((real *) s11, (real *) s22, (real *) s33,           \
-                                     (real *) s12, (real *) s13, (real *) s23,           \
-                                     (real *) u, (real *) v, (real *) w,                 \
-                                     (real *) dx, (real *) dy, (real *) dz,              \
-                                     (real *) drdx, (real *) drdy, (real *) drdz,        \
-                                     (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
-                                     (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
-                                     (real *) jacinv);                                   \
-    CUDA_CHECK(cudaGetLastError());
-
-#define CASE_part1_KSTEP_PADDED(LX)                                                      \
-    ax_helm_svv_full_part1_kernel_vector_kstep_padded<real, LX>                          \
-    <<<nblcks, nthrds, 0, stream>>> ((real *) s11, (real *) s22, (real *) s33,           \
-                                     (real *) s12, (real *) s13, (real *) s23,           \
-                                     (real *) u, (real *) v, (real *) w,                 \
-                                     (real *) dx, (real *) dy, (real *) dz,              \
-                                     (real *) drdx, (real *) drdy, (real *) drdz,        \
-                                     (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
-                                     (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
-                                     (real *) jacinv);                                   \
-    CUDA_CHECK(cudaGetLastError());
-
-#define CASE_part1(LX)                                                                   \
-    case LX:                                                                             \
-      CASE_part1_KSTEP(LX);                                                              \
-       break
-
-#define CASE_part1_PADDED(LX)                                                            \
-    case LX:                                                                             \
-      CASE_part1_KSTEP_PADDED(LX);                                                       \
-       break
-
-    switch(*lx) {
-      CASE_part1(2);
-      CASE_part1(3);
-      CASE_part1_PADDED(4);
-      CASE_part1(5);
-      CASE_part1(6);
-      CASE_part1(7);
-      CASE_part1_PADDED(8);
-      CASE_part1(9);
-      CASE_part1(10);
-      CASE_part1(11);
-      CASE_part1(12);
-      CASE_part1(13);
-      CASE_part1(14);
-      CASE_part1(15);
-      CASE_part1_PADDED(16);
-      default:
-        {
-          fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
-          exit(1);
-        }
-      }
-  }
-
-  /**
-   * Fortran wrapper for device CUDA Ax_svv_full version, part 2
-   */
-  void cuda_ax_helm_svv_full_vector_part2(void *au, void *av, void *aw,
-                                   void *s11, void *s22, void *s33,
-                                   void *s12, void *s13, void *s23,
-                                   void *s11_svv, void *s22_svv, void *s33_svv,
-                                   void *s12_svv, void *s13_svv, void *s23_svv,
-                                   void *dx, void *dy, void *dz,
-                                   void *h1,
-                                   void *drdx, void *drdy, void *drdz,
-                                   void *dsdx, void *dsdy, void *dsdz,
-                                   void *dtdx, void *dtdy, void *dtdz,
-                                   void *w3, void *h1_svv, int *nelv, int *lx) {
-
-    const dim3 nthrds((*lx), (*lx), 1);
-    const dim3 nblcks((*nelv), 1, 1);
-    const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
-
-#define CASE_part2_KSTEP(LX)                                                             \
-    ax_helm_svv_full_part2_kernel_vector_kstep<real, LX>                                 \
-    <<<nblcks, nthrds, 0, stream>>> ((real *) au, (real *) av, (real *) aw,              \
-                                     (real *) s11, (real *) s22, (real *) s33,           \
-                                     (real *) s12, (real *) s13, (real *) s23,           \
-                                     (real *) s11_svv, (real *) s22_svv,                 \
-                                     (real *) s33_svv, (real *) s12_svv,                 \
-                                     (real *) s13_svv, (real *) s23_svv,                 \
-                                     (real *) dx, (real *) dy, (real *) dz,              \
-                                     (real *) h1,                                        \
-                                     (real *) drdx, (real *) drdy, (real *) drdz,        \
-                                     (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
-                                     (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
-                                     (real *) w3, (real *) h1_svv);                      \
-    CUDA_CHECK(cudaGetLastError());
-
-#define CASE_part2_KSTEP_PADDED(LX)                                                      \
-    ax_helm_svv_full_part2_kernel_vector_kstep_padded<real, LX>                          \
-    <<<nblcks, nthrds, 0, stream>>> ((real *) au, (real *) av, (real *) aw,              \
-                                     (real *) s11, (real *) s22, (real *) s33,           \
-                                     (real *) s12, (real *) s13, (real *) s23,           \
-                                     (real *) s11_svv, (real *) s22_svv,                 \
-                                     (real *) s33_svv, (real *) s12_svv,                 \
-                                     (real *) s13_svv, (real *) s23_svv,                 \
-                                     (real *) dx, (real *) dy, (real *) dz,              \
-                                     (real *) h1,                                        \
-                                     (real *) drdx, (real *) drdy, (real *) drdz,        \
-                                     (real *) dsdx, (real *) dsdy, (real *) dsdz,        \
-                                     (real *) dtdx, (real *) dtdy, (real *) dtdz,        \
-                                     (real *) w3, (real *) h1_svv);                      \
-    CUDA_CHECK(cudaGetLastError());
-
-#define CASE_part2(LX)                                                                   \
-    case LX:                                                                             \
-      CASE_part2_KSTEP(LX);                                                              \
-       break
-
-#define CASE_part2_PADDED(LX)                                                            \
-    case LX:                                                                             \
-      CASE_part2_KSTEP_PADDED(LX);                                                       \
-       break
-
-    switch(*lx) {
-      CASE_part2(2);
-      CASE_part2(3);
-      CASE_part2_PADDED(4);
-      CASE_part2(5);
-      CASE_part2(6);
-      CASE_part2(7);
-      CASE_part2_PADDED(8);
-      CASE_part2(9);
-      CASE_part2(10);
-      CASE_part2(11);
-      CASE_part2(12);
-      CASE_part2(13);
-      CASE_part2(14);
-      CASE_part2(15);
-      CASE_part2_PADDED(16);
-      default:
-        {
-          fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
-          exit(1);
-        }
-      }
-  }
 
 }

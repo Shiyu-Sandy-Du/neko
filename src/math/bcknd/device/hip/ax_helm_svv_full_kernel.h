@@ -1,7 +1,7 @@
 #ifndef __MATH_AX_HELM_SVV_FULL_KERNEL_H__
 #define __MATH_AX_HELM_SVV_FULL_KERNEL_H__
 /*
- Copyright (c) 2025, The Neko Authors
+ Copyright (c) 2025-2026, The Neko Authors
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -35,626 +35,360 @@
 */
 
 /**
- * Device kernels for Ax helm svv full
+ * Evaluate one physical derivative of a field at a nodal point.
  */
+template<typename T, const int LX>
+__device__ __forceinline__ T ax_helm_svv_full_derivative(
+    const T * __restrict__ field,
+    const int component,
+    const int i,
+    const int j,
+    const int k,
+    const int elem,
+    const T * __restrict__ dx,
+    const T * __restrict__ dy,
+    const T * __restrict__ dz,
+    const T * __restrict__ drdx,
+    const T * __restrict__ drdy,
+    const T * __restrict__ drdz,
+    const T * __restrict__ dsdx,
+    const T * __restrict__ dsdy,
+    const T * __restrict__ dsdz,
+    const T * __restrict__ dtdx,
+    const T * __restrict__ dtdy,
+    const T * __restrict__ dtdz,
+    const T * __restrict__ jacinv) {
 
-template< typename T, const int LX >
-__global__ void __launch_bounds__(LX*LX,3)
-  ax_helm_svv_full_part1_kernel_vector_kstep(T * __restrict__ s11,
-                                      T * __restrict__ s22,
-                                      T * __restrict__ s33,
-                                      T * __restrict__ s12,
-                                      T * __restrict__ s13,
-                                      T * __restrict__ s23,
-                                      const T * __restrict__ u,
-                                      const T * __restrict__ v,
-                                      const T * __restrict__ w,                            
-                                      const T * __restrict__ dx,
-                                      const T * __restrict__ dy,
-                                      const T * __restrict__ dz,
-                                      const T * __restrict__ drdx,
-                                      const T * __restrict__ drdy,
-                                      const T * __restrict__ drdz,
-                                      const T * __restrict__ dsdx,
-                                      const T * __restrict__ dsdy,
-                                      const T * __restrict__ dsdz,
-                                      const T * __restrict__ dtdx,
-                                      const T * __restrict__ dtdy,
-                                      const T * __restrict__ dtdz,
-                                      const T * __restrict__ jacinv) {
-
-  __shared__ T shdx[LX * LX];
-  __shared__ T shdy[LX * LX];
-  __shared__ T shdz[LX * LX];
-
-  __shared__ T shu[LX * LX];
-  __shared__ T shv[LX * LX];
-  __shared__ T shw[LX * LX];
-
-  T ru[LX];
-  T rv[LX];
-  T rw[LX];
-
-  const int e = blockIdx.x;
-  const int j = threadIdx.y;
-  const int i = threadIdx.x;
-  const int ij = i + j*LX;
-  const int ele = e*LX*LX*LX;
-
-  shdx[ij] = dx[ij];
-  shdy[ij] = dy[ij];
-  shdz[ij] = dz[ij];
+  const int lx2 = LX * LX;
+  const int ij = i + j * LX;
+  const int ijk = ij + k * lx2;
+  const int index = ijk + elem;
+  T ur = 0.0;
+  T us = 0.0;
+  T ut = 0.0;
 
 #pragma unroll
-  for(int k = 0; k < LX; ++k){
-    ru[k] = u[ij + k*LX*LX + ele];
-    rv[k] = v[ij + k*LX*LX + ele];
-    rw[k] = w[ij + k*LX*LX + ele];
+  for (int l = 0; l < LX; ++l) {
+    ur += dx[i + l * LX] * field[l + j * LX + k * lx2 + elem];
+    us += dy[j + l * LX] * field[i + l * LX + k * lx2 + elem];
+    ut += dz[k + l * LX] * field[ij + l * lx2 + elem];
   }
 
-  __syncthreads();
+  if (component == 0) {
+    return (ur * drdx[index] + us * dsdx[index] +
+            ut * dtdx[index]) * jacinv[index];
+  }
+  if (component == 1) {
+    return (ur * drdy[index] + us * dsdy[index] +
+            ut * dtdy[index]) * jacinv[index];
+  }
+  return (ur * drdz[index] + us * dsdz[index] +
+          ut * dtdz[index]) * jacinv[index];
+}
+
+/**
+ * Fused device kernel for the asymmetric full-stress SVV Helmholtz operator.
+ *
+ * Each physical strain component is formed, filtered and consumed entirely
+ * within the kernel. Only two element-sized shared arrays are required.
+ */
+template<typename T, const int LX>
+__global__ void ax_helm_svv_full_kernel(
+    T * __restrict__ au,
+    T * __restrict__ av,
+    T * __restrict__ aw,
+    const T * __restrict__ u,
+    const T * __restrict__ v,
+    const T * __restrict__ w,
+    const T * __restrict__ dx,
+    const T * __restrict__ dy,
+    const T * __restrict__ dz,
+    const T * __restrict__ h1,
+    const T * __restrict__ drdx,
+    const T * __restrict__ drdy,
+    const T * __restrict__ drdz,
+    const T * __restrict__ dsdx,
+    const T * __restrict__ dsdy,
+    const T * __restrict__ dsdz,
+    const T * __restrict__ dtdx,
+    const T * __restrict__ dtdy,
+    const T * __restrict__ dtdz,
+    const T * __restrict__ jacinv,
+    const T * __restrict__ w3,
+    const T * __restrict__ h1_svv,
+    const T * __restrict__ filter_r,
+    const T * __restrict__ filter_s,
+    const T * __restrict__ filter_t) {
+
+  extern __shared__ T shared[];
+  T *shfield = shared;
+  T *shwork = shared + LX * LX * LX;
+
+  const int e = blockIdx.x;
+  const int i = threadIdx.x;
+  const int j = threadIdx.y;
+  const int ij = i + j * LX;
+  const int lx2 = LX * LX;
+  const int elem = e * LX * lx2;
+
+#pragma unroll 1
+  for (int k = 0; k < LX; ++k) {
+    const int index = ij + k * lx2 + elem;
+    au[index] = 0.0;
+    av[index] = 0.0;
+    aw[index] = 0.0;
+  }
+
+  // Process s11, s22, s33, s12, s13 and s23 in turn.
+#pragma unroll 1
+  for (int stress = 0; stress < 6; ++stress) {
+
+    // Form one component of grad(u) + grad(u)^T.
+#pragma unroll 1
+    for (int k = 0; k < LX; ++k) {
+      T value;
+      if (stress == 0) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            u, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 1) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            v, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 2) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            w, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 3) {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            u, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            v, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 4) {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            u, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            w, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            v, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            w, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      shwork[ij + k * lx2] = value;
+    }
+
+    // Apply the selected tensor-product low-pass filter.
+    __syncthreads();
+#pragma unroll 1
+    for (int k = 0; k < LX; ++k) {
+      T value = 0.0;
 #pragma unroll
-  for (int k = 0; k < LX; ++k){
-    const int ijk = ij + k*LX*LX;
-    const T drdx_local = drdx[ijk+ele];
-    const T drdy_local = drdy[ijk+ele];
-    const T drdz_local = drdz[ijk+ele];
-    const T dsdx_local = dsdx[ijk+ele];
-    const T dsdy_local = dsdy[ijk+ele];
-    const T dsdz_local = dsdz[ijk+ele];
-    const T dtdx_local = dtdx[ijk+ele];
-    const T dtdy_local = dtdy[ijk+ele];
-    const T dtdz_local = dtdz[ijk+ele];
-    const T dj = jacinv[ijk+ele];
-
-    T uttmp = 0.0;
-    T vttmp = 0.0;
-    T wttmp = 0.0;
-    shu[ij] = ru[k];
-    shv[ij] = rv[k];
-    shw[ij] = rw[k];
-
-    for (int l = 0; l < LX; l++){
-      uttmp += shdz[k+l*LX] * ru[l];
-      vttmp += shdz[k+l*LX] * rv[l];
-      wttmp += shdz[k+l*LX] * rw[l];
+      for (int l = 0; l < LX; ++l) {
+        value += filter_r[i + l * LX] *
+                 shwork[l + j * LX + k * lx2];
+      }
+      shfield[ij + k * lx2] = value;
     }
     __syncthreads();
 
-    T urtmp = 0.0;
-    T ustmp = 0.0;
-
-    T vrtmp = 0.0;
-    T vstmp = 0.0;
-
-    T wrtmp = 0.0;
-    T wstmp = 0.0;
-
+#pragma unroll 1
+    for (int k = 0; k < LX; ++k) {
+      T value = 0.0;
 #pragma unroll
-    for (int l = 0; l < LX; l++){
-      urtmp += shdx[i+l*LX] * shu[l+j*LX];
-      ustmp += shdy[j+l*LX] * shu[i+l*LX];
-
-      vrtmp += shdx[i+l*LX] * shv[l+j*LX];
-      vstmp += shdy[j+l*LX] * shv[i+l*LX];
-
-      wrtmp += shdx[i+l*LX] * shw[l+j*LX];
-      wstmp += shdy[j+l*LX] * shw[i+l*LX];
+      for (int l = 0; l < LX; ++l) {
+        value += filter_s[l + j * LX] *
+                 shfield[i + l * LX + k * lx2];
+      }
+      shwork[ij + k * lx2] = value;
     }
     __syncthreads();
 
-    T u1 = urtmp * drdx_local + 
-           ustmp * dsdx_local + 
-           uttmp * dtdx_local;
-    T u2 = urtmp * drdy_local + 
-           ustmp * dsdy_local + 
-           uttmp * dtdy_local;
-    T u3 = urtmp * drdz_local + 
-           ustmp * dsdz_local + 
-           uttmp * dtdz_local;
+#pragma unroll 1
+    for (int k = 0; k < LX; ++k) {
+      T value = 0.0;
+#pragma unroll
+      for (int l = 0; l < LX; ++l) {
+        value += filter_t[l + k * LX] * shwork[ij + l * lx2];
+      }
+      shfield[ij + k * lx2] = value;
+    }
+    __syncthreads();
 
-    T v1 = vrtmp * drdx_local + 
-           vstmp * dsdx_local + 
-           vttmp * dtdx_local;
-    T v2 = vrtmp * drdy_local + 
-           vstmp * dsdy_local + 
-           vttmp * dtdy_local;
-    T v3 = vrtmp * drdz_local + 
-           vstmp * dsdz_local + 
-           vttmp * dtdz_local;
+    // Recompute the unfiltered strain and combine both viscosities.
+#pragma unroll 1
+    for (int k = 0; k < LX; ++k) {
+      T value;
+      if (stress == 0) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            u, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 1) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            v, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 2) {
+        value = 2.0 * ax_helm_svv_full_derivative<T, LX>(
+            w, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 3) {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            u, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            v, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else if (stress == 4) {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            u, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            w, 0, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
+      else {
+        value = ax_helm_svv_full_derivative<T, LX>(
+            v, 2, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv)
+          + ax_helm_svv_full_derivative<T, LX>(
+            w, 1, i, j, k, elem, dx, dy, dz,
+            drdx, drdy, drdz, dsdx, dsdy, dsdz,
+            dtdx, dtdy, dtdz, jacinv);
+      }
 
-    T w1 = wrtmp * drdx_local + 
-           wstmp * dsdx_local + 
-           wttmp * dtdx_local;
-    T w2 = wrtmp * drdy_local + 
-           wstmp * dsdy_local + 
-           wttmp * dtdy_local;
-    T w3 = wrtmp * drdz_local + 
-           wstmp * dsdz_local + 
-           wttmp * dtdz_local;
+      const int ijk = ij + k * lx2;
+      const int index = ijk + elem;
+      shwork[ijk] =
+          w3[ijk] * (h1[index] * value +
+                     h1_svv[index] * (value - shfield[ijk]));
+    }
+    __syncthreads();
 
-    s11[ijk + ele] = dj*(u1 + u1);
-    s22[ijk + ele] = dj*(v2 + v2);
-    s33[ijk + ele] = dj*(w3 + w3);
-    s12[ijk + ele] = dj*(u2 + v1);
-    s13[ijk + ele] = dj*(u3 + w1);
-    s23[ijk + ele] = dj*(v3 + w2);   
+    // A diagonal strain contributes once; a shear strain contributes twice.
+    const int contributions = stress < 3 ? 1 : 2;
+#pragma unroll 1
+    for (int contribution = 0;
+         contribution < contributions; ++contribution) {
+      int output;
+      int physical;
+      if (stress < 3) {
+        output = stress;
+        physical = stress;
+      }
+      else if (stress == 3) {
+        output = contribution;
+        physical = 1 - contribution;
+      }
+      else if (stress == 4) {
+        output = contribution == 0 ? 0 : 2;
+        physical = contribution == 0 ? 2 : 0;
+      }
+      else {
+        output = contribution == 0 ? 1 : 2;
+        physical = contribution == 0 ? 2 : 1;
+      }
+
+      T *result = output == 0 ? au : (output == 1 ? av : aw);
+
+      // r-direction reference flux and divergence.
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        const int ijk = ij + k * lx2;
+        const int index = ijk + elem;
+        T metric = physical == 0 ? drdx[index]
+                   : (physical == 1 ? drdy[index] : drdz[index]);
+        shfield[ijk] = metric * shwork[ijk];
+      }
+      __syncthreads();
+
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        T value = 0.0;
+#pragma unroll
+        for (int l = 0; l < LX; ++l) {
+          value += dx[l + i * LX] * shfield[l + j * LX + k * lx2];
+        }
+        result[ij + k * lx2 + elem] += value;
+      }
+      __syncthreads();
+
+      // s-direction reference flux and divergence.
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        const int ijk = ij + k * lx2;
+        const int index = ijk + elem;
+        T metric = physical == 0 ? dsdx[index]
+                   : (physical == 1 ? dsdy[index] : dsdz[index]);
+        shfield[ijk] = metric * shwork[ijk];
+      }
+      __syncthreads();
+
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        T value = 0.0;
+#pragma unroll
+        for (int l = 0; l < LX; ++l) {
+          value += dy[l + j * LX] * shfield[i + l * LX + k * lx2];
+        }
+        result[ij + k * lx2 + elem] += value;
+      }
+      __syncthreads();
+
+      // t-direction reference flux and divergence.
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        const int ijk = ij + k * lx2;
+        const int index = ijk + elem;
+        T metric = physical == 0 ? dtdx[index]
+                   : (physical == 1 ? dtdy[index] : dtdz[index]);
+        shfield[ijk] = metric * shwork[ijk];
+      }
+      __syncthreads();
+
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        T value = 0.0;
+#pragma unroll
+        for (int l = 0; l < LX; ++l) {
+          value += dz[l + k * LX] * shfield[ij + l * lx2];
+        }
+        result[ij + k * lx2 + elem] += value;
+      }
+      __syncthreads();
+    }
   }
 }
 
-template< typename T, const int LX >
-__global__ void __launch_bounds__(LX*LX,3)
-  ax_helm_svv_full_part1_kernel_vector_kstep_padded(T * __restrict__ s11,
-                                             T * __restrict__ s22,
-                                             T * __restrict__ s33,
-                                             T * __restrict__ s12,
-                                             T * __restrict__ s13,
-                                             T * __restrict__ s23,
-                                             const T * __restrict__ u,
-                                             const T * __restrict__ v,
-                                             const T * __restrict__ w,                            
-                                             const T * __restrict__ dx,
-                                             const T * __restrict__ dy,
-                                             const T * __restrict__ dz,
-                                             const T * __restrict__ drdx,
-                                             const T * __restrict__ drdy,
-                                             const T * __restrict__ drdz,
-                                             const T * __restrict__ dsdx,
-                                             const T * __restrict__ dsdy,
-                                             const T * __restrict__ dsdz,
-                                             const T * __restrict__ dtdx,
-                                             const T * __restrict__ dtdy,
-                                             const T * __restrict__ dtdz,
-                                             const T * __restrict__ jacinv) {
-
-  __shared__ T shdx[LX * (LX+1)];
-  __shared__ T shdy[LX * (LX+1)];
-  __shared__ T shdz[LX * (LX+1)];
-
-  __shared__ T shu[LX * (LX+1)];
-  __shared__ T shv[LX * (LX+1)];
-  __shared__ T shw[LX * (LX+1)];
-
-  T ru[LX];
-  T rv[LX];
-  T rw[LX];
-
-  const int e = blockIdx.x;
-  const int j = threadIdx.y;
-  const int i = threadIdx.x;
-  const int ij = i + j*LX;
-  const int ij_p = i + j*(LX+1);
-  const int ele = e*LX*LX*LX;
-
-  shdx[ij_p] = dx[ij];
-  shdy[ij_p] = dy[ij];
-  shdz[ij_p] = dz[ij];
-
-#pragma unroll
-  for(int k = 0; k < LX; ++k){
-    ru[k] = u[ij + k*LX*LX + ele];
-    rv[k] = v[ij + k*LX*LX + ele];
-    rw[k] = w[ij + k*LX*LX + ele];
-  }
-
-
-  __syncthreads();
-#pragma unroll
-  for (int k = 0; k < LX; ++k){
-    const int ijk = ij + k*LX*LX;
-    const T drdx_local = drdx[ijk+ele];
-    const T drdy_local = drdy[ijk+ele];
-    const T drdz_local = drdz[ijk+ele];
-    const T dsdx_local = dsdx[ijk+ele];
-    const T dsdy_local = dsdy[ijk+ele];
-    const T dsdz_local = dsdz[ijk+ele];
-    const T dtdx_local = dtdx[ijk+ele];
-    const T dtdy_local = dtdy[ijk+ele];
-    const T dtdz_local = dtdz[ijk+ele];
-    const T dj  = jacinv[ijk+ele];
-
-    T uttmp = 0.0;
-    T vttmp = 0.0;
-    T wttmp = 0.0;
-    shu[ij_p] = ru[k];
-    shv[ij_p] = rv[k];
-    shw[ij_p] = rw[k];
-
-    for (int l = 0; l < LX; l++){
-      uttmp += shdz[k+l*(LX+1)] * ru[l];
-      vttmp += shdz[k+l*(LX+1)] * rv[l];
-      wttmp += shdz[k+l*(LX+1)] * rw[l];
-    }
-    __syncthreads();
-
-    T urtmp = 0.0;
-    T ustmp = 0.0;
-
-    T vrtmp = 0.0;
-    T vstmp = 0.0;
-
-    T wrtmp = 0.0;
-    T wstmp = 0.0;
-
-#pragma unroll
-    for (int l = 0; l < LX; l++){
-      urtmp += shdx[i+l*(LX+1)] * shu[l+j*(LX+1)];
-      ustmp += shdy[j+l*(LX+1)] * shu[i+l*(LX+1)];
-
-      vrtmp += shdx[i+l*(LX+1)] * shv[l+j*(LX+1)];
-      vstmp += shdy[j+l*(LX+1)] * shv[i+l*(LX+1)];
-
-      wrtmp += shdx[i+l*(LX+1)] * shw[l+j*(LX+1)];
-      wstmp += shdy[j+l*(LX+1)] * shw[i+l*(LX+1)];
-    }
-    __syncthreads();
-
-    T u1 = urtmp * drdx_local + 
-           ustmp * dsdx_local + 
-           uttmp * dtdx_local;
-    T u2 = urtmp * drdy_local + 
-           ustmp * dsdy_local + 
-           uttmp * dtdy_local;
-    T u3 = urtmp * drdz_local + 
-           ustmp * dsdz_local + 
-           uttmp * dtdz_local;
-
-    T v1 = vrtmp * drdx_local + 
-           vstmp * dsdx_local + 
-           vttmp * dtdx_local;
-    T v2 = vrtmp * drdy_local + 
-           vstmp * dsdy_local + 
-           vttmp * dtdy_local;
-    T v3 = vrtmp * drdz_local + 
-           vstmp * dsdz_local + 
-           vttmp * dtdz_local;
-
-    T w1 = wrtmp * drdx_local + 
-           wstmp * dsdx_local + 
-           wttmp * dtdx_local;
-    T w2 = wrtmp * drdy_local + 
-           wstmp * dsdy_local + 
-           wttmp * dtdy_local;
-    T w3 = wrtmp * drdz_local + 
-           wstmp * dsdz_local + 
-           wttmp * dtdz_local;
-
-    s11[ij + k*LX*LX + ele] = dj*(u1 + u1);
-    s22[ij + k*LX*LX + ele] = dj*(v2 + v2);
-    s33[ij + k*LX*LX + ele] = dj*(w3 + w3);
-    s12[ij + k*LX*LX + ele] = dj*(u2 + v1);
-    s13[ij + k*LX*LX + ele] = dj*(u3 + w1);
-    s23[ij + k*LX*LX + ele] = dj*(v3 + w2);
-  }
-}
-
-template< typename T, const int LX >
-__global__ void __launch_bounds__(LX*LX,3)
-  ax_helm_svv_full_part2_kernel_vector_kstep(T * __restrict__ au,
-                                 T * __restrict__ av,
-                                 T * __restrict__ aw,
-                                 const T * __restrict__ s11,
-                                 const T * __restrict__ s22,
-                                 const T * __restrict__ s33,
-                                 const T * __restrict__ s12,
-                                 const T * __restrict__ s13,
-                                 const T * __restrict__ s23,
-                                 const T * __restrict__ s11_svv,
-                                 const T * __restrict__ s22_svv,
-                                 const T * __restrict__ s33_svv,
-                                 const T * __restrict__ s12_svv,
-                                 const T * __restrict__ s13_svv,
-                                 const T * __restrict__ s23_svv,
-                                 const T * __restrict__ dx,
-                                 const T * __restrict__ dy,
-                                 const T * __restrict__ dz,
-                                 const T * __restrict__ h1,
-                                 const T * __restrict__ drdx,
-                                 const T * __restrict__ drdy,
-                                 const T * __restrict__ drdz,
-                                 const T * __restrict__ dsdx,
-                                 const T * __restrict__ dsdy,
-                                 const T * __restrict__ dsdz,
-                                 const T * __restrict__ dtdx,
-                                 const T * __restrict__ dtdy,
-                                 const T * __restrict__ dtdz,
-                                 const T * __restrict__ w3,
-                                 const T * __restrict__ h1_svv) {
-
-  __shared__ T shdx[LX * LX];
-  __shared__ T shdy[LX * LX];
-  __shared__ T shdz[LX * LX];
-
-  __shared__ T shur2[LX * LX];
-  __shared__ T shus2[LX * LX];
-  T rut2;
-  __shared__ T shvr2[LX * LX];
-  __shared__ T shvs2[LX * LX];
-  T rvt2;
-  __shared__ T shwr2[LX * LX];
-  __shared__ T shws2[LX * LX];
-  T rwt2;
-
-  T ruw[LX];
-  T rvw[LX];
-  T rww[LX];
-
-  const int e = blockIdx.x;
-  const int j = threadIdx.y;
-  const int i = threadIdx.x;
-  const int ij = i + j*LX;
-  const int ele = e*LX*LX*LX;
-
-  shdx[ij] = dx[ij];
-  shdy[ij] = dy[ij];
-  shdz[ij] = dz[ij];
-
-#pragma unroll
-  for(int k = 0; k < LX; ++k){
-    ruw[k] = 0.0;
-    rvw[k] = 0.0;
-    rww[k] = 0.0;
-  }
-
-  __syncthreads();
-#pragma unroll
-  for (int k = 0; k < LX; ++k){
-    const int ijk = ij + k*LX*LX;
-    const T drdx_local = drdx[ijk+ele];
-    const T drdy_local = drdy[ijk+ele];
-    const T drdz_local = drdz[ijk+ele];
-    const T dsdx_local = dsdx[ijk+ele];
-    const T dsdy_local = dsdy[ijk+ele];
-    const T dsdz_local = dsdz[ijk+ele];
-    const T dtdx_local = dtdx[ijk+ele];
-    const T dtdy_local = dtdy[ijk+ele];
-    const T dtdz_local = dtdz[ijk+ele];
-    const T dj = w3[ijk]*h1[ijk+ele];
-    const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
-    
-    T rs11 = s11[ijk + ele];
-    T rs22 = s22[ijk + ele];
-    T rs33 = s33[ijk + ele];
-    T rs12 = s12[ijk + ele];
-    T rs13 = s13[ijk + ele];
-    T rs23 = s23[ijk + ele];
-    T rs11_svv = rs11 - s11_svv[ijk + ele];
-    T rs22_svv = rs22 - s22_svv[ijk + ele];
-    T rs33_svv = rs33 - s33_svv[ijk + ele];
-    T rs12_svv = rs12 - s12_svv[ijk + ele];
-    T rs13_svv = rs13 - s13_svv[ijk + ele];
-    T rs23_svv = rs23 - s23_svv[ijk + ele];
-
-    T rs11_h = dj * rs11 + dj_svv * rs11_svv;
-    T rs22_h = dj * rs22 + dj_svv * rs22_svv;
-    T rs33_h = dj * rs33 + dj_svv * rs33_svv;
-    T rs12_h = dj * rs12 + dj_svv * rs12_svv;
-    T rs13_h = dj * rs13 + dj_svv * rs13_svv;
-    T rs23_h = dj * rs23 + dj_svv * rs23_svv;
-
-    shur2[ij] = drdx_local * rs11_h +
-                drdy_local * rs12_h +
-                drdz_local * rs13_h;
-    shus2[ij] = dsdx_local * rs11_h +
-                dsdy_local * rs12_h +
-                dsdz_local * rs13_h;
-    rut2 =      dtdx_local * rs11_h +
-                dtdy_local * rs12_h +
-                dtdz_local * rs13_h;
-    shvr2[ij] = drdx_local * rs12_h +
-                drdy_local * rs22_h +
-                drdz_local * rs23_h;
-    shvs2[ij] = dsdx_local * rs12_h +
-                dsdy_local * rs22_h +
-                dsdz_local * rs23_h;
-    rvt2 =      dtdx_local * rs12_h +
-                dtdy_local * rs22_h +
-                dtdz_local * rs23_h;
-    shwr2[ij] = drdx_local * rs13_h +
-                drdy_local * rs23_h +
-                drdz_local * rs33_h;
-    shws2[ij] = dsdx_local * rs13_h +
-                dsdy_local * rs23_h +
-                dsdz_local * rs33_h;
-    rwt2 =      dtdx_local * rs13_h +
-                dtdy_local * rs23_h +
-                dtdz_local * rs33_h;
-
-    __syncthreads();
-
-    T uwijke = 0.0;
-    T vwijke = 0.0;
-    T wwijke = 0.0;
-#pragma unroll
-    for (int l = 0; l < LX; l++){
-      uwijke += shur2[l+j*LX] * shdx[l+i*LX];
-      ruw[l] += rut2 * shdz[k+l*LX];
-      uwijke += shus2[i+l*LX] * shdy[l + j*LX];
-
-      vwijke += shvr2[l+j*LX] * shdx[l+i*LX];
-      rvw[l] += rvt2 * shdz[k+l*LX];
-      vwijke += shvs2[i+l*LX] * shdy[l + j*LX];
-
-      wwijke += shwr2[l+j*LX] * shdx[l+i*LX];
-      rww[l] += rwt2 * shdz[k+l*LX];
-      wwijke += shws2[i+l*LX] * shdy[l + j*LX];
-    }
-    __syncthreads();
-    ruw[k] += uwijke;
-    rvw[k] += vwijke;
-    rww[k] += wwijke;
-  }
-#pragma unroll
-  for (int k = 0; k < LX; ++k){
-    au[ij + k*LX*LX + ele] = ruw[k];
-    av[ij + k*LX*LX + ele] = rvw[k];
-    aw[ij + k*LX*LX + ele] = rww[k];
-  }
-}
-
-template< typename T, const int LX >
-__global__ void __launch_bounds__(LX*LX,3)
-  ax_helm_svv_full_part2_kernel_vector_kstep_padded(T * __restrict__ au,
-                                 T * __restrict__ av,
-                                 T * __restrict__ aw,
-                                 const T * __restrict__ s11,
-                                 const T * __restrict__ s22,
-                                 const T * __restrict__ s33,
-                                 const T * __restrict__ s12,
-                                 const T * __restrict__ s13,
-                                 const T * __restrict__ s23,
-                                 const T * __restrict__ s11_svv,
-                                 const T * __restrict__ s22_svv,
-                                 const T * __restrict__ s33_svv,
-                                 const T * __restrict__ s12_svv,
-                                 const T * __restrict__ s13_svv,
-                                 const T * __restrict__ s23_svv,
-                                 const T * __restrict__ dx,
-                                 const T * __restrict__ dy,
-                                 const T * __restrict__ dz,
-                                 const T * __restrict__ h1,
-                                 const T * __restrict__ drdx,
-                                 const T * __restrict__ drdy,
-                                 const T * __restrict__ drdz,
-                                 const T * __restrict__ dsdx,
-                                 const T * __restrict__ dsdy,
-                                 const T * __restrict__ dsdz,
-                                 const T * __restrict__ dtdx,
-                                 const T * __restrict__ dtdy,
-                                 const T * __restrict__ dtdz,
-                                 const T * __restrict__ w3,
-                                 const T * __restrict__ h1_svv) {
-
-  __shared__ T shdx[LX * (LX+1)];
-  __shared__ T shdy[LX * (LX+1)];
-  __shared__ T shdz[LX * (LX+1)];
-
-  __shared__ T shur2[LX * LX];
-  __shared__ T shus2[LX * (LX+1)];
-  T rut2;
-  __shared__ T shvr2[LX * LX];
-  __shared__ T shvs2[LX * (LX+1)];
-  T rvt2;
-  __shared__ T shwr2[LX * LX];
-  __shared__ T shws2[LX * (LX+1)];
-  T rwt2;
-
-  T ruw[LX];
-  T rvw[LX];
-  T rww[LX];
-
-  const int e = blockIdx.x;
-  const int j = threadIdx.y;
-  const int i = threadIdx.x;
-  const int ij = i + j*LX;
-  const int ij_p = i + j*(LX+1);
-  const int ele = e*LX*LX*LX;
-
-  shdx[ij_p] = dx[ij];
-  shdy[ij_p] = dy[ij];
-  shdz[ij_p] = dz[ij];
-
-#pragma unroll
-  for(int k = 0; k < LX; ++k){
-    ruw[k] = 0.0;
-    rvw[k] = 0.0;
-    rww[k] = 0.0;
-  }
-
-  __syncthreads();
-#pragma unroll
-  for (int k = 0; k < LX; ++k){
-    const int ijk = ij + k*LX*LX;
-    const T drdx_local = drdx[ijk+ele];
-    const T drdy_local = drdy[ijk+ele];
-    const T drdz_local = drdz[ijk+ele];
-    const T dsdx_local = dsdx[ijk+ele];
-    const T dsdy_local = dsdy[ijk+ele];
-    const T dsdz_local = dsdz[ijk+ele];
-    const T dtdx_local = dtdx[ijk+ele];
-    const T dtdy_local = dtdy[ijk+ele];
-    const T dtdz_local = dtdz[ijk+ele];
-    const T dj = w3[ijk]*h1[ijk+ele];
-    const T dj_svv = w3[ijk]*h1_svv[ijk+ele];
-    
-    T rs11 = s11[ijk + ele];
-    T rs22 = s22[ijk + ele];
-    T rs33 = s33[ijk + ele];
-    T rs12 = s12[ijk + ele];
-    T rs13 = s13[ijk + ele];
-    T rs23 = s23[ijk + ele];
-    T rs11_svv = s11[ijk + ele] - s11_svv[ijk + ele];
-    T rs22_svv = s22[ijk + ele] - s22_svv[ijk + ele];
-    T rs33_svv = s33[ijk + ele] - s33_svv[ijk + ele];
-    T rs12_svv = s12[ijk + ele] - s12_svv[ijk + ele];
-    T rs13_svv = s13[ijk + ele] - s13_svv[ijk + ele];
-    T rs23_svv = s23[ijk + ele] - s23_svv[ijk + ele];
-
-    T rs11_h = dj * rs11 + dj_svv * rs11_svv;
-    T rs22_h = dj * rs22 + dj_svv * rs22_svv;
-    T rs33_h = dj * rs33 + dj_svv * rs33_svv;
-    T rs12_h = dj * rs12 + dj_svv * rs12_svv;
-    T rs13_h = dj * rs13 + dj_svv * rs13_svv;
-    T rs23_h = dj * rs23 + dj_svv * rs23_svv;
-
-    shur2[ij] = drdx_local * rs11_h +
-                drdy_local * rs12_h +
-                drdz_local * rs13_h;
-    shus2[ij_p] = dsdx_local * rs11_h +
-                dsdy_local * rs12_h +
-                dsdz_local * rs13_h;
-    rut2 =      dtdx_local * rs11_h +
-                dtdy_local * rs12_h +
-                dtdz_local * rs13_h;
-    shvr2[ij] = drdx_local * rs12_h +
-                drdy_local * rs22_h +
-                drdz_local * rs23_h;
-    shvs2[ij_p] = dsdx_local * rs12_h +
-                dsdy_local * rs22_h +
-                dsdz_local * rs23_h;
-    rvt2 =      dtdx_local * rs12_h +
-                dtdy_local * rs22_h +
-                dtdz_local * rs23_h;
-    shwr2[ij] = drdx_local * rs13_h +
-                drdy_local * rs23_h +
-                drdz_local * rs33_h;
-    shws2[ij_p] = dsdx_local * rs13_h +
-                dsdy_local * rs23_h +
-                dsdz_local * rs33_h;
-    rwt2 =      dtdx_local * rs13_h +
-                dtdy_local * rs23_h +
-                dtdz_local * rs33_h;
-
-    __syncthreads();
-
-    T uwijke = 0.0;
-    T vwijke = 0.0;
-    T wwijke = 0.0;
-#pragma unroll
-    for (int l = 0; l < LX; l++){
-      uwijke += shur2[l+j*LX] * shdx[l+i*(LX+1)];
-      ruw[l] += rut2 * shdz[k+l*(LX+1)];
-      uwijke += shus2[i+l*(LX+1)] * shdy[l + j*(LX+1)];
-
-      vwijke += shvr2[l+j*LX] * shdx[l+i*(LX+1)];
-      rvw[l] += rvt2 * shdz[k+l*(LX+1)];
-      vwijke += shvs2[i+l*(LX+1)] * shdy[l + j*(LX+1)];
-
-      wwijke += shwr2[l+j*LX] * shdx[l+i*(LX+1)];
-      rww[l] += rwt2 * shdz[k+l*(LX+1)];
-      wwijke += shws2[i+l*(LX+1)] * shdy[l + j*(LX+1)];
-    }
-    __syncthreads();
-    ruw[k] += uwijke;
-    rvw[k] += vwijke;
-    rww[k] += wwijke;
-  }
-#pragma unroll
-  for (int k = 0; k < LX; ++k){
-    au[ij + k*LX*LX + ele] = ruw[k];
-    av[ij + k*LX*LX + ele] = rvw[k];
-    aw[ij + k*LX*LX + ele] = rww[k];
-  }
-}
-
-#endif // __MATH_AX_HELM_SVV_FULL_KERNEL_H__
+#endif
