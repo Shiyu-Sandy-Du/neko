@@ -45,6 +45,7 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_svv_cpu, only : ax_helm_svv_cpu_t
   use ax_helm_sym_svv_cpu, only : ax_helm_sym_svv_cpu_t
   use ax_helm_svv_device, only : ax_helm_svv_device_t
+  use ax_helm_sym_svv_device, only : ax_helm_sym_svv_device_t
   use ax_helm_svv_full_cpu, only : ax_helm_svv_full_cpu_t
   use ax_helm_sym_svv_full_cpu, only : ax_helm_sym_svv_full_cpu_t
   use ax_helm_svv_full_device, only : ax_helm_svv_full_device_t
@@ -141,14 +142,18 @@ contains
                         &on the CPU and device")
        else if (NEKO_BCKND_DEVICE .eq. 1) then
           if (svv%formulation .eq. "symmetric") then
-             call neko_error("The symmetric SVV formulation is only " // &
-                  "available on the CPU backend")
+             allocate(ax_helm_sym_svv_device_t::object)
+             select type (f => object)
+             type is (ax_helm_sym_svv_device_t)
+                f%svv => svv
+             end select
+          else
+             allocate(ax_helm_svv_device_t::object)
+             select type (f => object)
+             type is (ax_helm_svv_device_t)
+                f%svv => svv
+             end select
           end if
-          allocate(ax_helm_svv_device_t::object)
-          select type (f => object)
-          type is (ax_helm_svv_device_t)
-             f%svv => svv
-          end select
        else
           if (svv%formulation .eq. "symmetric") then
              allocate(ax_helm_sym_svv_cpu_t::object)
