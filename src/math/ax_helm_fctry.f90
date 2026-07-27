@@ -148,19 +148,6 @@ contains
           select type (f => object)
           type is (ax_helm_svv_device_t)
              f%svv => svv
-             n = svv%coef%dof%size()
-             if (rp .eq. REAL32) then
-                s = n * int(4, c_size_t)
-             else if (rp .eq. REAL64) then
-                s = n * int(8, c_size_t)
-             end if
-
-             call device_alloc(f%ur_d, s)
-             call device_alloc(f%us_d, s)
-             call device_alloc(f%ut_d, s)
-             call device_alloc(f%ur_svv_d, s)
-             call device_alloc(f%us_svv_d, s)
-             call device_alloc(f%ut_svv_d, s)
           end select
        else
           if (svv%formulation .eq. "symmetric") then

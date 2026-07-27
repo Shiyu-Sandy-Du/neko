@@ -13,7 +13,7 @@
 !     disclaimer in the documentation and/or other materials provided
 !     with the distribution.
 !
-!   * Neither the name of the wthors nor the names of its
+!   * Neither the name of the authors nor the names of its
 !     contributors may be used to endorse or promote products derived
 !     from this software without specific prior written permission.
 !
@@ -37,593 +37,66 @@ module ax_helm_svv_device
   use space, only : space_t
   use mesh, only : mesh_t
   use device_math, only : device_addcol4
-  use device, only : device_get_ptr, device_alloc
-  use tensor_device, only : tnsr3d_device
-  use num_types, only : rp
+  use device, only : device_get_ptr
   use utils, only : neko_error
-  use, intrinsic :: iso_c_binding, only : c_ptr, c_int, c_char, &
-                                          c_size_t, C_NULL_PTR, &
-                                          c_associated
+  use, intrinsic :: iso_c_binding, only : c_ptr, c_int
   implicit none
   private
 
+  !> Device matrix-vector product for an SVV Helmholtz problem.
   type, public, extends(ax_helm_svv_t) :: ax_helm_svv_device_t
-     type(c_ptr) :: ur_d = C_NULL_PTR
-     type(c_ptr) :: us_d = C_NULL_PTR
-     type(c_ptr) :: ut_d = C_NULL_PTR
-     type(c_ptr) :: ur_svv_d = C_NULL_PTR
-     type(c_ptr) :: us_svv_d = C_NULL_PTR
-     type(c_ptr) :: ut_svv_d = C_NULL_PTR
    contains
+     !> Compute the product.
      procedure, pass(this) :: compute => ax_helm_svv_device_compute
   end type ax_helm_svv_device_t
 
 #ifdef HAVE_HIP
   interface
-     subroutine hip_ax_helm_svv_part1_rst(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dy_d, dz_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_rst')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dy_d, dz_d
+     subroutine hip_ax_helm_svv(w_d, u_d, dx_d, dy_d, dz_d, h1_d, &
+          drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
+          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
+          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          bind(c, name='hip_ax_helm_svv')
+       use, intrinsic :: iso_c_binding, only : c_ptr, c_int
+       type(c_ptr), value :: w_d, u_d
+       type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
+       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
+       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
        integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_rst
+     end subroutine hip_ax_helm_svv
   end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_rs(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dy_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_rs')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dy_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_rs
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_rt(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dz_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_rt')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dz_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_rt
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_st(ur_d, us_d, ut_d,&
-          u_d, &
-          dy_d, dz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_st')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dy_d, dz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_st
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_r(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, &
-          drdx_d, drdy_d, drdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_r')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_r
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_s(ur_d, us_d, ut_d,&
-          u_d, &
-          dy_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_s')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dy_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_s
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part1_t(ur_d, us_d, ut_d,&
-          u_d, &
-          dz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part1_t')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part1_t
-  end interface
-
-  interface
-     subroutine hip_ax_helm_svv_part2_rst(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dy_d, dz_d, &
-          h1_d, drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_rst')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dy_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_rst
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_rs(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dy_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_rs')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dy_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_rs
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_rt(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dz_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_rt')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_rt
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_st(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dy_d, dz_d, &
-          h1_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_st')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dy_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_st
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_r(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_r')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_r
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_s(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dy_d, &
-          h1_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_s')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dy_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_s
-  end interface
-  interface
-     subroutine hip_ax_helm_svv_part2_t(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dz_d, &
-          h1_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='hip_ax_helm_svv_part2_t')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine hip_ax_helm_svv_part2_t
-  end interface
-  
 #elif HAVE_CUDA
   interface
-     subroutine cuda_ax_helm_svv_part1_rst(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dy_d, dz_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_rst')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dy_d, dz_d
+     subroutine cuda_ax_helm_svv(w_d, u_d, dx_d, dy_d, dz_d, h1_d, &
+          drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
+          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
+          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          bind(c, name='cuda_ax_helm_svv')
+       use, intrinsic :: iso_c_binding, only : c_ptr, c_int
+       type(c_ptr), value :: w_d, u_d
+       type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
+       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
+       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
        integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_rst
+     end subroutine cuda_ax_helm_svv
   end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_rs(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dy_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_rs')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dy_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_rs
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_rt(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, dz_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_rt')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d, dz_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_rt
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_st(ur_d, us_d, ut_d,&
-          u_d, &
-          dy_d, dz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_st')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dy_d, dz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_st
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_r(ur_d, us_d, ut_d,&
-          u_d, &
-          dx_d, &
-          drdx_d, drdy_d, drdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_r')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dx_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_r
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_s(ur_d, us_d, ut_d,&
-          u_d, &
-          dy_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_s')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dy_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_s
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part1_t(ur_d, us_d, ut_d,&
-          u_d, &
-          dz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          jacinv_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part1_t')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: u_d
-       type(c_ptr), value :: dz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part1_t
-  end interface
-
-  interface
-     subroutine cuda_ax_helm_svv_part2_rst(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dy_d, dz_d, &
-          h1_d, drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_rst')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dy_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_rst
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_rs(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dy_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_rs')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dy_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_rs
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_rt(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, dz_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_rt')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_rt
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_st(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dy_d, dz_d, &
-          h1_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_st')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dy_d, dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_st
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_r(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dx_d, &
-          h1_d, &
-          drdx_d, drdy_d, drdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_r')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dx_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_r
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_s(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dy_d, &
-          h1_d, &
-          dsdx_d, dsdy_d, dsdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_s')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dy_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_s
-  end interface
-  interface
-     subroutine cuda_ax_helm_svv_part2_t(w_d, &
-          ur_d, us_d, ut_d,&
-          ur_svv_d, us_svv_d, ut_svv_d, &
-          dz_d, &
-          h1_d, &
-          dtdx_d, dtdy_d, dtdz_d, &
-          w3_d, svv_h1_d, nelv, lx) &
-          bind(c, name='cuda_ax_helm_svv_part2_t')
-       use, intrinsic :: iso_c_binding
-       type(c_ptr), value :: w_d
-       type(c_ptr), value :: ur_d, us_d, ut_d
-       type(c_ptr), value :: ur_svv_d, us_svv_d, ut_svv_d
-       type(c_ptr), value :: dz_d
-       type(c_ptr), value :: h1_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: w3_d
-       type(c_ptr), value :: svv_h1_d
-       integer(c_int) :: nelv, lx
-     end subroutine cuda_ax_helm_svv_part2_t
-  end interface
-
 #endif
 
 contains
 
+  !> Compute the product.
+  !! @param this Device SVV Helmholtz operator.
+  !! @param w Result.
+  !! @param u Input field.
+  !! @param coef Coefficients.
+  !! @param msh Mesh.
+  !! @param Xh Function space.
   subroutine ax_helm_svv_device_compute(this, w, u, coef, msh, Xh)
     class(ax_helm_svv_device_t), intent(inout) :: this
     type(mesh_t), intent(in) :: msh
@@ -632,312 +105,51 @@ contains
     real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     type(c_ptr) :: u_d, w_d
-    integer :: n
-
-    associate(lx => Xh%lx, ly => Xh%ly, lz => Xh%lz, &
-          nelv => msh%nelv, &
-          ur_d => this%ur_d, us_d => this%us_d, ut_d => this%ut_d, &
-          ur_svv_d => this%ur_svv_d, us_svv_d => this%us_svv_d, &
-          ut_svv_d => this%ut_svv_d, &
-          svv_Q => this%svv%filter%fh_d, svv_Qt => this%svv%filter%fht_d, &
-          svv_direction => this%svv%direction, &
-          ident => this%svv%filter%ident_d)
+    type(c_ptr) :: filter_r_d, filter_s_d, filter_t_d
 
     u_d = device_get_ptr(u)
     w_d = device_get_ptr(w)
-    
-#ifdef HAVE_HIP
-    select case (svv_direction)
-    case ("rst")
-       call hip_ax_helm_svv_part1_rst(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("rs")
-       call hip_ax_helm_svv_part1_rs(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dy_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("rt")
-       call hip_ax_helm_svv_part1_rt(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dz_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("st")
-       call hip_ax_helm_svv_part1_st(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dy_d, Xh%dz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("r")
-       call hip_ax_helm_svv_part1_r(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("s")
-       call hip_ax_helm_svv_part1_s(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dy_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("t")
-       call hip_ax_helm_svv_part1_t(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case default
-       call neko_error("invalid svv_direction")
-    end select
-#elif HAVE_CUDA
-    select case (svv_direction)
-    case ("rst")
-       call cuda_ax_helm_svv_part1_rst(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("rs")
-       call cuda_ax_helm_svv_part1_rs(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dy_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("rt")
-       call cuda_ax_helm_svv_part1_rt(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, Xh%dz_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("st")
-       call cuda_ax_helm_svv_part1_st(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dy_d, Xh%dz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("r")
-       call cuda_ax_helm_svv_part1_r(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dx_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("s")
-       call cuda_ax_helm_svv_part1_s(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dy_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case ("t")
-       call cuda_ax_helm_svv_part1_t(ur_d, us_d, ut_d, &
-            u_d, &
-            Xh%dz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            coef%jacinv_d, &
-            nelv, lx)
-    case default
-       call neko_error("invalid svv_direction")
-    end select
-#elif HAVE_OPENCL
-    call neko_error('OPENCL is not implemented for SVV')
-#endif
 
-    ! Filtering operation
-    if (svv_direction .eq. "rst") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, svv_Qt, svv_Qt, nelv)
-    else if (svv_direction .eq. "rs") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, svv_Qt, ident, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, svv_Qt, ident, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, svv_Qt, ident, nelv)
-    else if (svv_direction .eq. "rt") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, ident, svv_Qt, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, ident, svv_Qt, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, ident, svv_Qt, nelv)
-    else if (svv_direction .eq. "st") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, svv_Qt, svv_Qt, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, svv_Qt, svv_Qt, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, svv_Qt, svv_Qt, nelv)
-    else if (svv_direction .eq. "r") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, svv_Q, ident, ident, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, svv_Q, ident, ident, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, svv_Q, ident, ident, nelv)
-    else if (svv_direction .eq. "s") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, svv_Qt, ident, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, svv_Qt, ident, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, svv_Qt, ident, nelv)
-    else if (svv_direction .eq. "t") then
-       call tnsr3d_device(ur_svv_d, lx, ur_d, lx, ident, ident, svv_Qt, nelv)
-       call tnsr3d_device(us_svv_d, lx, us_d, lx, ident, ident, svv_Qt, nelv)
-       call tnsr3d_device(ut_svv_d, lx, ut_d, lx, ident, ident, svv_Qt, nelv)
+    if (index(this%svv%direction, "r") > 0) then
+       filter_r_d = this%svv%filter%fh_d
+    else
+       filter_r_d = this%svv%filter%ident_d
+    end if
+
+    if (index(this%svv%direction, "s") > 0) then
+       filter_s_d = this%svv%filter%fht_d
+    else
+       filter_s_d = this%svv%filter%ident_d
+    end if
+
+    if (index(this%svv%direction, "t") > 0) then
+       filter_t_d = this%svv%filter%fht_d
+    else
+       filter_t_d = this%svv%filter%ident_d
     end if
 
 #ifdef HAVE_HIP
-    select case (svv_direction)
-    case ("rst")
-       call hip_ax_helm_svv_part2_rst(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-            coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("rs")
-       call hip_ax_helm_svv_part2_rs(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dy_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("rt")
-       call hip_ax_helm_svv_part2_rt(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dz_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("st")
-       call hip_ax_helm_svv_part2_st(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dy_d, Xh%dz_d, &
-            coef%h1_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("r")
-       call hip_ax_helm_svv_part2_r(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("s")
-       call hip_ax_helm_svv_part2_s(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dy_d, &
-            coef%h1_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("t")
-       call hip_ax_helm_svv_part2_t(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dz_d, &
-            coef%h1_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case default
-       call neko_error("invalid svv_direction")
-    end select
+    call hip_ax_helm_svv(w_d, u_d, Xh%dx_d, Xh%dy_d, Xh%dz_d, &
+         coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
+         coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
+         coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
+         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
+         msh%nelv, Xh%lx)
 #elif HAVE_CUDA
-    select case (svv_direction)
-    case ("rst")
-       call cuda_ax_helm_svv_part2_rst(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-            coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("rs")
-       call cuda_ax_helm_svv_part2_rs(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dy_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("rt")
-       call cuda_ax_helm_svv_part2_rt(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, Xh%dz_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("st")
-       call cuda_ax_helm_svv_part2_st(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dy_d, Xh%dz_d, &
-            coef%h1_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("r")
-       call cuda_ax_helm_svv_part2_r(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dx_d, &
-            coef%h1_d, &
-            coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("s")
-       call cuda_ax_helm_svv_part2_s(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dy_d, &
-            coef%h1_d, &
-            coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case ("t")
-       call cuda_ax_helm_svv_part2_t(w_d, &
-            ur_d, us_d, ut_d, &
-            ur_svv_d, us_svv_d, ut_svv_d, &
-            Xh%dz_d, &
-            coef%h1_d, &
-            coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, &
-            Xh%w3_d, this%svv%h1_d, msh%nelv, Xh%lx)
-    case default
-       call neko_error("invalid svv_direction")
-    end select
+    call cuda_ax_helm_svv(w_d, u_d, Xh%dx_d, Xh%dy_d, Xh%dz_d, &
+         coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
+         coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
+         coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
+         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
+         msh%nelv, Xh%lx)
 #elif HAVE_OPENCL
     call neko_error('OPENCL is not implemented for SVV')
 #endif
 
     if (coef%ifh2) then
-       call device_addcol4(w_d ,coef%h2_d, coef%B_d, u_d, coef%dof%size())
+       call device_addcol4(w_d, coef%h2_d, coef%B_d, u_d, coef%dof%size())
     end if
 
-    end associate
-
   end subroutine ax_helm_svv_device_compute
+
 end module ax_helm_svv_device
