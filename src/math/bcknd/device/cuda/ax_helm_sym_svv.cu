@@ -57,13 +57,7 @@ void cuda_ax_helm_sym_svv(
       2 * (*lx) * (*lx) * (*lx) * sizeof(real);
   static bool shared_configured[17] = {false};
 
-#define CASE(LX)                                                               \
-  case LX:                                                                     \
-    if (!shared_configured[LX]) {                                               \
-      CUDA_CHECK(cudaFuncSetAttribute(ax_helm_sym_svv_kernel<real, LX>,        \
-          cudaFuncAttributeMaxDynamicSharedMemorySize, shared_size));          \
-      shared_configured[LX] = true;                                             \
-    }                                                                           \
+#define LAUNCH(LX)                                                             \
     ax_helm_sym_svv_kernel<real, LX>                                           \
         <<<blocks, threads, shared_size, stream>>>(                            \
         (real *) w, (real *) u,                                                \
@@ -73,7 +67,22 @@ void cuda_ax_helm_sym_svv(
         (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
         (real *) jacinv, (real *) w3, (real *) h1_svv,                        \
         (real *) filter_r, (real *) filter_s, (real *) filter_t);             \
-    CUDA_CHECK(cudaGetLastError());                                            \
+    CUDA_CHECK(cudaGetLastError())
+
+#define CASE(LX)                                                               \
+  case LX:                                                                     \
+    LAUNCH(LX);                                                                \
+    break
+
+// Double precision exceeds the default 48 KiB shared-memory limit at LX >= 15.
+#define CASE_LARGE(LX)                                                         \
+  case LX:                                                                     \
+    if (!shared_configured[LX]) {                                               \
+      CUDA_CHECK(cudaFuncSetAttribute(ax_helm_sym_svv_kernel<real, LX>,        \
+          cudaFuncAttributeMaxDynamicSharedMemorySize, shared_size));          \
+      shared_configured[LX] = true;                                             \
+    }                                                                           \
+    LAUNCH(LX);                                                                \
     break
 
   switch (*lx) {
@@ -90,8 +99,8 @@ void cuda_ax_helm_sym_svv(
     CASE(12);
     CASE(13);
     CASE(14);
-    CASE(15);
-    CASE(16);
+    CASE_LARGE(15);
+    CASE_LARGE(16);
     default:
       fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
       exit(1);
