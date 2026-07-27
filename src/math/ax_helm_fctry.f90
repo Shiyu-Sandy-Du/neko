@@ -49,6 +49,7 @@ submodule (ax_product) ax_helm_fctry
   use ax_helm_svv_full_cpu, only : ax_helm_svv_full_cpu_t
   use ax_helm_sym_svv_full_cpu, only : ax_helm_sym_svv_full_cpu_t
   use ax_helm_svv_full_device, only : ax_helm_svv_full_device_t
+  use ax_helm_sym_svv_full_device, only : ax_helm_sym_svv_full_device_t
   use spectral_vanishing_viscosity, only : svv_t
   use utils, only : neko_error
   use, intrinsic :: iso_c_binding, only : c_size_t
@@ -86,33 +87,37 @@ contains
              call neko_error("svv is only available on the CPU and device")
           else if (NEKO_BCKND_DEVICE .eq. 1) then
              if (svv%formulation .eq. "symmetric") then
-                call neko_error("The symmetric SVV formulation is only " // &
-                     "available on the CPU backend")
-             end if
-             allocate(ax_helm_svv_full_device_t::object)
-             select type (f => object)
-             type is (ax_helm_svv_full_device_t)
-                f%svv => svv
-                n = svv%coef%dof%size()
-                if (rp .eq. REAL32) then
-                   s = n * int(4, c_size_t)
-                else if (rp .eq. REAL64) then
-                   s = n * int(8, c_size_t)
-                end if
+                allocate(ax_helm_sym_svv_full_device_t::object)
+                select type (f => object)
+                type is (ax_helm_sym_svv_full_device_t)
+                   f%svv => svv
+                end select
+             else
+                allocate(ax_helm_svv_full_device_t::object)
+                select type (f => object)
+                type is (ax_helm_svv_full_device_t)
+                   f%svv => svv
+                   n = svv%coef%dof%size()
+                   if (rp .eq. REAL32) then
+                      s = n * int(4, c_size_t)
+                   else if (rp .eq. REAL64) then
+                      s = n * int(8, c_size_t)
+                   end if
 
-                call device_alloc(f%s11_d, s)
-                call device_alloc(f%s22_d, s)
-                call device_alloc(f%s33_d, s)
-                call device_alloc(f%s12_d, s)
-                call device_alloc(f%s13_d, s)
-                call device_alloc(f%s23_d, s)
-                call device_alloc(f%s11_svv_d, s)
-                call device_alloc(f%s22_svv_d, s)
-                call device_alloc(f%s33_svv_d, s)
-                call device_alloc(f%s12_svv_d, s)
-                call device_alloc(f%s13_svv_d, s)
-                call device_alloc(f%s23_svv_d, s)
-             end select
+                   call device_alloc(f%s11_d, s)
+                   call device_alloc(f%s22_d, s)
+                   call device_alloc(f%s33_d, s)
+                   call device_alloc(f%s12_d, s)
+                   call device_alloc(f%s13_d, s)
+                   call device_alloc(f%s23_d, s)
+                   call device_alloc(f%s11_svv_d, s)
+                   call device_alloc(f%s22_svv_d, s)
+                   call device_alloc(f%s33_svv_d, s)
+                   call device_alloc(f%s12_svv_d, s)
+                   call device_alloc(f%s13_svv_d, s)
+                   call device_alloc(f%s23_svv_d, s)
+                end select
+             end if
           else if (svv%formulation .eq. "symmetric") then
              allocate(ax_helm_sym_svv_full_cpu_t::object)
              select type (f => object)

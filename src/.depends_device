@@ -15,6 +15,7 @@ math/bcknd/device/hip/ax_helm_full.lo : math/bcknd/device/hip/ax_helm_full.hip m
 math/bcknd/device/hip/ax_helm_svv.lo : math/bcknd/device/hip/ax_helm_svv.hip math/bcknd/device/hip/ax_helm_svv_kernel.h
 math/bcknd/device/hip/ax_helm_sym_svv.lo : math/bcknd/device/hip/ax_helm_sym_svv.hip math/bcknd/device/hip/ax_helm_sym_svv_kernel.h
 math/bcknd/device/hip/ax_helm_svv_full.lo : math/bcknd/device/hip/ax_helm_svv_full.hip math/bcknd/device/hip/ax_helm_svv_full_kernel.h
+math/bcknd/device/hip/ax_helm_sym_svv_full.lo : math/bcknd/device/hip/ax_helm_sym_svv_full.hip math/bcknd/device/hip/ax_helm_sym_svv_full_kernel.h
 math/bcknd/device/hip/schwarz.lo : math/bcknd/device/hip/schwarz.hip math/bcknd/device/hip/schwarz_kernel.h
 math/bcknd/device/hip/tensor.lo : math/bcknd/device/hip/tensor.hip math/bcknd/device/hip/tensor_kernel.h
 math/bcknd/device/hip/fdm.lo : math/bcknd/device/hip/fdm.hip math/bcknd/device/hip/fdm_kernel.h
@@ -71,6 +72,7 @@ math/bcknd/device/cuda/ax_helm_full.lo : math/bcknd/device/cuda/ax_helm_full.cu 
 math/bcknd/device/cuda/ax_helm_svv.lo : math/bcknd/device/cuda/ax_helm_svv.cu math/bcknd/device/cuda/ax_helm_svv_kernel.h
 math/bcknd/device/cuda/ax_helm_sym_svv.lo : math/bcknd/device/cuda/ax_helm_sym_svv.cu math/bcknd/device/cuda/ax_helm_sym_svv_kernel.h
 math/bcknd/device/cuda/ax_helm_svv_full.lo : math/bcknd/device/cuda/ax_helm_svv_full.cu math/bcknd/device/cuda/ax_helm_svv_full_kernel.h
+math/bcknd/device/cuda/ax_helm_sym_svv_full.lo : math/bcknd/device/cuda/ax_helm_sym_svv_full.cu math/bcknd/device/cuda/ax_helm_sym_svv_full_kernel.h
 math/bcknd/device/cuda/schwarz.lo : math/bcknd/device/cuda/schwarz.cu math/bcknd/device/cuda/schwarz_kernel.h
 math/bcknd/device/cuda/tensor.lo : math/bcknd/device/cuda/tensor.cu math/bcknd/device/cuda/tensor_kernel.h
 math/bcknd/device/cuda/fdm.lo : math/bcknd/device/cuda/fdm.cu math/bcknd/device/cuda/fdm_kernel.h
