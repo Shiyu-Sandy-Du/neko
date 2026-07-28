@@ -37,8 +37,6 @@ module ax_helm_sym_svv_full_cpu
   use space, only : space_t
   use mesh, only : mesh_t
   use math, only : addcol4
-  use mxm_wrapper, only : mxm
-  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
@@ -79,9 +77,8 @@ contains
             Xh%dx, Xh%dy, Xh%dz, Xh%dxt, Xh%dyt, Xh%dzt, &
             coef%h1, coef%drdx, coef%drdy, coef%drdz, coef%dsdx, coef%dsdy, &
             coef%dsdz, coef%dtdx, coef%dtdy, coef%dtdz, &
-            coef%jacinv, Xh%w3, this%svv%h1, this%svv%filter%fh, &
-            this%svv%filter%fht, this%svv%direction, this%svv%filter%ident, &
-            msh%nelv, Xh%lx)
+            coef%jacinv, Xh%w3, this%svv%h1, &
+            this%svv%Br, this%svv%Bs, this%svv%Bt, msh%nelv, Xh%lx)
 
     if (coef%ifh2) then
        call addcol4 (au, coef%h2, coef%B, u, coef%dof%size())
@@ -95,7 +92,7 @@ contains
   subroutine ax_helm_sym_svv_full_lx(au, av, aw, u, v, w, &
        Dx, Dy, Dz, Dxt, Dyt, Dzt, &
        h1, drdx, drdy, drdz, dsdx, dsdy, dsdz, dtdx, dtdy, dtdz, &
-       jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, ident, n, lx)
+       jacinv, weights3, svv_h1, Br, Bs, Bt, n, lx)
     integer, intent(in) :: n, lx
     real(kind=rp), intent(in) :: u(lx, lx, lx, n)
     real(kind=rp), intent(in) :: v(lx, lx, lx, n)
@@ -122,9 +119,7 @@ contains
     real(kind=rp), intent(in) :: Dyt(lx,lx)
     real(kind=rp), intent(in) :: Dzt(lx,lx)
     real(kind=rp), intent(in) :: svv_h1(lx, lx, lx, n)
-    real(kind=rp), intent(inout) :: svv_Q(lx, lx), svv_Qt(lx, lx)
-    character(len=*), intent(in) :: svv_direction
-    real(kind=rp), intent(inout) :: ident(lx, lx)
+    real(kind=rp), intent(in) :: Br(lx, lx), Bs(lx, lx), Bt(lx, lx)
 
     real(kind=rp) :: s11_h(lx, lx, lx), s22_h(lx, lx, lx)
     real(kind=rp) :: s33_h(lx, lx, lx), s12_h(lx, lx, lx)
@@ -149,17 +144,9 @@ contains
     real(kind=rp) :: ws_svv(lx, lx, lx)
     real(kind=rp) :: wt_svv(lx, lx, lx)
 
-    real(kind=rp) :: s11_svv(lx, lx, lx)
-    real(kind=rp) :: s22_svv(lx, lx, lx)
-    real(kind=rp) :: s33_svv(lx, lx, lx)
-    real(kind=rp) :: s12_svv(lx, lx, lx)
-    real(kind=rp) :: s13_svv(lx, lx, lx)
-    real(kind=rp) :: s23_svv(lx, lx, lx)
-    real(kind=rp) :: svv_Qh(lx, lx)
-    real(kind=rp) :: svv_Qht(lx, lx)
     integer :: e, i, j, k, l
 
-    real(kind=rp) :: t1, t2, t3
+    real(kind=rp) :: t1, t2, t3, t1_svv, t2_svv, t3_svv
     real(kind=rp) :: s11(lx, lx, lx)
     real(kind=rp) :: s22(lx, lx, lx)
     real(kind=rp) :: s33(lx, lx, lx)
@@ -168,26 +155,29 @@ contains
     real(kind=rp) :: s23(lx, lx, lx)
     real(kind=rp) :: u1, u2, u3, v1, v2, v3, w1, w2, w3
 
-    ! Form the high-pass filter and its transpose once. The directional
-    ! contractions avoid applying identity factors in a generic 3D tensor
-    ! product.
-    svv_Qh = ident - svv_Q
-    svv_Qht = ident - svv_Qt
-
     do e = 1, n
        do j = 1, lx * lx
           do i = 1, lx
              t1 = 0.0_rp
              t2 = 0.0_rp
              t3 = 0.0_rp
+             t1_svv = 0.0_rp
+             t2_svv = 0.0_rp
+             t3_svv = 0.0_rp
              do k = 1, lx
                 t1 = t1 + Dx(i,k) * u(k,j,1,e)
                 t2 = t2 + Dx(i,k) * v(k,j,1,e)
                 t3 = t3 + Dx(i,k) * w(k,j,1,e)
+                t1_svv = t1_svv + Br(i,k) * u(k,j,1,e)
+                t2_svv = t2_svv + Br(i,k) * v(k,j,1,e)
+                t3_svv = t3_svv + Br(i,k) * w(k,j,1,e)
              end do
              wur(i,j,1) = t1
              wvr(i,j,1) = t2
              wwr(i,j,1) = t3
+             ur_svv(i,j,1) = t1_svv
+             vr_svv(i,j,1) = t2_svv
+             wr_svv(i,j,1) = t3_svv
           end do
        end do
 
@@ -197,14 +187,23 @@ contains
                 t1 = 0.0_rp
                 t2 = 0.0_rp
                 t3 = 0.0_rp
+                t1_svv = 0.0_rp
+                t2_svv = 0.0_rp
+                t3_svv = 0.0_rp
                 do l = 1, lx
                    t1 = t1 + Dy(j,l) * u(i,l,k,e)
                    t2 = t2 + Dy(j,l) * v(i,l,k,e)
                    t3 = t3 + Dy(j,l) * w(i,l,k,e)
+                   t1_svv = t1_svv + Bs(j,l) * u(i,l,k,e)
+                   t2_svv = t2_svv + Bs(j,l) * v(i,l,k,e)
+                   t3_svv = t3_svv + Bs(j,l) * w(i,l,k,e)
                 end do
                 wus(i,j,k) = t1
                 wvs(i,j,k) = t2
                 wws(i,j,k) = t3
+                us_svv(i,j,k) = t1_svv
+                vs_svv(i,j,k) = t2_svv
+                ws_svv(i,j,k) = t3_svv
              end do
           end do
        end do
@@ -214,14 +213,23 @@ contains
              t1 = 0.0_rp
              t2 = 0.0_rp
              t3 = 0.0_rp
+             t1_svv = 0.0_rp
+             t2_svv = 0.0_rp
+             t3_svv = 0.0_rp
              do l = 1, lx
                 t1 = t1 + Dz(k,l) * u(i,1,l,e)
                 t2 = t2 + Dz(k,l) * v(i,1,l,e)
                 t3 = t3 + Dz(k,l) * w(i,1,l,e)
+                t1_svv = t1_svv + Bt(k,l) * u(i,1,l,e)
+                t2_svv = t2_svv + Bt(k,l) * v(i,1,l,e)
+                t3_svv = t3_svv + Bt(k,l) * w(i,1,l,e)
              end do
              wut(i,1,k) = t1
              wvt(i,1,k) = t2
              wwt(i,1,k) = t3
+             ut_svv(i,1,k) = t1_svv
+             vt_svv(i,1,k) = t2_svv
+             wt_svv(i,1,k) = t3_svv
           end do
        end do
 
@@ -260,26 +268,6 @@ contains
           s13(i,1,1) = u3 + w1
           s23(i,1,1) = v3 + w2
        end do
-
-       ! Trial-side high-pass filtering of each reference derivative.
-       call hpf_direction(ur_svv, wur, svv_Qh, svv_Qht, &
-            svv_direction, "r", .false., lx)
-       call hpf_direction(us_svv, wus, svv_Qh, svv_Qht, &
-            svv_direction, "s", .false., lx)
-       call hpf_direction(ut_svv, wut, svv_Qh, svv_Qht, &
-            svv_direction, "t", .false., lx)
-       call hpf_direction(vr_svv, wvr, svv_Qh, svv_Qht, &
-            svv_direction, "r", .false., lx)
-       call hpf_direction(vs_svv, wvs, svv_Qh, svv_Qht, &
-            svv_direction, "s", .false., lx)
-       call hpf_direction(vt_svv, wvt, svv_Qh, svv_Qht, &
-            svv_direction, "t", .false., lx)
-       call hpf_direction(wr_svv, wwr, svv_Qh, svv_Qht, &
-            svv_direction, "r", .false., lx)
-       call hpf_direction(ws_svv, wws, svv_Qh, svv_Qht, &
-            svv_direction, "s", .false., lx)
-       call hpf_direction(wt_svv, wwt, svv_Qh, svv_Qht, &
-            svv_direction, "t", .false., lx)
 
        do i = 1, lx*lx*lx
           ! Standard unfiltered stress and reference-space flux.
@@ -383,45 +371,18 @@ contains
                         + dtdz(i,1,1,e) * s33_h(i,1,1)
        end do
 
-       ! Test-side adjoint filtering of the reference-space SVV flux.
-       call hpf_direction(s11, ur_svv, svv_Qh, svv_Qht, &
-            svv_direction, "r", .true., lx)
-       call hpf_direction(s22, us_svv, svv_Qh, svv_Qht, &
-            svv_direction, "s", .true., lx)
-       call hpf_direction(s33, ut_svv, svv_Qh, svv_Qht, &
-            svv_direction, "t", .true., lx)
-       call hpf_direction(s12, vr_svv, svv_Qh, svv_Qht, &
-            svv_direction, "r", .true., lx)
-       call hpf_direction(s13, vs_svv, svv_Qh, svv_Qht, &
-            svv_direction, "s", .true., lx)
-       call hpf_direction(s23, vt_svv, svv_Qh, svv_Qht, &
-            svv_direction, "t", .true., lx)
-       call hpf_direction(s11_svv, wr_svv, svv_Qh, svv_Qht, &
-            svv_direction, "r", .true., lx)
-       call hpf_direction(s22_svv, ws_svv, svv_Qh, svv_Qht, &
-            svv_direction, "s", .true., lx)
-       call hpf_direction(s33_svv, wt_svv, svv_Qh, svv_Qht, &
-            svv_direction, "t", .true., lx)
-
-       wur = wur + s11
-       wus = wus + s22
-       wut = wut + s33
-       wvr = wvr + s12
-       wvs = wvs + s13
-       wvt = wvt + s23
-       wwr = wwr + s11_svv
-       wws = wws + s22_svv
-       wwt = wwt + s33_svv
-
        do j = 1, lx*lx
           do i = 1, lx
              t1 = 0.0_rp
              t2 = 0.0_rp
              t3 = 0.0_rp
              do k = 1, lx
-                t1 = t1 + Dxt(i,k) * wur(k,j,1)
-                t2 = t2 + Dxt(i,k) * wvr(k,j,1)
-                t3 = t3 + Dxt(i,k) * wwr(k,j,1)
+                t1 = t1 + Dxt(i,k) * wur(k,j,1) &
+                     + Br(k,i) * ur_svv(k,j,1)
+                t2 = t2 + Dxt(i,k) * wvr(k,j,1) &
+                     + Br(k,i) * vr_svv(k,j,1)
+                t3 = t3 + Dxt(i,k) * wwr(k,j,1) &
+                     + Br(k,i) * wr_svv(k,j,1)
              end do
              au(i,j,1,e) = t1
              av(i,j,1,e) = t2
@@ -436,9 +397,12 @@ contains
                 t2 = 0.0_rp
                 t3 = 0.0_rp
                 do l = 1, lx
-                   t1 = t1 + Dyt(j,l) * wus(i,l,k)
-                   t2 = t2 + Dyt(j,l) * wvs(i,l,k)
-                   t3 = t3 + Dyt(j,l) * wws(i,l,k)
+                   t1 = t1 + Dyt(j,l) * wus(i,l,k) &
+                        + Bs(l,j) * us_svv(i,l,k)
+                   t2 = t2 + Dyt(j,l) * wvs(i,l,k) &
+                        + Bs(l,j) * vs_svv(i,l,k)
+                   t3 = t3 + Dyt(j,l) * wws(i,l,k) &
+                        + Bs(l,j) * ws_svv(i,l,k)
                 end do
                 au(i,j,k,e) = au(i,j,k,e) + t1
                 av(i,j,k,e) = av(i,j,k,e) + t2
@@ -453,9 +417,12 @@ contains
              t2 = 0.0_rp
              t3 = 0.0_rp
              do l = 1, lx
-                t1 = t1 + Dzt(k,l) * wut(i,1,l)
-                t2 = t2 + Dzt(k,l) * wvt(i,1,l)
-                t3 = t3 + Dzt(k,l) * wwt(i,1,l)
+                t1 = t1 + Dzt(k,l) * wut(i,1,l) &
+                     + Bt(l,k) * ut_svv(i,1,l)
+                t2 = t2 + Dzt(k,l) * wvt(i,1,l) &
+                     + Bt(l,k) * vt_svv(i,1,l)
+                t3 = t3 + Dzt(k,l) * wwt(i,1,l) &
+                     + Bt(l,k) * wt_svv(i,1,l)
              end do
              au(i,1,k,e) = au(i,1,k,e) + t1
              av(i,1,k,e) = av(i,1,k,e) + t2
@@ -465,56 +432,5 @@ contains
 
     end do
   end subroutine ax_helm_sym_svv_full_lx
-
-  !> Apply a directional high-pass SVV filter.
-  !! @param output Filtered field.
-  !! @param input Input field.
-  !! @param Qh High-pass filter matrix.
-  !! @param Qht Transpose of the high-pass filter matrix.
-  !! @param active_directions Active reference-space directions.
-  !! @param direction Direction of the derivative or flux.
-  !! @param transpose Whether to apply the adjoint filter.
-  !! @param lx Polynomial order.
-  subroutine hpf_direction(output, input, Qh, Qht, active_directions, &
-       direction, transpose, lx)
-    integer, intent(in) :: lx
-    real(kind=rp), intent(out) :: output(lx, lx, lx)
-    real(kind=rp), intent(in) :: input(lx, lx, lx)
-    real(kind=rp), intent(in) :: Qh(lx, lx), Qht(lx, lx)
-    character(len=*), intent(in) :: active_directions
-    character(len=*), intent(in) :: direction
-    logical, intent(in) :: transpose
-    integer :: k
-
-    if (index(active_directions, direction) .eq. 0) then
-       output = 0.0_rp
-       return
-    end if
-
-    select case (direction)
-    case ("r")
-       if (transpose) then
-          call mxm(Qht, lx, input, lx, output, lx * lx)
-       else
-          call mxm(Qh, lx, input, lx, output, lx * lx)
-       end if
-    case ("s")
-       if (transpose) then
-          do k = 1, lx
-             call mxm(input(1,1,k), lx, Qh, lx, output(1,1,k), lx)
-          end do
-       else
-          do k = 1, lx
-             call mxm(input(1,1,k), lx, Qht, lx, output(1,1,k), lx)
-          end do
-       end if
-    case ("t")
-       if (transpose) then
-          call mxm(input, lx * lx, Qh, lx, output, lx)
-       else
-          call mxm(input, lx * lx, Qht, lx, output, lx)
-       end if
-    end select
-  end subroutine hpf_direction
 
 end module ax_helm_sym_svv_full_cpu

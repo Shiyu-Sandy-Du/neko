@@ -37,8 +37,6 @@ module ax_helm_sym_svv_cpu
   use space, only : space_t
   use mesh, only : mesh_t
   use math, only : addcol4
-  use mxm_wrapper, only : mxm
-  use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
 
@@ -66,14 +64,11 @@ contains
     type(coef_t), intent(in) :: coef
     real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
-    integer :: i
 
     call ax_helm_sym_svv_lx(w, u, Xh%dx, Xh%dy, Xh%dz, &
             Xh%dxt, Xh%dyt, Xh%dzt, &
-            coef%h1, coef%drdx, coef%drdy, coef%drdz, coef%dsdx, coef%dsdy, &
-            coef%dsdz, coef%dtdx, coef%dtdy, coef%dtdz, &
-            coef%jacinv, Xh%w3, this%svv%h1, this%svv%filter%fh, &
-            this%svv%filter%fht, this%svv%direction, this%svv%filter%ident, &
+            this%svv%Br, this%svv%Bs, this%svv%Bt, coef%h1, this%svv%h1, &
+            coef%G11, coef%G22, coef%G33, coef%G12, coef%G13, coef%G23, &
             msh%nelv, Xh%lx)
 
     if (coef%ifh2) call addcol4 (w,coef%h2,coef%B,u,coef%dof%size())
@@ -90,70 +85,59 @@ contains
   !! @param Dxt Derivative operator transpose in first dimension.
   !! @param Dyt Derivative operator transpose in second dimension.
   !! @param Dzt Derivative operator transpose in third dimension.
-  !! @param G11 Geometric factor.
+  !! @param Br Complementary derivative operator in first dimension.
+  !! @param Bs Complementary derivative operator in second dimension.
+  !! @param Bt Complementary derivative operator in third dimension.
+  !! @param h1 Ordinary viscosity coefficient.
+  !! @param svv_h1 SVV viscosity coefficient.
+  !! @param G11 Geometric factor \f$G_{11}\f$.
+  !! @param G22 Geometric factor \f$G_{22}\f$.
+  !! @param G33 Geometric factor \f$G_{33}\f$.
+  !! @param G12 Geometric factor \f$G_{12}\f$.
+  !! @param G13 Geometric factor \f$G_{13}\f$.
+  !! @param G23 Geometric factor \f$G_{23}\f$.
   !! @param n Number of elements.
   !! @param lx Polynomial order.
   subroutine ax_helm_sym_svv_lx(w, u, Dx, Dy, Dz, Dxt, Dyt, Dzt, &
-       h1, drdx, drdy, drdz, dsdx, dsdy, dsdz, dtdx, dtdy, dtdz, &
-       jacinv, weights3, svv_h1, svv_Q, svv_Qt, svv_direction, ident, n, lx)
+       Br, Bs, Bt, h1, svv_h1, G11, G22, G33, G12, G13, G23, n, lx)
     integer, intent(in) :: n, lx
     real(kind=rp), intent(inout) :: w(lx, lx, lx, n)
     real(kind=rp), intent(in) :: u(lx, lx, lx, n)
     real(kind=rp), intent(in) :: h1(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: drdx(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: drdy(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: drdz(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dsdx(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dsdy(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dsdz(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dtdx(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dtdy(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: dtdz(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: jacinv(lx, lx, lx, n)
-    real(kind=rp), intent(in) :: weights3(lx, lx, lx)
-    real(kind=rp), intent(in) :: Dx(lx,lx)
-    real(kind=rp), intent(in) :: Dy(lx,lx)
-    real(kind=rp), intent(in) :: Dz(lx,lx)
-    real(kind=rp), intent(in) :: Dxt(lx,lx)
-    real(kind=rp), intent(in) :: Dyt(lx,lx)
-    real(kind=rp), intent(in) :: Dzt(lx,lx)
     real(kind=rp), intent(in) :: svv_h1(lx, lx, lx, n)
-    real(kind=rp), intent(inout) :: svv_Q(lx, lx), svv_Qt(lx, lx)
-    character(len=*) :: svv_direction
-    real(kind=rp), intent(inout) :: ident(lx, lx)
+    real(kind=rp), intent(in) :: G11(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: G22(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: G33(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: G12(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: G13(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: G23(lx, lx, lx, n)
+    real(kind=rp), intent(in) :: Dx(lx, lx), Dy(lx, lx), Dz(lx, lx)
+    real(kind=rp), intent(in) :: Dxt(lx, lx), Dyt(lx, lx), Dzt(lx, lx)
+    real(kind=rp), intent(in) :: Br(lx, lx), Bs(lx, lx), Bt(lx, lx)
     real(kind=rp) :: ur_h
     real(kind=rp) :: us_h
     real(kind=rp) :: ut_h
-    real(kind=rp) :: u1(lx, lx, lx)
-    real(kind=rp) :: u2(lx, lx, lx)
-    real(kind=rp) :: u3(lx, lx, lx)
-   !  real(kind=rp) :: u_svv(lx, lx, lx, n)
     real(kind=rp) :: u1_svv(lx, lx, lx)
     real(kind=rp) :: u2_svv(lx, lx, lx)
     real(kind=rp) :: u3_svv(lx, lx, lx)
-    real(kind=rp) :: svv_Qh(lx, lx)
-    real(kind=rp) :: svv_Qht(lx, lx)
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
-    real(kind=rp) :: tmp
+    real(kind=rp) :: tmp, tmp_svv
     integer :: e, i, j, k, l
 
-    ! Form the high-pass filter and its transpose once. The directional
-    ! contractions below avoid applying the two identity factors required by
-    ! the generic three-dimensional tensor-product kernel.
-    svv_Qh = ident - svv_Q
-    svv_Qht = ident - svv_Qt
-
     do e = 1, n
-       ! Reference-space derivatives, D u.
+       ! Ordinary and complementary reference-space derivatives, D u and B u.
        do j = 1, lx * lx
           do i = 1, lx
              tmp = 0.0_rp
+             tmp_svv = 0.0_rp
              do k = 1, lx
                 tmp = tmp + Dx(i,k) * u(k,j,1,e)
+                tmp_svv = tmp_svv + Br(i,k) * u(k,j,1,e)
              end do
              wur(i,j,1) = tmp
+             u1_svv(i,j,1) = tmp_svv
           end do
        end do
 
@@ -161,10 +145,13 @@ contains
           do j = 1, lx
              do i = 1, lx
                 tmp = 0.0_rp
+                tmp_svv = 0.0_rp
                 do l = 1, lx
                    tmp = tmp + Dy(j,l) * u(i,l,k,e)
+                   tmp_svv = tmp_svv + Bs(j,l) * u(i,l,k,e)
                 end do
                 wus(i,j,k) = tmp
+                u2_svv(i,j,k) = tmp_svv
              end do
           end do
        end do
@@ -172,111 +159,51 @@ contains
        do k = 1, lx
           do i = 1, lx*lx
              tmp = 0.0_rp
+             tmp_svv = 0.0_rp
              do l = 1, lx
                 tmp = tmp + Dz(k,l) * u(i,1,l,e)
+                tmp_svv = tmp_svv + Bt(k,l) * u(i,1,l,e)
              end do
              wut(i,1,k) = tmp
+             u3_svv(i,1,k) = tmp_svv
           end do
        end do
 
-       ! Physical gradient for the ordinary, unfiltered Helmholtz term.
+       ! Construct the ordinary and SVV reference-space fluxes.
        do i = 1, lx*lx*lx
-          u1(i,1,1) = (drdx(i,1,1,e) * wur(i,1,1) &
-                     + dsdx(i,1,1,e) * wus(i,1,1) &
-                     + dtdx(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
-          u2(i,1,1) = (drdy(i,1,1,e) * wur(i,1,1) &
-                     + dsdy(i,1,1,e) * wus(i,1,1) &
-                     + dtdy(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
-          u3(i,1,1) = (drdz(i,1,1,e) * wur(i,1,1) &
-                     + dsdz(i,1,1,e) * wus(i,1,1) &
-                     + dtdz(i,1,1,e) * wut(i,1,1)) * jacinv(i,1,1,e)
+          ur_h = h1(i,1,1,e) * (G11(i,1,1,e) * wur(i,1,1) &
+               + G12(i,1,1,e) * wus(i,1,1) &
+               + G13(i,1,1,e) * wut(i,1,1))
+          us_h = h1(i,1,1,e) * (G12(i,1,1,e) * wur(i,1,1) &
+               + G22(i,1,1,e) * wus(i,1,1) &
+               + G23(i,1,1,e) * wut(i,1,1))
+          ut_h = h1(i,1,1,e) * (G13(i,1,1,e) * wur(i,1,1) &
+               + G23(i,1,1,e) * wus(i,1,1) &
+               + G33(i,1,1,e) * wut(i,1,1))
+          wur(i,1,1) = ur_h
+          wus(i,1,1) = us_h
+          wut(i,1,1) = ut_h
+
+          ur_h = svv_h1(i,1,1,e) * (G11(i,1,1,e) * u1_svv(i,1,1) &
+               + G12(i,1,1,e) * u2_svv(i,1,1) &
+               + G13(i,1,1,e) * u3_svv(i,1,1))
+          us_h = svv_h1(i,1,1,e) * (G12(i,1,1,e) * u1_svv(i,1,1) &
+               + G22(i,1,1,e) * u2_svv(i,1,1) &
+               + G23(i,1,1,e) * u3_svv(i,1,1))
+          ut_h = svv_h1(i,1,1,e) * (G13(i,1,1,e) * u1_svv(i,1,1) &
+               + G23(i,1,1,e) * u2_svv(i,1,1) &
+               + G33(i,1,1,e) * u3_svv(i,1,1))
+          u1_svv(i,1,1) = ur_h
+          u2_svv(i,1,1) = us_h
+          u3_svv(i,1,1) = ut_h
        end do
-
-       ! Apply the one-dimensional high-pass convolution independently to
-       ! each reference derivative: Q_hat D u.
-       if (index(svv_direction, "r") > 0) then
-          call mxm(svv_Qh, lx, wur, lx, u1_svv, lx * lx)
-       else
-          u1_svv = 0.0_rp
-       end if
-       if (index(svv_direction, "s") > 0) then
-          do k = 1, lx
-             call mxm(wus(1,1,k), lx, svv_Qht, lx, &
-                  u2_svv(1,1,k), lx)
-          end do
-       else
-          u2_svv = 0.0_rp
-       end if
-       if (index(svv_direction, "t") > 0) then
-          call mxm(wut, lx * lx, svv_Qht, lx, u3_svv, lx)
-       else
-          u3_svv = 0.0_rp
-       end if
-
-       ! Standard Helmholtz flux, D^T G D u.
-       do i = 1, lx*lx*lx
-          ur_h = h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
-          us_h = h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
-          ut_h = h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
-          wur(i,1,1) = drdx(i,1,1,e) * ur_h &
-                     + drdy(i,1,1,e) * us_h &
-                     + drdz(i,1,1,e) * ut_h
-          wus(i,1,1) = dsdx(i,1,1,e) * ur_h &
-                     + dsdy(i,1,1,e) * us_h &
-                     + dsdz(i,1,1,e) * ut_h
-          wut(i,1,1) = dtdx(i,1,1,e) * ur_h &
-                     + dtdy(i,1,1,e) * us_h &
-                     + dtdz(i,1,1,e) * ut_h
-       end do
-
-       ! Map Q_hat D u to physical space, multiply by the SVV viscosity,
-       ! and pull the flux back to reference space.
-       do i = 1, lx*lx*lx
-          u1(i,1,1) = (drdx(i,1,1,e) * u1_svv(i,1,1) &
-                     + dsdx(i,1,1,e) * u2_svv(i,1,1) &
-                     + dtdx(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
-          u2(i,1,1) = (drdy(i,1,1,e) * u1_svv(i,1,1) &
-                     + dsdy(i,1,1,e) * u2_svv(i,1,1) &
-                     + dtdy(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
-          u3(i,1,1) = (drdz(i,1,1,e) * u1_svv(i,1,1) &
-                     + dsdz(i,1,1,e) * u2_svv(i,1,1) &
-                     + dtdz(i,1,1,e) * u3_svv(i,1,1)) * jacinv(i,1,1,e)
-
-          ur_h = svv_h1(i,1,1,e) * u1(i,1,1) * weights3(i,1,1)
-          us_h = svv_h1(i,1,1,e) * u2(i,1,1) * weights3(i,1,1)
-          ut_h = svv_h1(i,1,1,e) * u3(i,1,1) * weights3(i,1,1)
-          u1_svv(i,1,1) = drdx(i,1,1,e) * ur_h &
-                        + drdy(i,1,1,e) * us_h &
-                        + drdz(i,1,1,e) * ut_h
-          u2_svv(i,1,1) = dsdx(i,1,1,e) * ur_h &
-                        + dsdy(i,1,1,e) * us_h &
-                        + dsdz(i,1,1,e) * ut_h
-          u3_svv(i,1,1) = dtdx(i,1,1,e) * ur_h &
-                        + dtdy(i,1,1,e) * us_h &
-                        + dtdz(i,1,1,e) * ut_h
-       end do
-
-       ! Test-function-side convolution, Q_hat^T G Q_hat D u.
-       if (index(svv_direction, "r") > 0) then
-          call mxm(svv_Qht, lx, u1_svv, lx, u1, lx * lx)
-          wur = wur + u1
-       end if
-       if (index(svv_direction, "s") > 0) then
-          do k = 1, lx
-             call mxm(u2_svv(1,1,k), lx, svv_Qh, lx, u2(1,1,k), lx)
-          end do
-          wus = wus + u2
-       end if
-       if (index(svv_direction, "t") > 0) then
-          call mxm(u3_svv, lx * lx, svv_Qh, lx, u3, lx)
-          wut = wut + u3
-       end if
 
        do j = 1, lx*lx
           do i = 1, lx
              tmp = 0.0_rp
              do k = 1, lx
-                tmp = tmp + Dxt(i,k) * wur(k,j,1)
+                tmp = tmp + Dxt(i,k) * wur(k,j,1) &
+                     + Br(k,i) * u1_svv(k,j,1)
              end do
              w(i,j,1,e) = tmp
           end do
@@ -287,7 +214,8 @@ contains
              do i = 1, lx
                 tmp = 0.0_rp
                 do l = 1, lx
-                   tmp = tmp + Dyt(j,l) * wus(i,l,k)
+                   tmp = tmp + Dyt(j,l) * wus(i,l,k) &
+                        + Bs(l,j) * u2_svv(i,l,k)
                 end do
                 w(i,j,k,e) = w(i,j,k,e) + tmp
              end do
@@ -298,7 +226,8 @@ contains
           do i = 1, lx*lx
              tmp = 0.0_rp
              do l = 1, lx
-                tmp = tmp + Dzt(k,l) * wut(i,1,l)
+                tmp = tmp + Dzt(k,l) * wut(i,1,l) &
+                     + Bt(l,k) * u3_svv(i,1,l)
              end do
              w(i,1,k,e) = w(i,1,k,e) + tmp
           end do
