@@ -53,36 +53,30 @@ module ax_helm_sym_svv_device
 #ifdef HAVE_HIP
   interface
      subroutine hip_ax_helm_sym_svv(w_d, u_d, dx_d, dy_d, dz_d, h1_d, &
-          drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
-          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          Br_d, Bs_d, Bt_d, svv_h1_d, G11_d, G22_d, G33_d, &
+          G12_d, G13_d, G23_d, nelv, lx) &
           bind(c, name='hip_ax_helm_sym_svv')
        use, intrinsic :: iso_c_binding, only : c_ptr, c_int
        type(c_ptr), value :: w_d, u_d
        type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
-       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
+       type(c_ptr), value :: Br_d, Bs_d, Bt_d, svv_h1_d
+       type(c_ptr), value :: G11_d, G22_d, G33_d
+       type(c_ptr), value :: G12_d, G13_d, G23_d
        integer(c_int) :: nelv, lx
      end subroutine hip_ax_helm_sym_svv
   end interface
 #elif HAVE_CUDA
   interface
      subroutine cuda_ax_helm_sym_svv(w_d, u_d, dx_d, dy_d, dz_d, h1_d, &
-          drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
-          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          Br_d, Bs_d, Bt_d, svv_h1_d, G11_d, G22_d, G33_d, &
+          G12_d, G13_d, G23_d, nelv, lx) &
           bind(c, name='cuda_ax_helm_sym_svv')
        use, intrinsic :: iso_c_binding, only : c_ptr, c_int
        type(c_ptr), value :: w_d, u_d
        type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
-       type(c_ptr), value :: drdx_d, drdy_d, drdz_d
-       type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
-       type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
-       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
+       type(c_ptr), value :: Br_d, Bs_d, Bt_d, svv_h1_d
+       type(c_ptr), value :: G11_d, G22_d, G33_d
+       type(c_ptr), value :: G12_d, G13_d, G23_d
        integer(c_int) :: nelv, lx
      end subroutine cuda_ax_helm_sym_svv
   end interface
@@ -105,42 +99,21 @@ contains
     real(kind=rp), intent(inout) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: u(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     type(c_ptr) :: u_d, w_d
-    type(c_ptr) :: filter_r_d, filter_s_d, filter_t_d
 
     u_d = device_get_ptr(u)
     w_d = device_get_ptr(w)
 
-    if (index(this%svv%direction, "r") > 0) then
-       filter_r_d = this%svv%filter%fh_d
-    else
-       filter_r_d = this%svv%filter%ident_d
-    end if
-
-    if (index(this%svv%direction, "s") > 0) then
-       filter_s_d = this%svv%filter%fht_d
-    else
-       filter_s_d = this%svv%filter%ident_d
-    end if
-
-    if (index(this%svv%direction, "t") > 0) then
-       filter_t_d = this%svv%filter%fht_d
-    else
-       filter_t_d = this%svv%filter%ident_d
-    end if
-
 #ifdef HAVE_HIP
     call hip_ax_helm_sym_svv(w_d, u_d, Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-         coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-         coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-         coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
-         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
+         coef%h1_d, this%svv%Br_d, this%svv%Bs_d, this%svv%Bt_d, &
+         this%svv%h1_d, coef%G11_d, coef%G22_d, coef%G33_d, &
+         coef%G12_d, coef%G13_d, coef%G23_d, &
          msh%nelv, Xh%lx)
 #elif HAVE_CUDA
     call cuda_ax_helm_sym_svv(w_d, u_d, Xh%dx_d, Xh%dy_d, Xh%dz_d, &
-         coef%h1_d, coef%drdx_d, coef%drdy_d, coef%drdz_d, &
-         coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
-         coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
-         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
+         coef%h1_d, this%svv%Br_d, this%svv%Bs_d, this%svv%Bt_d, &
+         this%svv%h1_d, coef%G11_d, coef%G22_d, coef%G33_d, &
+         coef%G12_d, coef%G13_d, coef%G23_d, &
          msh%nelv, Xh%lx)
 #elif HAVE_OPENCL
     call neko_error('OPENCL is not implemented for symmetric SVV')

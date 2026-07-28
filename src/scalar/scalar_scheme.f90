@@ -470,6 +470,8 @@ contains
   subroutine scalar_scheme_free(this)
     class(scalar_scheme_t), intent(inout) :: this
 
+    if (this%svv_enabled) call this%svv%free()
+
     nullify(this%Xh)
     nullify(this%dm_Xh)
     nullify(this%gs_Xh)

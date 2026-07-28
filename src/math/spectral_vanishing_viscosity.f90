@@ -44,8 +44,8 @@ module spectral_vanishing_viscosity
   use math, only : cfill, copy, rzero, col2
   use device_math, only : device_rzero, device_cfill, device_copy, device_col2, device_glmax
   use field_math, only : field_sub3
-  use device, only : device_map
-  use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR
+  use device, only : device_map, device_memcpy, device_free, HOST_TO_DEVICE
+  use, intrinsic :: iso_c_binding, only : c_ptr, C_NULL_PTR, c_associated
   use neko_config, only : NEKO_BCKND_DEVICE
   implicit none
   private
@@ -73,6 +73,11 @@ module spectral_vanishing_viscosity
     !> the viscosity field
     real(kind=rp), allocatable :: h1(:,:,:,:)
     type(c_ptr) :: h1_d = C_NULL_PTR
+    !> Complementary derivative matrices, (I - F) D, in each direction
+    real(kind=rp), allocatable :: Br(:,:), Bs(:,:), Bt(:,:)
+    type(c_ptr) :: Br_d = C_NULL_PTR
+    type(c_ptr) :: Bs_d = C_NULL_PTR
+    type(c_ptr) :: Bt_d = C_NULL_PTR
     !> a pointer pointing to a potentially variable viscosity field
     character(len=:), allocatable :: nue_field_name
     type(field_t), pointer :: nue
@@ -81,7 +86,7 @@ module spectral_vanishing_viscosity
     logical :: tvar_h1 = .false.
   contains
     procedure, pass(this) :: init => svv_init_from_json
-    ! procedure, pass(this) :: free => svv_free
+    procedure, pass(this) :: free => svv_free
     procedure, pass(this) :: update => update_h1
     procedure, pass(this) :: hpf => svv_hpf
   end type svv_t
@@ -98,6 +103,8 @@ contains
     character(len=:), allocatable :: formulation
     real(kind=rp) :: exponent_factor
     integer :: i
+
+    call this%free()
 
     this%coef => coef
 
@@ -187,7 +194,79 @@ contains
     ! build the 1d elementwise filter
     call this%filter%build_1d()
 
+    call build_complementary_derivatives(this)
+
   end subroutine svv_init_from_json
+
+  !> Build and upload the complementary derivative matrices.
+  !! @param this Spectral vanishing viscosity object.
+  subroutine build_complementary_derivatives(this)
+    class(svv_t), intent(inout) :: this
+    integer :: lx
+    real(kind=rp), allocatable :: Qh(:,:)
+
+    lx = this%coef%Xh%lx
+    allocate(this%Br(lx, lx), this%Bs(lx, lx), this%Bt(lx, lx))
+    allocate(Qh(lx, lx))
+
+    Qh = this%filter%ident - this%filter%fh
+    this%Br = 0.0_rp
+    this%Bs = 0.0_rp
+    this%Bt = 0.0_rp
+
+    if (index(this%direction, "r") > 0) then
+       this%Br = matmul(Qh, this%coef%Xh%dx)
+    end if
+    if (index(this%direction, "s") > 0) then
+       this%Bs = matmul(Qh, this%coef%Xh%dy)
+    end if
+    if (index(this%direction, "t") > 0) then
+       this%Bt = matmul(Qh, this%coef%Xh%dz)
+    end if
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_map(this%Br, this%Br_d, lx * lx)
+       call device_map(this%Bs, this%Bs_d, lx * lx)
+       call device_map(this%Bt, this%Bt_d, lx * lx)
+       call device_memcpy(this%Br, this%Br_d, lx * lx, HOST_TO_DEVICE, &
+            sync = .false.)
+       call device_memcpy(this%Bs, this%Bs_d, lx * lx, HOST_TO_DEVICE, &
+            sync = .false.)
+       call device_memcpy(this%Bt, this%Bt_d, lx * lx, HOST_TO_DEVICE, &
+            sync = .true.)
+    end if
+
+    deallocate(Qh)
+  end subroutine build_complementary_derivatives
+
+  !> Destructor.
+  !! @param this Spectral vanishing viscosity object.
+  subroutine svv_free(this)
+    class(svv_t), intent(inout) :: this
+
+    call this%filter%free()
+
+    if (c_associated(this%h1_d)) call device_free(this%h1_d)
+    if (c_associated(this%Br_d)) call device_free(this%Br_d)
+    if (c_associated(this%Bs_d)) call device_free(this%Bs_d)
+    if (c_associated(this%Bt_d)) call device_free(this%Bt_d)
+    this%h1_d = C_NULL_PTR
+    this%Br_d = C_NULL_PTR
+    this%Bs_d = C_NULL_PTR
+    this%Bt_d = C_NULL_PTR
+
+    if (allocated(this%h1)) deallocate(this%h1)
+    if (allocated(this%Br)) deallocate(this%Br)
+    if (allocated(this%Bs)) deallocate(this%Bs)
+    if (allocated(this%Bt)) deallocate(this%Bt)
+    if (allocated(this%direction)) deallocate(this%direction)
+    if (allocated(this%formulation)) deallocate(this%formulation)
+    if (allocated(this%nue_field_name)) deallocate(this%nue_field_name)
+
+    nullify(this%coef)
+    nullify(this%nue)
+    this%tvar_h1 = .false.
+  end subroutine svv_free
 
   !> Update of h1 is it's time varying
   subroutine update_h1(this, rho, tstep)

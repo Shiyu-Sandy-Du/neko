@@ -358,6 +358,7 @@ contains
     class(bc_t), pointer :: bc
     integer :: i
 
+    if (this%svv_enabled) call this%svv%free()
 
     call this%Xh%free()
 

@@ -196,6 +196,10 @@ contains
        deallocate(this%fht)
     end if
 
+    if (allocated(this%ident)) then
+       deallocate(this%ident)
+    end if
+
     if (allocated(this%transfer)) then
        deallocate(this%transfer)
     end if
@@ -211,6 +215,9 @@ contains
     if (c_associated(this%ident_d)) then
        call device_free(this%ident_d)
     end if
+    this%fh_d = C_NULL_PTR
+    this%fht_d = C_NULL_PTR
+    this%ident_d = C_NULL_PTR
 
     this%filter_type = ""
     this%nx = 0

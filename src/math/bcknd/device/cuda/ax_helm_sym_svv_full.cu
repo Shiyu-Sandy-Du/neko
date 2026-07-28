@@ -36,7 +36,7 @@
 #include <stdlib.h>
 #include <device/device_config.h>
 #include <device/cuda/check.h>
-#include "ax_helm_sym_svv_full_kernel.h"
+#include "ax_helm_full_kernel.h"
 
 extern "C" {
 
@@ -44,31 +44,59 @@ extern "C" {
 void cuda_ax_helm_sym_svv_full(
     void *au, void *av, void *aw, void *u, void *v, void *w,
     void *dx, void *dy, void *dz, void *h1,
+    void *Br, void *Bs, void *Bt, void *h1_svv,
     void *drdx, void *drdy, void *drdz,
     void *dsdx, void *dsdy, void *dsdz,
     void *dtdx, void *dtdy, void *dtdz,
-    void *jacinv, void *w3, void *h1_svv,
-    void *filter_r, void *filter_s, void *filter_t,
+    void *jacinv, void *w3,
     int *nelv, int *lx) {
 
   const dim3 threads(*lx, *lx, 1);
   const dim3 blocks(*nelv, 1, 1);
   const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
-  const size_t shared_size =
-      2 * (*lx) * (*lx) * (*lx) * sizeof(real);
-  static bool shared_configured[17] = {false};
 
 #define LAUNCH(LX)                                                             \
-    ax_helm_sym_svv_full_kernel<real, LX>                                      \
-        <<<blocks, threads, shared_size, stream>>>(                            \
+    ax_helm_stress_kernel_vector_kstep<real, LX, false>                        \
+        <<<blocks, threads, 0, stream>>>(                                      \
         (real *) au, (real *) av, (real *) aw,                                \
         (real *) u, (real *) v, (real *) w,                                   \
         (real *) dx, (real *) dy, (real *) dz, (real *) h1,                   \
         (real *) drdx, (real *) drdy, (real *) drdz,                          \
         (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
         (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
-        (real *) jacinv, (real *) w3, (real *) h1_svv,                        \
-        (real *) filter_r, (real *) filter_s, (real *) filter_t);             \
+        (real *) jacinv, (real *) w3);                                        \
+    CUDA_CHECK(cudaGetLastError());                                            \
+    ax_helm_stress_kernel_vector_kstep<real, LX, true>                         \
+        <<<blocks, threads, 0, stream>>>(                                      \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) Br, (real *) Bs, (real *) Bt, (real *) h1_svv,               \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
+    CUDA_CHECK(cudaGetLastError())
+
+#define LAUNCH_PADDED(LX)                                                      \
+    ax_helm_stress_kernel_vector_kstep_padded<real, LX, false>                 \
+        <<<blocks, threads, 0, stream>>>(                                      \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) dx, (real *) dy, (real *) dz, (real *) h1,                   \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
+    CUDA_CHECK(cudaGetLastError());                                            \
+    ax_helm_stress_kernel_vector_kstep_padded<real, LX, true>                  \
+        <<<blocks, threads, 0, stream>>>(                                      \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) Br, (real *) Bs, (real *) Bt, (real *) h1_svv,               \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
     CUDA_CHECK(cudaGetLastError())
 
 #define CASE(LX)                                                               \
@@ -76,34 +104,27 @@ void cuda_ax_helm_sym_svv_full(
     LAUNCH(LX);                                                                \
     break
 
-// Double precision exceeds the default 48 KiB shared-memory limit at LX >= 15.
-#define CASE_LARGE(LX)                                                         \
+#define CASE_PADDED(LX)                                                        \
   case LX:                                                                     \
-    if (!shared_configured[LX]) {                                               \
-      CUDA_CHECK(cudaFuncSetAttribute(                                         \
-          ax_helm_sym_svv_full_kernel<real, LX>,                               \
-          cudaFuncAttributeMaxDynamicSharedMemorySize, shared_size));          \
-      shared_configured[LX] = true;                                             \
-    }                                                                           \
-    LAUNCH(LX);                                                                \
+    LAUNCH_PADDED(LX);                                                         \
     break
 
   switch (*lx) {
     CASE(2);
     CASE(3);
-    CASE(4);
+    CASE_PADDED(4);
     CASE(5);
     CASE(6);
     CASE(7);
-    CASE(8);
+    CASE_PADDED(8);
     CASE(9);
     CASE(10);
     CASE(11);
     CASE(12);
     CASE(13);
     CASE(14);
-    CASE_LARGE(15);
-    CASE_LARGE(16);
+    CASE(15);
+    CASE_PADDED(16);
     default:
       fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
       exit(1);

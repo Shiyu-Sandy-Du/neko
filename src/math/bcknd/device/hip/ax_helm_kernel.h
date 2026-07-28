@@ -145,7 +145,7 @@ __global__ void ax_helm_kernel_1d(T * __restrict__ w,
   }
 }
 
-template< typename T, const int LX >
+template< typename T, const int LX, const bool ACCUMULATE = false >
 __global__ void __launch_bounds__(LX*LX,3)
   ax_helm_kernel_kstep(T * __restrict__ w,
                        const T * __restrict__ u,
@@ -240,7 +240,12 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-    w[ij + k*LX*LX + ele] = rw[k];
+    if (ACCUMULATE) {
+      w[ij + k*LX*LX + ele] += rw[k];
+    }
+    else {
+      w[ij + k*LX*LX + ele] = rw[k];
+    }
   }
 }
 
@@ -249,7 +254,7 @@ __global__ void __launch_bounds__(LX*LX,3)
  * remove bank conflicts when LX is a power of 2
  */
 
-template< typename T, const int LX >
+template< typename T, const int LX, const bool ACCUMULATE = false >
 __global__ void __launch_bounds__(LX*LX,3)
   ax_helm_kernel_kstep_padded(T * __restrict__ w,
                               const T * __restrict__ u,
@@ -345,7 +350,12 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-    w[ij + k*LX*LX + ele] = rw[k];
+    if (ACCUMULATE) {
+      w[ij + k*LX*LX + ele] += rw[k];
+    }
+    else {
+      w[ij + k*LX*LX + ele] = rw[k];
+    }
   }
 }
 

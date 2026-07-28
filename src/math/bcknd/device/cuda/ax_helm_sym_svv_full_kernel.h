@@ -96,126 +96,13 @@ __global__ void ax_helm_sym_svv_full_kernel(
 
 #pragma unroll 1
     for (int target = 0; target < 3; ++target) {
+      T ordinary_flux[LX];
 
-      // Ordinary full-stress flux.
+      // Construct the ordinary and SVV fluxes together so that each
+      // velocity/reference derivative is evaluated only once.
 #pragma unroll 1
       for (int k = 0; k < LX; ++k) {
-        shfield[ij + k * lx2] = 0.0;
-      }
-      __syncthreads();
-
-#pragma unroll 1
-      for (int velocity = 0; velocity < 3; ++velocity) {
-        const T *field = velocity == 0 ? u : (velocity == 1 ? v : w);
-
-#pragma unroll 1
-        for (int source = 0; source < 3; ++source) {
-#pragma unroll 1
-          for (int k = 0; k < LX; ++k) {
-            T derivative = 0.0;
-#pragma unroll
-            for (int l = 0; l < LX; ++l) {
-              if (source == 0) {
-                derivative += dx[i + l * LX] *
-                              field[l + j * LX + k * lx2 + elem];
-              }
-              else if (source == 1) {
-                derivative += dy[j + l * LX] *
-                              field[i + l * LX + k * lx2 + elem];
-              }
-              else {
-                derivative += dz[k + l * LX] *
-                              field[ij + l * lx2 + elem];
-              }
-            }
-            shwork[ij + k * lx2] = derivative;
-          }
-          __syncthreads();
-
-#pragma unroll 1
-          for (int k = 0; k < LX; ++k) {
-            const int ijk = ij + k * lx2;
-            const int index = ijk + elem;
-            T target_x, target_y, target_z;
-            T source_x, source_y, source_z;
-
-            if (target == 0) {
-              target_x = drdx[index];
-              target_y = drdy[index];
-              target_z = drdz[index];
-            }
-            else if (target == 1) {
-              target_x = dsdx[index];
-              target_y = dsdy[index];
-              target_z = dsdz[index];
-            }
-            else {
-              target_x = dtdx[index];
-              target_y = dtdy[index];
-              target_z = dtdz[index];
-            }
-
-            if (source == 0) {
-              source_x = drdx[index];
-              source_y = drdy[index];
-              source_z = drdz[index];
-            }
-            else if (source == 1) {
-              source_x = dsdx[index];
-              source_y = dsdy[index];
-              source_z = dsdz[index];
-            }
-            else {
-              source_x = dtdx[index];
-              source_y = dtdy[index];
-              source_z = dtdz[index];
-            }
-
-            const T target_velocity =
-                velocity == 0 ? target_x :
-                (velocity == 1 ? target_y : target_z);
-            const T source_output =
-                output == 0 ? source_x :
-                (output == 1 ? source_y : source_z);
-            T coefficient = target_velocity * source_output;
-            if (velocity == output) {
-              coefficient += target_x * source_x +
-                             target_y * source_y +
-                             target_z * source_z;
-            }
-            shfield[ijk] += h1[index] * w3[ijk] * jacinv[index] *
-                            coefficient * shwork[ijk];
-          }
-          __syncthreads();
-        }
-      }
-
-      // Apply the transposed derivative to the ordinary flux.
-#pragma unroll 1
-      for (int k = 0; k < LX; ++k) {
-        T value = 0.0;
-#pragma unroll
-        for (int l = 0; l < LX; ++l) {
-          if (target == 0) {
-            value += dx[l + i * LX] *
-                     shfield[l + j * LX + k * lx2];
-          }
-          else if (target == 1) {
-            value += dy[l + j * LX] *
-                     shfield[i + l * LX + k * lx2];
-          }
-          else {
-            value += dz[l + k * LX] *
-                     shfield[ij + l * lx2];
-          }
-        }
-        result[ij + k * lx2 + elem] += value;
-      }
-      __syncthreads();
-
-      // Symmetric SVV flux, G Q_hat D u.
-#pragma unroll 1
-      for (int k = 0; k < LX; ++k) {
+        ordinary_flux[k] = 0.0;
         shfield[ij + k * lx2] = 0.0;
       }
       __syncthreads();
@@ -316,12 +203,44 @@ __global__ void ax_helm_sym_svv_full_kernel(
                              target_y * source_y +
                              target_z * source_z;
             }
-            shfield[ijk] += h1_svv[index] * w3[ijk] * jacinv[index] *
-                            coefficient * (shwork[ijk] - filtered);
+            const T weight = w3[ijk] * jacinv[index] * coefficient;
+            ordinary_flux[k] += h1[index] * weight * shwork[ijk];
+            shfield[ijk] += h1_svv[index] * weight *
+                            (shwork[ijk] - filtered);
           }
           __syncthreads();
         }
       }
+
+      // Stage the thread-local ordinary flux for the transpose operation.
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        shwork[ij + k * lx2] = ordinary_flux[k];
+      }
+      __syncthreads();
+
+      // Apply the transposed derivative to the ordinary flux.
+#pragma unroll 1
+      for (int k = 0; k < LX; ++k) {
+        T value = 0.0;
+#pragma unroll
+        for (int l = 0; l < LX; ++l) {
+          if (target == 0) {
+            value += dx[l + i * LX] *
+                     shwork[l + j * LX + k * lx2];
+          }
+          else if (target == 1) {
+            value += dy[l + j * LX] *
+                     shwork[i + l * LX + k * lx2];
+          }
+          else {
+            value += dz[l + k * LX] *
+                     shwork[ij + l * lx2];
+          }
+        }
+        result[ij + k * lx2 + elem] += value;
+      }
+      __syncthreads();
 
       // Test-function-side complementary filter.
 #pragma unroll 1

@@ -37,7 +37,7 @@
 #include <hip/hip_runtime.h>
 #include <device/device_config.h>
 #include <device/hip/check.h>
-#include "ax_helm_sym_svv_full_kernel.h"
+#include "ax_helm_full_kernel.h"
 
 extern "C" {
 
@@ -45,42 +45,80 @@ extern "C" {
 void hip_ax_helm_sym_svv_full(
     void *au, void *av, void *aw, void *u, void *v, void *w,
     void *dx, void *dy, void *dz, void *h1,
+    void *Br, void *Bs, void *Bt, void *h1_svv,
     void *drdx, void *drdy, void *drdz,
     void *dsdx, void *dsdy, void *dsdz,
     void *dtdx, void *dtdy, void *dtdz,
-    void *jacinv, void *w3, void *h1_svv,
-    void *filter_r, void *filter_s, void *filter_t,
+    void *jacinv, void *w3,
     int *nelv, int *lx) {
 
   const dim3 threads(*lx, *lx, 1);
   const dim3 blocks(*nelv, 1, 1);
-  const size_t shared_size =
-      2 * (*lx) * (*lx) * (*lx) * sizeof(real);
 
 #define CASE(LX)                                                               \
   case LX:                                                                     \
     hipLaunchKernelGGL(                                                        \
-        HIP_KERNEL_NAME(ax_helm_sym_svv_full_kernel<real, LX>),               \
-        blocks, threads, shared_size, (hipStream_t) glb_cmd_queue,             \
+        HIP_KERNEL_NAME(                                                       \
+            ax_helm_stress_kernel_vector_kstep<real, LX, false>),              \
+        blocks, threads, 0, (hipStream_t) glb_cmd_queue,                       \
         (real *) au, (real *) av, (real *) aw,                                \
         (real *) u, (real *) v, (real *) w,                                   \
         (real *) dx, (real *) dy, (real *) dz, (real *) h1,                   \
         (real *) drdx, (real *) drdy, (real *) drdz,                          \
         (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
         (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
-        (real *) jacinv, (real *) w3, (real *) h1_svv,                        \
-        (real *) filter_r, (real *) filter_s, (real *) filter_t);             \
+        (real *) jacinv, (real *) w3);                                        \
+    HIP_CHECK(hipGetLastError());                                              \
+    hipLaunchKernelGGL(                                                        \
+        HIP_KERNEL_NAME(                                                       \
+            ax_helm_stress_kernel_vector_kstep<real, LX, true>),               \
+        blocks, threads, 0, (hipStream_t) glb_cmd_queue,                       \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) Br, (real *) Bs, (real *) Bt, (real *) h1_svv,               \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
+    HIP_CHECK(hipGetLastError());                                              \
+    break
+
+#define CASE_PADDED(LX)                                                        \
+  case LX:                                                                     \
+    hipLaunchKernelGGL(                                                        \
+        HIP_KERNEL_NAME(                                                       \
+            ax_helm_stress_kernel_vector_kstep_padded<real, LX, false>),       \
+        blocks, threads, 0, (hipStream_t) glb_cmd_queue,                       \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) dx, (real *) dy, (real *) dz, (real *) h1,                   \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
+    HIP_CHECK(hipGetLastError());                                              \
+    hipLaunchKernelGGL(                                                        \
+        HIP_KERNEL_NAME(                                                       \
+            ax_helm_stress_kernel_vector_kstep_padded<real, LX, true>),        \
+        blocks, threads, 0, (hipStream_t) glb_cmd_queue,                       \
+        (real *) au, (real *) av, (real *) aw,                                \
+        (real *) u, (real *) v, (real *) w,                                   \
+        (real *) Br, (real *) Bs, (real *) Bt, (real *) h1_svv,               \
+        (real *) drdx, (real *) drdy, (real *) drdz,                          \
+        (real *) dsdx, (real *) dsdy, (real *) dsdz,                          \
+        (real *) dtdx, (real *) dtdy, (real *) dtdz,                          \
+        (real *) jacinv, (real *) w3);                                        \
     HIP_CHECK(hipGetLastError());                                              \
     break
 
   switch (*lx) {
     CASE(2);
     CASE(3);
-    CASE(4);
+    CASE_PADDED(4);
     CASE(5);
     CASE(6);
     CASE(7);
-    CASE(8);
+    CASE_PADDED(8);
     CASE(9);
     CASE(10);
     CASE(11);
@@ -88,7 +126,7 @@ void hip_ax_helm_sym_svv_full(
     CASE(13);
     CASE(14);
     CASE(15);
-    CASE(16);
+    CASE_PADDED(16);
     default:
       fprintf(stderr, __FILE__ ": size not supported: %d\n", *lx);
       exit(1);

@@ -38,7 +38,7 @@
  * Device kernels for Ax helm full
  */
 
-template< typename T, const int LX >
+template< typename T, const int LX, const bool ACCUMULATE = false >
 __global__ void __launch_bounds__(LX*LX,3)
   ax_helm_stress_kernel_vector_kstep(T * __restrict__ au,
                               T * __restrict__ av,
@@ -272,13 +272,20 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-   au[ij + k*LX*LX + ele] = ruw[k];
-   av[ij + k*LX*LX + ele] = rvw[k];
-   aw[ij + k*LX*LX + ele] = rww[k];
+    if (ACCUMULATE) {
+      au[ij + k*LX*LX + ele] += ruw[k];
+      av[ij + k*LX*LX + ele] += rvw[k];
+      aw[ij + k*LX*LX + ele] += rww[k];
+    }
+    else {
+      au[ij + k*LX*LX + ele] = ruw[k];
+      av[ij + k*LX*LX + ele] = rvw[k];
+      aw[ij + k*LX*LX + ele] = rww[k];
+    }
   }
 }
 
-template< typename T, const int LX >
+template< typename T, const int LX, const bool ACCUMULATE = false >
 __global__ void __launch_bounds__(LX*LX,3)
   ax_helm_stress_kernel_vector_kstep_padded(T * __restrict__ au,
                               T * __restrict__ av,
@@ -513,9 +520,16 @@ __global__ void __launch_bounds__(LX*LX,3)
   }
 #pragma unroll
   for (int k = 0; k < LX; ++k){
-   au[ij + k*LX*LX + ele] = ruw[k];
-   av[ij + k*LX*LX + ele] = rvw[k];
-   aw[ij + k*LX*LX + ele] = rww[k];
+    if (ACCUMULATE) {
+      au[ij + k*LX*LX + ele] += ruw[k];
+      av[ij + k*LX*LX + ele] += rvw[k];
+      aw[ij + k*LX*LX + ele] += rww[k];
+    }
+    else {
+      au[ij + k*LX*LX + ele] = ruw[k];
+      av[ij + k*LX*LX + ele] = rvw[k];
+      aw[ij + k*LX*LX + ele] = rww[k];
+    }
   }
 }
 

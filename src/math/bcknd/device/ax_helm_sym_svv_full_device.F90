@@ -54,40 +54,38 @@ module ax_helm_sym_svv_full_device
 #ifdef HAVE_HIP
   interface
      subroutine hip_ax_helm_sym_svv_full(au_d, av_d, aw_d, u_d, v_d, w_d, &
-          dx_d, dy_d, dz_d, h1_d, &
+          dx_d, dy_d, dz_d, h1_d, Br_d, Bs_d, Bt_d, svv_h1_d, &
           drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
-          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, nelv, lx) &
           bind(c, name='hip_ax_helm_sym_svv_full')
        use, intrinsic :: iso_c_binding, only : c_ptr, c_int
        type(c_ptr), value :: au_d, av_d, aw_d
        type(c_ptr), value :: u_d, v_d, w_d
        type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
+       type(c_ptr), value :: Br_d, Bs_d, Bt_d, svv_h1_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
-       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
+       type(c_ptr), value :: jacinv_d, w3_d
        integer(c_int) :: nelv, lx
      end subroutine hip_ax_helm_sym_svv_full
   end interface
 #elif HAVE_CUDA
   interface
      subroutine cuda_ax_helm_sym_svv_full(au_d, av_d, aw_d, u_d, v_d, w_d, &
-          dx_d, dy_d, dz_d, h1_d, &
+          dx_d, dy_d, dz_d, h1_d, Br_d, Bs_d, Bt_d, svv_h1_d, &
           drdx_d, drdy_d, drdz_d, dsdx_d, dsdy_d, dsdz_d, &
-          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, svv_h1_d, &
-          filter_r_d, filter_s_d, filter_t_d, nelv, lx) &
+          dtdx_d, dtdy_d, dtdz_d, jacinv_d, w3_d, nelv, lx) &
           bind(c, name='cuda_ax_helm_sym_svv_full')
        use, intrinsic :: iso_c_binding, only : c_ptr, c_int
        type(c_ptr), value :: au_d, av_d, aw_d
        type(c_ptr), value :: u_d, v_d, w_d
        type(c_ptr), value :: dx_d, dy_d, dz_d, h1_d
+       type(c_ptr), value :: Br_d, Bs_d, Bt_d, svv_h1_d
        type(c_ptr), value :: drdx_d, drdy_d, drdz_d
        type(c_ptr), value :: dsdx_d, dsdy_d, dsdz_d
        type(c_ptr), value :: dtdx_d, dtdy_d, dtdz_d
-       type(c_ptr), value :: jacinv_d, w3_d, svv_h1_d
-       type(c_ptr), value :: filter_r_d, filter_s_d, filter_t_d
+       type(c_ptr), value :: jacinv_d, w3_d
        integer(c_int) :: nelv, lx
      end subroutine cuda_ax_helm_sym_svv_full
   end interface
@@ -119,7 +117,6 @@ contains
     real(kind=rp), intent(in) :: v(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     real(kind=rp), intent(in) :: w(Xh%lx, Xh%ly, Xh%lz, msh%nelv)
     type(c_ptr) :: au_d, av_d, aw_d, u_d, v_d, w_d
-    type(c_ptr) :: filter_r_d, filter_s_d, filter_t_d
 
     au_d = device_get_ptr(au)
     av_d = device_get_ptr(av)
@@ -128,40 +125,22 @@ contains
     v_d = device_get_ptr(v)
     w_d = device_get_ptr(w)
 
-    if (index(this%svv%direction, "r") > 0) then
-       filter_r_d = this%svv%filter%fh_d
-    else
-       filter_r_d = this%svv%filter%ident_d
-    end if
-
-    if (index(this%svv%direction, "s") > 0) then
-       filter_s_d = this%svv%filter%fht_d
-    else
-       filter_s_d = this%svv%filter%ident_d
-    end if
-
-    if (index(this%svv%direction, "t") > 0) then
-       filter_t_d = this%svv%filter%fht_d
-    else
-       filter_t_d = this%svv%filter%ident_d
-    end if
-
 #ifdef HAVE_HIP
     call hip_ax_helm_sym_svv_full(au_d, av_d, aw_d, u_d, v_d, w_d, &
          Xh%dx_d, Xh%dy_d, Xh%dz_d, coef%h1_d, &
+         this%svv%Br_d, this%svv%Bs_d, this%svv%Bt_d, this%svv%h1_d, &
          coef%drdx_d, coef%drdy_d, coef%drdz_d, &
          coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
          coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
-         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
-         msh%nelv, Xh%lx)
+         Xh%w3_d, msh%nelv, Xh%lx)
 #elif HAVE_CUDA
     call cuda_ax_helm_sym_svv_full(au_d, av_d, aw_d, u_d, v_d, w_d, &
          Xh%dx_d, Xh%dy_d, Xh%dz_d, coef%h1_d, &
+         this%svv%Br_d, this%svv%Bs_d, this%svv%Bt_d, this%svv%h1_d, &
          coef%drdx_d, coef%drdy_d, coef%drdz_d, &
          coef%dsdx_d, coef%dsdy_d, coef%dsdz_d, &
          coef%dtdx_d, coef%dtdy_d, coef%dtdz_d, coef%jacinv_d, &
-         Xh%w3_d, this%svv%h1_d, filter_r_d, filter_s_d, filter_t_d, &
-         msh%nelv, Xh%lx)
+         Xh%w3_d, msh%nelv, Xh%lx)
 #elif HAVE_OPENCL
     call neko_error('OPENCL is not implemented for symmetric full SVV')
 #endif
