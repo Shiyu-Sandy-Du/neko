@@ -37,7 +37,7 @@ module ax_helm_sym_svv_cpu
   use space, only : space_t
   use mesh, only : mesh_t
   use math, only : addcol4
-  use tensor, only : tnsr3d_el, tnsr3d
+  use mxm_wrapper, only : mxm
   use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
@@ -131,11 +131,19 @@ contains
     real(kind=rp) :: u1_svv(lx, lx, lx)
     real(kind=rp) :: u2_svv(lx, lx, lx)
     real(kind=rp) :: u3_svv(lx, lx, lx)
+    real(kind=rp) :: svv_Qh(lx, lx)
+    real(kind=rp) :: svv_Qht(lx, lx)
     real(kind=rp) :: wur(lx, lx, lx)
     real(kind=rp) :: wus(lx, lx, lx)
     real(kind=rp) :: wut(lx, lx, lx)
     real(kind=rp) :: tmp
     integer :: e, i, j, k, l
+
+    ! Form the high-pass filter and its transpose once. The directional
+    ! contractions below avoid applying the two identity factors required by
+    ! the generic three-dimensional tensor-product kernel.
+    svv_Qh = ident - svv_Q
+    svv_Qht = ident - svv_Qt
 
     do e = 1, n
        ! Reference-space derivatives, D u.
@@ -187,20 +195,20 @@ contains
        ! Apply the one-dimensional high-pass convolution independently to
        ! each reference derivative: Q_hat D u.
        if (index(svv_direction, "r") > 0) then
-          call tnsr3d_el(u1_svv, lx, wur, lx, svv_Q, ident, ident)
-          u1_svv = wur - u1_svv
+          call mxm(svv_Qh, lx, wur, lx, u1_svv, lx * lx)
        else
           u1_svv = 0.0_rp
        end if
        if (index(svv_direction, "s") > 0) then
-          call tnsr3d_el(u2_svv, lx, wus, lx, ident, svv_Qt, ident)
-          u2_svv = wus - u2_svv
+          do k = 1, lx
+             call mxm(wus(1,1,k), lx, svv_Qht, lx, &
+                  u2_svv(1,1,k), lx)
+          end do
        else
           u2_svv = 0.0_rp
        end if
        if (index(svv_direction, "t") > 0) then
-          call tnsr3d_el(u3_svv, lx, wut, lx, ident, ident, svv_Qt)
-          u3_svv = wut - u3_svv
+          call mxm(wut, lx * lx, svv_Qht, lx, u3_svv, lx)
        else
           u3_svv = 0.0_rp
        end if
@@ -250,16 +258,18 @@ contains
 
        ! Test-function-side convolution, Q_hat^T G Q_hat D u.
        if (index(svv_direction, "r") > 0) then
-          call tnsr3d_el(u1, lx, u1_svv, lx, svv_Qt, ident, ident)
-          wur = wur + u1_svv - u1
+          call mxm(svv_Qht, lx, u1_svv, lx, u1, lx * lx)
+          wur = wur + u1
        end if
        if (index(svv_direction, "s") > 0) then
-          call tnsr3d_el(u2, lx, u2_svv, lx, ident, svv_Q, ident)
-          wus = wus + u2_svv - u2
+          do k = 1, lx
+             call mxm(u2_svv(1,1,k), lx, svv_Qh, lx, u2(1,1,k), lx)
+          end do
+          wus = wus + u2
        end if
        if (index(svv_direction, "t") > 0) then
-          call tnsr3d_el(u3, lx, u3_svv, lx, ident, ident, svv_Q)
-          wut = wut + u3_svv - u3
+          call mxm(u3_svv, lx * lx, svv_Qh, lx, u3, lx)
+          wut = wut + u3
        end if
 
        do j = 1, lx*lx

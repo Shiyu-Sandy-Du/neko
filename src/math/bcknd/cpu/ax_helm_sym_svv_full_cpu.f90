@@ -37,7 +37,7 @@ module ax_helm_sym_svv_full_cpu
   use space, only : space_t
   use mesh, only : mesh_t
   use math, only : addcol4
-  use tensor, only : tnsr3d_el, tnsr3d
+  use mxm_wrapper, only : mxm
   use spectral_vanishing_viscosity, only : svv_t
   implicit none
   private
@@ -155,6 +155,8 @@ contains
     real(kind=rp) :: s12_svv(lx, lx, lx)
     real(kind=rp) :: s13_svv(lx, lx, lx)
     real(kind=rp) :: s23_svv(lx, lx, lx)
+    real(kind=rp) :: svv_Qh(lx, lx)
+    real(kind=rp) :: svv_Qht(lx, lx)
     integer :: e, i, j, k, l
 
     real(kind=rp) :: t1, t2, t3
@@ -165,6 +167,12 @@ contains
     real(kind=rp) :: s13(lx, lx, lx)
     real(kind=rp) :: s23(lx, lx, lx)
     real(kind=rp) :: u1, u2, u3, v1, v2, v3, w1, w2, w3
+
+    ! Form the high-pass filter and its transpose once. The directional
+    ! contractions avoid applying identity factors in a generic 3D tensor
+    ! product.
+    svv_Qh = ident - svv_Q
+    svv_Qht = ident - svv_Qt
 
     do e = 1, n
        do j = 1, lx * lx
@@ -254,23 +262,23 @@ contains
        end do
 
        ! Trial-side high-pass filtering of each reference derivative.
-       call hpf_direction(ur_svv, wur, svv_Q, svv_Qt, ident, &
+       call hpf_direction(ur_svv, wur, svv_Qh, svv_Qht, &
             svv_direction, "r", .false., lx)
-       call hpf_direction(us_svv, wus, svv_Q, svv_Qt, ident, &
+       call hpf_direction(us_svv, wus, svv_Qh, svv_Qht, &
             svv_direction, "s", .false., lx)
-       call hpf_direction(ut_svv, wut, svv_Q, svv_Qt, ident, &
+       call hpf_direction(ut_svv, wut, svv_Qh, svv_Qht, &
             svv_direction, "t", .false., lx)
-       call hpf_direction(vr_svv, wvr, svv_Q, svv_Qt, ident, &
+       call hpf_direction(vr_svv, wvr, svv_Qh, svv_Qht, &
             svv_direction, "r", .false., lx)
-       call hpf_direction(vs_svv, wvs, svv_Q, svv_Qt, ident, &
+       call hpf_direction(vs_svv, wvs, svv_Qh, svv_Qht, &
             svv_direction, "s", .false., lx)
-       call hpf_direction(vt_svv, wvt, svv_Q, svv_Qt, ident, &
+       call hpf_direction(vt_svv, wvt, svv_Qh, svv_Qht, &
             svv_direction, "t", .false., lx)
-       call hpf_direction(wr_svv, wwr, svv_Q, svv_Qt, ident, &
+       call hpf_direction(wr_svv, wwr, svv_Qh, svv_Qht, &
             svv_direction, "r", .false., lx)
-       call hpf_direction(ws_svv, wws, svv_Q, svv_Qt, ident, &
+       call hpf_direction(ws_svv, wws, svv_Qh, svv_Qht, &
             svv_direction, "s", .false., lx)
-       call hpf_direction(wt_svv, wwt, svv_Q, svv_Qt, ident, &
+       call hpf_direction(wt_svv, wwt, svv_Qh, svv_Qht, &
             svv_direction, "t", .false., lx)
 
        do i = 1, lx*lx*lx
@@ -376,23 +384,23 @@ contains
        end do
 
        ! Test-side adjoint filtering of the reference-space SVV flux.
-       call hpf_direction(s11, ur_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s11, ur_svv, svv_Qh, svv_Qht, &
             svv_direction, "r", .true., lx)
-       call hpf_direction(s22, us_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s22, us_svv, svv_Qh, svv_Qht, &
             svv_direction, "s", .true., lx)
-       call hpf_direction(s33, ut_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s33, ut_svv, svv_Qh, svv_Qht, &
             svv_direction, "t", .true., lx)
-       call hpf_direction(s12, vr_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s12, vr_svv, svv_Qh, svv_Qht, &
             svv_direction, "r", .true., lx)
-       call hpf_direction(s13, vs_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s13, vs_svv, svv_Qh, svv_Qht, &
             svv_direction, "s", .true., lx)
-       call hpf_direction(s23, vt_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s23, vt_svv, svv_Qh, svv_Qht, &
             svv_direction, "t", .true., lx)
-       call hpf_direction(s11_svv, wr_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s11_svv, wr_svv, svv_Qh, svv_Qht, &
             svv_direction, "r", .true., lx)
-       call hpf_direction(s22_svv, ws_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s22_svv, ws_svv, svv_Qh, svv_Qht, &
             svv_direction, "s", .true., lx)
-       call hpf_direction(s33_svv, wt_svv, svv_Q, svv_Qt, ident, &
+       call hpf_direction(s33_svv, wt_svv, svv_Qh, svv_Qht, &
             svv_direction, "t", .true., lx)
 
        wur = wur + s11
@@ -461,23 +469,22 @@ contains
   !> Apply a directional high-pass SVV filter.
   !! @param output Filtered field.
   !! @param input Input field.
-  !! @param Q Low-pass filter matrix.
-  !! @param Qt Transpose of the low-pass filter matrix.
-  !! @param ident Identity matrix.
+  !! @param Qh High-pass filter matrix.
+  !! @param Qht Transpose of the high-pass filter matrix.
   !! @param active_directions Active reference-space directions.
   !! @param direction Direction of the derivative or flux.
   !! @param transpose Whether to apply the adjoint filter.
   !! @param lx Polynomial order.
-  subroutine hpf_direction(output, input, Q, Qt, ident, active_directions, &
+  subroutine hpf_direction(output, input, Qh, Qht, active_directions, &
        direction, transpose, lx)
     integer, intent(in) :: lx
     real(kind=rp), intent(out) :: output(lx, lx, lx)
-    real(kind=rp), intent(inout) :: input(lx, lx, lx)
-    real(kind=rp), intent(inout) :: Q(lx, lx), Qt(lx, lx)
-    real(kind=rp), intent(inout) :: ident(lx, lx)
+    real(kind=rp), intent(in) :: input(lx, lx, lx)
+    real(kind=rp), intent(in) :: Qh(lx, lx), Qht(lx, lx)
     character(len=*), intent(in) :: active_directions
     character(len=*), intent(in) :: direction
     logical, intent(in) :: transpose
+    integer :: k
 
     if (index(active_directions, direction) .eq. 0) then
        output = 0.0_rp
@@ -487,25 +494,27 @@ contains
     select case (direction)
     case ("r")
        if (transpose) then
-          call tnsr3d_el(output, lx, input, lx, Qt, ident, ident)
+          call mxm(Qht, lx, input, lx, output, lx * lx)
        else
-          call tnsr3d_el(output, lx, input, lx, Q, ident, ident)
+          call mxm(Qh, lx, input, lx, output, lx * lx)
        end if
     case ("s")
        if (transpose) then
-          call tnsr3d_el(output, lx, input, lx, ident, Q, ident)
+          do k = 1, lx
+             call mxm(input(1,1,k), lx, Qh, lx, output(1,1,k), lx)
+          end do
        else
-          call tnsr3d_el(output, lx, input, lx, ident, Qt, ident)
+          do k = 1, lx
+             call mxm(input(1,1,k), lx, Qht, lx, output(1,1,k), lx)
+          end do
        end if
     case ("t")
        if (transpose) then
-          call tnsr3d_el(output, lx, input, lx, ident, ident, Q)
+          call mxm(input, lx * lx, Qh, lx, output, lx)
        else
-          call tnsr3d_el(output, lx, input, lx, ident, ident, Qt)
+          call mxm(input, lx * lx, Qht, lx, output, lx)
        end if
     end select
-
-    output = input - output
   end subroutine hpf_direction
 
 end module ax_helm_sym_svv_full_cpu
