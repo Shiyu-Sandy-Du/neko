@@ -735,7 +735,6 @@ EXTRA_DIST = \
 	math/bcknd/device/cuda/ax_helm_kernel.h\
 	math/bcknd/device/cuda/ax_helm_full_kernel.h\
 	math/bcknd/device/cuda/ax_helm_svv_kernel.h\
-	math/bcknd/device/cuda/ax_helm_sym_svv_kernel.h\
 	math/bcknd/device/cuda/ax_helm_svv_full_kernel.h\
 	common/bcknd/device/cuda/sumab_kernel.h\
 	common/bcknd/device/cuda/makeext_kernel.h\
@@ -786,7 +785,6 @@ EXTRA_DIST = \
 	math/bcknd/device/hip/ax_helm_kernel.h\
 	math/bcknd/device/hip/ax_helm_full_kernel.h\
   math/bcknd/device/hip/ax_helm_svv_kernel.h\
-  math/bcknd/device/hip/ax_helm_sym_svv_kernel.h\
   math/bcknd/device/hip/ax_helm_svv_full_kernel.h\
 	common/bcknd/device/hip/sumab_kernel.h\
 	common/bcknd/device/hip/makeext_kernel.h\
